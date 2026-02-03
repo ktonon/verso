@@ -1,0 +1,10 @@
+dist/
+env.sh
+node_modules/
+public/*.webm
+public/*.webp
+public/erd_viewer*
+scripts/.cdk-outputs.json
+target/
+viewer-app/build-date.ts
+viewer-lib/pkg/
