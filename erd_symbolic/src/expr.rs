@@ -126,6 +126,18 @@ pub fn sin(a: Expr) -> Expr {
     Expr::Fn(FnKind::Sin, Box::new(a))
 }
 
+pub fn cos(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Cos, Box::new(a))
+}
+
+pub fn exp(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Exp, Box::new(a))
+}
+
+pub fn ln(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Ln, Box::new(a))
+}
+
 /// Returns true if the expression has tensor indices.
 pub fn has_indices(expr: &Expr) -> bool {
     matches!(expr, Expr::Var { indices, .. } if !indices.is_empty())

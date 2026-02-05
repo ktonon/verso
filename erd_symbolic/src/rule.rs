@@ -46,6 +46,22 @@ pub fn p_pow(base: Pattern, exp: Pattern) -> Pattern {
     Pattern::Pow(Box::new(base), Box::new(exp))
 }
 
+pub fn p_sin(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Sin, Box::new(a))
+}
+
+pub fn p_cos(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Cos, Box::new(a))
+}
+
+pub fn p_exp(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Exp, Box::new(a))
+}
+
+pub fn p_ln(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Ln, Box::new(a))
+}
+
 pub struct Rule {
     pub name: String,
     pub lhs: Pattern,
@@ -218,8 +234,62 @@ impl RuleSet {
         rs
     }
 
+    /// Trigonometric identities.
     pub fn trigonometric() -> RuleSet {
-        Self::new() // sin²x + cos²x = 1, etc.
+        use std::f64::consts::{FRAC_PI_2, PI};
+
+        let x = || wildcard("x");
+
+        let mut rs = Self::new();
+
+        // === Evaluation at special values ===
+        rs.add(rule("sin_zero", p_sin(p_const(0.0)), p_const(0.0))); // sin(0) = 0
+        rs.add(rule("cos_zero", p_cos(p_const(0.0)), p_const(1.0))); // cos(0) = 1
+        rs.add(rule("sin_pi", p_sin(p_const(PI)), p_const(0.0))); // sin(π) = 0
+        rs.add(rule("cos_pi", p_cos(p_const(PI)), p_const(-1.0))); // cos(π) = -1
+        rs.add(rule("sin_pi_2", p_sin(p_const(FRAC_PI_2)), p_const(1.0))); // sin(π/2) = 1
+        rs.add(rule("cos_pi_2", p_cos(p_const(FRAC_PI_2)), p_const(0.0))); // cos(π/2) = 0
+
+        // === Parity (odd/even functions) ===
+        // sin(-x) = -sin(x)
+        rs.add(rule("sin_neg", p_sin(p_neg(x())), p_neg(p_sin(x()))));
+        // cos(-x) = cos(x)
+        rs.add(rule("cos_neg", p_cos(p_neg(x())), p_cos(x())));
+
+        // === Pythagorean identity ===
+        // sin²x + cos²x = 1
+        rs.add(rule(
+            "pythagorean",
+            p_add(
+                p_pow(p_sin(x()), p_const(2.0)),
+                p_pow(p_cos(x()), p_const(2.0)),
+            ),
+            p_const(1.0),
+        ));
+        // sin²x = 1 - cos²x
+        rs.add(rule(
+            "sin_sq_from_cos",
+            p_pow(p_sin(x()), p_const(2.0)),
+            p_add(p_const(1.0), p_neg(p_pow(p_cos(x()), p_const(2.0)))),
+        ));
+        // cos²x = 1 - sin²x
+        rs.add(rule(
+            "cos_sq_from_sin",
+            p_pow(p_cos(x()), p_const(2.0)),
+            p_add(p_const(1.0), p_neg(p_pow(p_sin(x()), p_const(2.0)))),
+        ));
+
+        // === Double angle (useful for simplification) ===
+        // sin(2x) = 2 sin(x) cos(x) — represented with repeated wildcard
+        // Note: Matching 2*x requires a different pattern; these are structural rules
+
+        // === Exponential/Log identities ===
+        rs.add(rule("exp_zero", p_exp(p_const(0.0)), p_const(1.0))); // e^0 = 1
+        rs.add(rule("ln_one", p_ln(p_const(1.0)), p_const(0.0))); // ln(1) = 0
+        rs.add(rule("exp_ln", p_exp(p_ln(x())), x())); // e^(ln(x)) = x
+        rs.add(rule("ln_exp", p_ln(p_exp(x())), x())); // ln(e^x) = x
+
+        rs
     }
 
     pub fn tensor() -> RuleSet {
@@ -261,7 +331,7 @@ impl RuleSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::{add, constant, inv, mul, neg, scalar};
+    use crate::expr::{add, constant, cos, exp, inv, ln, mul, neg, scalar, sin};
     use crate::pow;
 
     #[test]
@@ -722,5 +792,115 @@ mod tests {
             .and_then(|r| r.apply_ltr(&expr));
 
         assert_eq!(result, Some(constant(1.0)));
+    }
+
+    // === Trigonometric RuleSet tests ===
+
+    #[test]
+    fn trig_ruleset_has_rules() {
+        let rs = RuleSet::trigonometric();
+        assert!(!rs.is_empty());
+        assert!(rs.len() >= 10); // We have at least 10 trig rules
+    }
+
+    #[test]
+    fn trig_sin_zero() {
+        let rs = RuleSet::trigonometric();
+        let expr = sin(constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "sin_zero")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(0.0)));
+    }
+
+    #[test]
+    fn trig_cos_zero() {
+        let rs = RuleSet::trigonometric();
+        let expr = cos(constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "cos_zero")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(1.0)));
+    }
+
+    #[test]
+    fn trig_sin_neg() {
+        let rs = RuleSet::trigonometric();
+        // sin(-a)
+        let expr = sin(neg(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "sin_neg")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        // Should become -sin(a)
+        assert_eq!(result, Some(neg(sin(scalar("a")))));
+    }
+
+    #[test]
+    fn trig_cos_neg() {
+        let rs = RuleSet::trigonometric();
+        // cos(-a)
+        let expr = cos(neg(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "cos_neg")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        // Should become cos(a)
+        assert_eq!(result, Some(cos(scalar("a"))));
+    }
+
+    #[test]
+    fn trig_pythagorean() {
+        let rs = RuleSet::trigonometric();
+        // sin²(a) + cos²(a)
+        let expr = add(
+            pow(sin(scalar("a")), constant(2.0)),
+            pow(cos(scalar("a")), constant(2.0)),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "pythagorean")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(1.0)));
+    }
+
+    #[test]
+    fn trig_exp_ln() {
+        let rs = RuleSet::trigonometric();
+        // exp(ln(a))
+        let expr = exp(ln(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "exp_ln")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn trig_ln_exp() {
+        let rs = RuleSet::trigonometric();
+        // ln(exp(a))
+        let expr = ln(exp(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "ln_exp")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
     }
 }
