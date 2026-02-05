@@ -1,5 +1,25 @@
-use crate::expr::{Expr, FnKind};
+use crate::expr::{Expr, FnKind, Index, IndexPosition};
 use std::collections::HashMap;
+
+/// Pattern for matching index names in tensor expressions.
+#[derive(Debug, Clone)]
+pub enum IndexPattern {
+    /// Match an upper (contravariant) index, binding its name to the wildcard.
+    Upper(String),
+    /// Match a lower (covariant) index, binding its name to the wildcard.
+    Lower(String),
+    /// Match an index with exact name and position.
+    Exact(Index),
+}
+
+/// Pattern for matching variable names.
+#[derive(Debug, Clone)]
+pub enum VarPattern {
+    /// Match a variable with this exact name.
+    Exact(String),
+    /// Match any variable, binding its name to this wildcard.
+    Wild(String),
+}
 
 pub enum Pattern {
     Wildcard(String),
@@ -11,6 +31,11 @@ pub enum Pattern {
     Inv(Box<Pattern>),
     Pow(Box<Pattern>, Box<Pattern>),
     Fn(FnKind, Box<Pattern>),
+    /// Match a variable with specific name pattern and index structure.
+    Var {
+        name: VarPattern,
+        indices: Vec<IndexPattern>,
+    },
 }
 
 // Pattern builder functions
@@ -62,13 +87,69 @@ pub fn p_ln(a: Pattern) -> Pattern {
     Pattern::Fn(FnKind::Ln, Box::new(a))
 }
 
+// === Var pattern builders ===
+
+/// Create a pattern matching a variable with exact name and index patterns.
+pub fn p_var(name: &str, indices: Vec<IndexPattern>) -> Pattern {
+    Pattern::Var {
+        name: VarPattern::Exact(name.to_string()),
+        indices,
+    }
+}
+
+/// Create a pattern matching any variable name (binding to wildcard) with index patterns.
+pub fn p_var_wild(name_wildcard: &str, indices: Vec<IndexPattern>) -> Pattern {
+    Pattern::Var {
+        name: VarPattern::Wild(name_wildcard.to_string()),
+        indices,
+    }
+}
+
+/// Create an upper index pattern that binds the index name to a wildcard.
+pub fn idx_upper(wildcard: &str) -> IndexPattern {
+    IndexPattern::Upper(wildcard.to_string())
+}
+
+/// Create a lower index pattern that binds the index name to a wildcard.
+pub fn idx_lower(wildcard: &str) -> IndexPattern {
+    IndexPattern::Lower(wildcard.to_string())
+}
+
+/// Create an exact index pattern.
+pub fn idx_exact(name: &str, position: IndexPosition) -> IndexPattern {
+    IndexPattern::Exact(Index {
+        name: name.to_string(),
+        position,
+    })
+}
+
 pub struct Rule {
     pub name: String,
     pub lhs: Pattern,
     pub rhs: Pattern,
 }
 
-pub type Bindings = HashMap<String, Expr>;
+/// Expression bindings: wildcard name -> matched expression
+pub type ExprBindings = HashMap<String, Expr>;
+
+/// Index bindings: wildcard name -> matched index name
+pub type IndexBindings = HashMap<String, String>;
+
+/// Combined bindings from pattern matching.
+#[derive(Debug, Clone, Default)]
+pub struct Bindings {
+    pub exprs: ExprBindings,
+    pub indices: IndexBindings,
+}
+
+impl Bindings {
+    pub fn new() -> Self {
+        Bindings {
+            exprs: ExprBindings::new(),
+            indices: IndexBindings::new(),
+        }
+    }
+}
 
 impl Pattern {
     /// Attempt to match this pattern against an expression.
@@ -86,10 +167,10 @@ impl Pattern {
     fn match_expr_inner(&self, expr: &Expr, bindings: &mut Bindings) -> bool {
         match (self, expr) {
             // Wildcard matches any expression
-            (Pattern::Wildcard(name), _) => bind(name, expr.clone(), bindings),
+            (Pattern::Wildcard(name), _) => bind_expr(name, expr.clone(), bindings),
 
             // ConstWild matches only constants
-            (Pattern::ConstWild(name), Expr::Const(_)) => bind(name, expr.clone(), bindings),
+            (Pattern::ConstWild(name), Expr::Const(_)) => bind_expr(name, expr.clone(), bindings),
             (Pattern::ConstWild(_), _) => false,
 
             // Const matches equal constants
@@ -122,6 +203,54 @@ impl Pattern {
             // Function matching requires same function kind
             (Pattern::Fn(pk, p), Expr::Fn(ek, a)) if pk == ek => p.match_expr_inner(a, bindings),
             (Pattern::Fn(_, _), _) => false,
+
+            // Variable matching with index patterns
+            (
+                Pattern::Var {
+                    name: pat_name,
+                    indices: pat_indices,
+                },
+                Expr::Var {
+                    name: expr_name,
+                    indices: expr_indices,
+                },
+            ) => {
+                // Check variable name matches
+                let name_matches = match pat_name {
+                    VarPattern::Exact(pn) => pn == expr_name,
+                    VarPattern::Wild(wildcard) => bind_expr(wildcard, expr.clone(), bindings),
+                };
+                if !name_matches {
+                    return false;
+                }
+
+                // Check index count matches
+                if pat_indices.len() != expr_indices.len() {
+                    return false;
+                }
+
+                // Check each index pattern
+                for (pat_idx, expr_idx) in pat_indices.iter().zip(expr_indices.iter()) {
+                    let idx_matches = match pat_idx {
+                        IndexPattern::Upper(wildcard) => {
+                            expr_idx.position == IndexPosition::Upper
+                                && bind_index(wildcard, &expr_idx.name, bindings)
+                        }
+                        IndexPattern::Lower(wildcard) => {
+                            expr_idx.position == IndexPosition::Lower
+                                && bind_index(wildcard, &expr_idx.name, bindings)
+                        }
+                        IndexPattern::Exact(expected) => {
+                            expr_idx.name == expected.name && expr_idx.position == expected.position
+                        }
+                    };
+                    if !idx_matches {
+                        return false;
+                    }
+                }
+                true
+            }
+            (Pattern::Var { .. }, _) => false,
         }
     }
 
@@ -130,6 +259,7 @@ impl Pattern {
     pub fn substitute(&self, bindings: &Bindings) -> Expr {
         match self {
             Pattern::Wildcard(name) | Pattern::ConstWild(name) => bindings
+                .exprs
                 .get(name)
                 .unwrap_or_else(|| panic!("Unbound wildcard: {}", name))
                 .clone(),
@@ -156,16 +286,78 @@ impl Pattern {
             Pattern::Inv(p) => Expr::Inv(Box::new(p.substitute(bindings))),
 
             Pattern::Fn(kind, p) => Expr::Fn(kind.clone(), Box::new(p.substitute(bindings))),
+
+            Pattern::Var {
+                name: pat_name,
+                indices: pat_indices,
+            } => {
+                // Resolve variable name
+                let var_name = match pat_name {
+                    VarPattern::Exact(n) => n.clone(),
+                    VarPattern::Wild(wildcard) => {
+                        // Get the name from the bound expression (must be a Var)
+                        match bindings.exprs.get(wildcard) {
+                            Some(Expr::Var { name, .. }) => name.clone(),
+                            Some(_) => {
+                                panic!("Var wildcard {} bound to non-Var expression", wildcard)
+                            }
+                            None => panic!("Unbound var wildcard: {}", wildcard),
+                        }
+                    }
+                };
+
+                // Resolve indices
+                let var_indices: Vec<Index> = pat_indices
+                    .iter()
+                    .map(|pat_idx| match pat_idx {
+                        IndexPattern::Upper(wildcard) => Index {
+                            name: bindings
+                                .indices
+                                .get(wildcard)
+                                .unwrap_or_else(|| panic!("Unbound index wildcard: {}", wildcard))
+                                .clone(),
+                            position: IndexPosition::Upper,
+                        },
+                        IndexPattern::Lower(wildcard) => Index {
+                            name: bindings
+                                .indices
+                                .get(wildcard)
+                                .unwrap_or_else(|| panic!("Unbound index wildcard: {}", wildcard))
+                                .clone(),
+                            position: IndexPosition::Lower,
+                        },
+                        IndexPattern::Exact(idx) => idx.clone(),
+                    })
+                    .collect();
+
+                Expr::Var {
+                    name: var_name,
+                    indices: var_indices,
+                }
+            }
         }
     }
 }
 
 /// Bind a name to an expression, checking consistency with existing bindings.
-fn bind(name: &str, expr: Expr, bindings: &mut Bindings) -> bool {
-    match bindings.get(name) {
+fn bind_expr(name: &str, expr: Expr, bindings: &mut Bindings) -> bool {
+    match bindings.exprs.get(name) {
         Some(existing) => *existing == expr, // Must match existing binding
         None => {
-            bindings.insert(name.to_string(), expr);
+            bindings.exprs.insert(name.to_string(), expr);
+            true
+        }
+    }
+}
+
+/// Bind an index wildcard to an index name, checking consistency.
+fn bind_index(wildcard: &str, index_name: &str, bindings: &mut Bindings) -> bool {
+    match bindings.indices.get(wildcard) {
+        Some(existing) => existing == index_name, // Must match existing binding
+        None => {
+            bindings
+                .indices
+                .insert(wildcard.to_string(), index_name.to_string());
             true
         }
     }
@@ -199,6 +391,19 @@ pub fn rule(name: &str, lhs: Pattern, rhs: Pattern) -> Rule {
 }
 
 impl RuleSet {
+    pub fn new() -> Self {
+        RuleSet { rules: Vec::new() }
+    }
+
+    pub fn full() -> Self {
+        let mut rules = Self::new();
+        rules
+            .merge(Self::trigonometric())
+            .merge(Self::trigonometric())
+            .merge(Self::tensor());
+        rules
+    }
+
     /// Standard arithmetic identities.
     pub fn standard() -> RuleSet {
         let x = || wildcard("x");
@@ -214,8 +419,16 @@ impl RuleSet {
         rs.add(rule("mul_one_left", p_mul(p_const(1.0), x()), x()));
 
         // Multiplicative zero: x * 0 = 0
-        rs.add(rule("mul_zero_right", p_mul(x(), p_const(0.0)), p_const(0.0)));
-        rs.add(rule("mul_zero_left", p_mul(p_const(0.0), x()), p_const(0.0)));
+        rs.add(rule(
+            "mul_zero_right",
+            p_mul(x(), p_const(0.0)),
+            p_const(0.0),
+        ));
+        rs.add(rule(
+            "mul_zero_left",
+            p_mul(p_const(0.0), x()),
+            p_const(0.0),
+        ));
 
         // Double negation: --x = x
         rs.add(rule("double_neg", p_neg(p_neg(x())), x()));
@@ -294,14 +507,10 @@ impl RuleSet {
 
     /// Tensor algebra rules.
     ///
-    /// Note: Full tensor rules (Kronecker delta contraction, metric tensor operations,
-    /// index symmetries) require extending Pattern with index-aware matching.
-    /// Currently, this provides algebraic rules useful in tensor calculations.
-    ///
-    /// Future extensions needed for complete tensor support:
-    /// - Pattern::Var { name, indices } for matching specific tensor structures
-    /// - Index pattern matching (upper/lower, specific names, wildcards)
+    /// Includes index-aware rules using Pattern::Var for tensor operations:
     /// - Kronecker delta: δ^i_j v^j = v^i
+    ///
+    /// Future extensions:
     /// - Metric tensor: g^{ij} g_{jk} = δ^i_k
     /// - Symmetry annotations: A^{ij} = A^{ji} for symmetric tensors
     pub fn tensor() -> RuleSet {
@@ -410,13 +619,54 @@ impl RuleSet {
         ));
 
         // -(x * y) = -x * y = x * -y (choose first form)
-        rs.add(rule("neg_mul", p_neg(p_mul(x(), y())), p_mul(p_neg(x()), y())));
+        rs.add(rule(
+            "neg_mul",
+            p_neg(p_mul(x(), y())),
+            p_mul(p_neg(x()), y()),
+        ));
+
+        // === Kronecker delta contraction ===
+        // δ^i_j * v^j = v^i (delta contracts with vector, result has free index)
+        rs.add(rule(
+            "kronecker_delta_right",
+            p_mul(
+                p_var("δ", vec![idx_upper("i"), idx_lower("j")]),
+                p_var_wild("v", vec![idx_upper("j")]),
+            ),
+            p_var_wild("v", vec![idx_upper("i")]),
+        ));
+
+        // v^j * δ^i_j = v^i (commuted form)
+        rs.add(rule(
+            "kronecker_delta_left",
+            p_mul(
+                p_var_wild("v", vec![idx_upper("j")]),
+                p_var("δ", vec![idx_upper("i"), idx_lower("j")]),
+            ),
+            p_var_wild("v", vec![idx_upper("i")]),
+        ));
+
+        // δ^i_j * w_j = w_i (contraction with covector)
+        rs.add(rule(
+            "kronecker_delta_covector_right",
+            p_mul(
+                p_var("δ", vec![idx_upper("i"), idx_lower("j")]),
+                p_var_wild("w", vec![idx_lower("j")]),
+            ),
+            p_var_wild("w", vec![idx_lower("i")]),
+        ));
+
+        // w_j * δ^i_j = w_i (commuted form with covector)
+        rs.add(rule(
+            "kronecker_delta_covector_left",
+            p_mul(
+                p_var_wild("w", vec![idx_lower("j")]),
+                p_var("δ", vec![idx_upper("i"), idx_lower("j")]),
+            ),
+            p_var_wild("w", vec![idx_lower("i")]),
+        ));
 
         rs
-    }
-
-    pub fn new() -> Self {
-        RuleSet { rules: Vec::new() }
     }
 
     /// Add a rule to the set. Duplicates are allowed.
@@ -458,7 +708,7 @@ mod tests {
         let pattern = wildcard("x");
         let expr = scalar("a");
         let bindings = pattern.match_expr(&expr).unwrap();
-        assert_eq!(bindings.get("x"), Some(&expr));
+        assert_eq!(bindings.exprs.get("x"), Some(&expr));
     }
 
     #[test]
@@ -466,7 +716,7 @@ mod tests {
         let pattern = const_wild("c");
         let expr = constant(42.0);
         let bindings = pattern.match_expr(&expr).unwrap();
-        assert_eq!(bindings.get("c"), Some(&expr));
+        assert_eq!(bindings.exprs.get("c"), Some(&expr));
     }
 
     #[test]
@@ -490,8 +740,8 @@ mod tests {
         // Expression: a + b
         let expr = add(scalar("a"), scalar("b"));
         let bindings = pattern.match_expr(&expr).unwrap();
-        assert_eq!(bindings.get("x"), Some(&scalar("a")));
-        assert_eq!(bindings.get("y"), Some(&scalar("b")));
+        assert_eq!(bindings.exprs.get("x"), Some(&scalar("a")));
+        assert_eq!(bindings.exprs.get("y"), Some(&scalar("b")));
     }
 
     #[test]
@@ -508,9 +758,9 @@ mod tests {
         // Expression: (a + b) * c
         let expr = mul(add(scalar("a"), scalar("b")), scalar("c"));
         let bindings = pattern.match_expr(&expr).unwrap();
-        assert_eq!(bindings.get("x"), Some(&scalar("a")));
-        assert_eq!(bindings.get("y"), Some(&scalar("b")));
-        assert_eq!(bindings.get("z"), Some(&scalar("c")));
+        assert_eq!(bindings.exprs.get("x"), Some(&scalar("a")));
+        assert_eq!(bindings.exprs.get("y"), Some(&scalar("b")));
+        assert_eq!(bindings.exprs.get("z"), Some(&scalar("c")));
     }
 
     #[test]
@@ -520,7 +770,7 @@ mod tests {
         // Expression: a + a (same sub-expression)
         let expr = add(scalar("a"), scalar("a"));
         let bindings = pattern.match_expr(&expr).unwrap();
-        assert_eq!(bindings.get("x"), Some(&scalar("a")));
+        assert_eq!(bindings.exprs.get("x"), Some(&scalar("a")));
     }
 
     #[test]
@@ -537,7 +787,7 @@ mod tests {
         let pattern = p_neg(wildcard("x"));
         let expr = neg(scalar("a"));
         let bindings = pattern.match_expr(&expr).unwrap();
-        assert_eq!(bindings.get("x"), Some(&scalar("a")));
+        assert_eq!(bindings.exprs.get("x"), Some(&scalar("a")));
     }
 
     #[test]
@@ -547,7 +797,7 @@ mod tests {
         // Expression: a * a
         let expr = mul(scalar("a"), scalar("a"));
         let bindings = pattern.match_expr(&expr).unwrap();
-        assert_eq!(bindings.get("x"), Some(&scalar("a")));
+        assert_eq!(bindings.exprs.get("x"), Some(&scalar("a")));
     }
 
     // === substitute tests ===
@@ -556,7 +806,7 @@ mod tests {
     fn substitute_wildcard() {
         let pattern = wildcard("x");
         let mut bindings = Bindings::new();
-        bindings.insert("x".to_string(), scalar("a"));
+        bindings.exprs.insert("x".to_string(), scalar("a"));
         assert_eq!(pattern.substitute(&bindings), scalar("a"));
     }
 
@@ -572,8 +822,8 @@ mod tests {
         // Pattern: x + y
         let pattern = p_add(wildcard("x"), wildcard("y"));
         let mut bindings = Bindings::new();
-        bindings.insert("x".to_string(), scalar("a"));
-        bindings.insert("y".to_string(), scalar("b"));
+        bindings.exprs.insert("x".to_string(), scalar("a"));
+        bindings.exprs.insert("y".to_string(), scalar("b"));
         assert_eq!(pattern.substitute(&bindings), add(scalar("a"), scalar("b")));
     }
 
@@ -582,9 +832,9 @@ mod tests {
         // Pattern: (x + y) * z
         let pattern = p_mul(p_add(wildcard("x"), wildcard("y")), wildcard("z"));
         let mut bindings = Bindings::new();
-        bindings.insert("x".to_string(), constant(1.0));
-        bindings.insert("y".to_string(), constant(2.0));
-        bindings.insert("z".to_string(), scalar("a"));
+        bindings.exprs.insert("x".to_string(), constant(1.0));
+        bindings.exprs.insert("y".to_string(), constant(2.0));
+        bindings.exprs.insert("z".to_string(), scalar("a"));
         assert_eq!(
             pattern.substitute(&bindings),
             mul(add(constant(1.0), constant(2.0)), scalar("a"))
@@ -596,7 +846,7 @@ mod tests {
         // Pattern: x + x (same wildcard used twice)
         let pattern = p_add(wildcard("x"), wildcard("x"));
         let mut bindings = Bindings::new();
-        bindings.insert("x".to_string(), scalar("a"));
+        bindings.exprs.insert("x".to_string(), scalar("a"));
         // Both x's get the same value
         assert_eq!(pattern.substitute(&bindings), add(scalar("a"), scalar("a")));
     }
@@ -1166,5 +1416,241 @@ mod tests {
             .and_then(|r| r.apply_ltr(&expr));
 
         assert_eq!(result, Some(add(neg(scalar("a")), neg(scalar("b")))));
+    }
+
+    // === Index-aware pattern matching tests ===
+
+    use crate::expr::{lower, tensor, upper};
+
+    #[test]
+    fn match_var_exact_name_no_indices() {
+        // Pattern: match variable named "x" with no indices
+        let pattern = p_var("x", vec![]);
+        let expr = scalar("x");
+        let bindings = pattern.match_expr(&expr).unwrap();
+        assert!(bindings.exprs.is_empty());
+        assert!(bindings.indices.is_empty());
+    }
+
+    #[test]
+    fn match_var_exact_name_fails_wrong_name() {
+        let pattern = p_var("x", vec![]);
+        let expr = scalar("y");
+        assert!(pattern.match_expr(&expr).is_none());
+    }
+
+    #[test]
+    fn match_var_exact_name_with_upper_index() {
+        // Pattern: match "v" with one upper index, bind index name to "i"
+        let pattern = p_var("v", vec![idx_upper("i")]);
+        let expr = tensor("v", vec![upper("mu")]);
+        let bindings = pattern.match_expr(&expr).unwrap();
+        assert_eq!(bindings.indices.get("i"), Some(&"mu".to_string()));
+    }
+
+    #[test]
+    fn match_var_exact_name_with_lower_index() {
+        // Pattern: match "w" with one lower index, bind to "j"
+        let pattern = p_var("w", vec![idx_lower("j")]);
+        let expr = tensor("w", vec![lower("nu")]);
+        let bindings = pattern.match_expr(&expr).unwrap();
+        assert_eq!(bindings.indices.get("j"), Some(&"nu".to_string()));
+    }
+
+    #[test]
+    fn match_var_fails_wrong_index_position() {
+        // Pattern expects upper, expr has lower
+        let pattern = p_var("v", vec![idx_upper("i")]);
+        let expr = tensor("v", vec![lower("mu")]);
+        assert!(pattern.match_expr(&expr).is_none());
+    }
+
+    #[test]
+    fn match_var_fails_wrong_index_count() {
+        // Pattern expects 1 index, expr has 2
+        let pattern = p_var("T", vec![idx_upper("i")]);
+        let expr = tensor("T", vec![upper("i"), lower("j")]);
+        assert!(pattern.match_expr(&expr).is_none());
+    }
+
+    #[test]
+    fn match_var_mixed_indices() {
+        // Pattern: T^i_j (one upper, one lower)
+        let pattern = p_var("T", vec![idx_upper("i"), idx_lower("j")]);
+        let expr = tensor("T", vec![upper("mu"), lower("nu")]);
+        let bindings = pattern.match_expr(&expr).unwrap();
+        assert_eq!(bindings.indices.get("i"), Some(&"mu".to_string()));
+        assert_eq!(bindings.indices.get("j"), Some(&"nu".to_string()));
+    }
+
+    #[test]
+    fn match_var_wild_name() {
+        // Pattern: any variable name (bind to "var"), with one upper index
+        let pattern = p_var_wild("var", vec![idx_upper("i")]);
+        let expr = tensor("velocity", vec![upper("x")]);
+        let bindings = pattern.match_expr(&expr).unwrap();
+        // The variable itself is bound
+        assert_eq!(bindings.exprs.get("var"), Some(&expr));
+        assert_eq!(bindings.indices.get("i"), Some(&"x".to_string()));
+    }
+
+    #[test]
+    fn match_var_repeated_index_wildcard_same() {
+        // Pattern: T^i_i (same index wildcard for both positions)
+        // This should match when both indices have the same name
+        let pattern = p_var("T", vec![idx_upper("i"), idx_lower("i")]);
+        let expr = tensor("T", vec![upper("mu"), lower("mu")]);
+        let bindings = pattern.match_expr(&expr).unwrap();
+        assert_eq!(bindings.indices.get("i"), Some(&"mu".to_string()));
+    }
+
+    #[test]
+    fn match_var_repeated_index_wildcard_different_fails() {
+        // Pattern: T^i_i (same wildcard) but expr has different index names
+        let pattern = p_var("T", vec![idx_upper("i"), idx_lower("i")]);
+        let expr = tensor("T", vec![upper("mu"), lower("nu")]);
+        assert!(pattern.match_expr(&expr).is_none());
+    }
+
+    #[test]
+    fn substitute_var_exact() {
+        // Substitute a Var pattern with exact name and index wildcards
+        let pattern = p_var("v", vec![idx_upper("i")]);
+        let mut bindings = Bindings::new();
+        bindings
+            .indices
+            .insert("i".to_string(), "alpha".to_string());
+
+        let result = pattern.substitute(&bindings);
+        assert_eq!(result, tensor("v", vec![upper("alpha")]));
+    }
+
+    #[test]
+    fn substitute_var_with_bound_indices() {
+        // More complex: T^i_j with bound index wildcards
+        let pattern = p_var("T", vec![idx_upper("i"), idx_lower("j")]);
+        let mut bindings = Bindings::new();
+        bindings.indices.insert("i".to_string(), "mu".to_string());
+        bindings.indices.insert("j".to_string(), "nu".to_string());
+
+        let result = pattern.substitute(&bindings);
+        assert_eq!(result, tensor("T", vec![upper("mu"), lower("nu")]));
+    }
+
+    #[test]
+    fn var_pattern_match_then_substitute_roundtrip() {
+        // Match a tensor, then substitute back
+        let pattern = p_var("A", vec![idx_upper("i"), idx_lower("j")]);
+        let expr = tensor("A", vec![upper("mu"), lower("nu")]);
+
+        let bindings = pattern.match_expr(&expr).unwrap();
+        let result = pattern.substitute(&bindings);
+        assert_eq!(result, expr);
+    }
+
+    #[test]
+    fn kronecker_delta_contraction_pattern() {
+        // This tests the building blocks for δ^i_j * v^j = v^i
+        // Pattern: δ^i_j (Kronecker delta with upper i, lower j)
+        let delta_pattern = p_var("δ", vec![idx_upper("i"), idx_lower("j")]);
+        let delta_expr = tensor("δ", vec![upper("mu"), lower("nu")]);
+
+        let bindings = delta_pattern.match_expr(&delta_expr).unwrap();
+        assert_eq!(bindings.indices.get("i"), Some(&"mu".to_string()));
+        assert_eq!(bindings.indices.get("j"), Some(&"nu".to_string()));
+
+        // Now test that we can construct a result using the bound indices
+        // v^i pattern with the bound "i" should give v^mu
+        let result_pattern = p_var("v", vec![idx_upper("i")]);
+        let result = result_pattern.substitute(&bindings);
+        assert_eq!(result, tensor("v", vec![upper("mu")]));
+    }
+
+    // === Kronecker delta rule tests ===
+
+    #[test]
+    fn kronecker_delta_rule_vector_right() {
+        // δ^μ_ν * A^ν = A^μ
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("δ", vec![upper("mu"), lower("nu")]),
+            tensor("A", vec![upper("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "kronecker_delta_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("A", vec![upper("mu")])));
+    }
+
+    #[test]
+    fn kronecker_delta_rule_vector_left() {
+        // A^ν * δ^μ_ν = A^μ
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("A", vec![upper("nu")]),
+            tensor("δ", vec![upper("mu"), lower("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "kronecker_delta_left")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("A", vec![upper("mu")])));
+    }
+
+    #[test]
+    fn kronecker_delta_rule_covector_right() {
+        // δ^μ_ν * B_ν = B_μ (note: lower index on result follows the pattern)
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("δ", vec![upper("mu"), lower("nu")]),
+            tensor("B", vec![lower("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "kronecker_delta_covector_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        // The covector rule maps δ^i_j * w_j -> w_i (lower index result)
+        assert_eq!(result, Some(tensor("B", vec![lower("mu")])));
+    }
+
+    #[test]
+    fn kronecker_delta_rule_covector_left() {
+        // B_ν * δ^μ_ν = B_μ
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("B", vec![lower("nu")]),
+            tensor("δ", vec![upper("mu"), lower("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "kronecker_delta_covector_left")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("B", vec![lower("mu")])));
+    }
+
+    #[test]
+    fn kronecker_delta_no_match_different_indices() {
+        // δ^μ_ν * A^σ should NOT match (indices don't contract)
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("δ", vec![upper("mu"), lower("nu")]),
+            tensor("A", vec![upper("sigma")]), // Different index
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "kronecker_delta_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert!(result.is_none());
     }
 }
