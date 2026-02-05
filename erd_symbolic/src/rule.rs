@@ -292,8 +292,127 @@ impl RuleSet {
         rs
     }
 
+    /// Tensor algebra rules.
+    ///
+    /// Note: Full tensor rules (Kronecker delta contraction, metric tensor operations,
+    /// index symmetries) require extending Pattern with index-aware matching.
+    /// Currently, this provides algebraic rules useful in tensor calculations.
+    ///
+    /// Future extensions needed for complete tensor support:
+    /// - Pattern::Var { name, indices } for matching specific tensor structures
+    /// - Index pattern matching (upper/lower, specific names, wildcards)
+    /// - Kronecker delta: δ^i_j v^j = v^i
+    /// - Metric tensor: g^{ij} g_{jk} = δ^i_k
+    /// - Symmetry annotations: A^{ij} = A^{ji} for symmetric tensors
     pub fn tensor() -> RuleSet {
-        Self::new() // index contraction, symmetries
+        let x = || wildcard("x");
+        let y = || wildcard("y");
+        let a = || wildcard("a");
+        let b = || wildcard("b");
+
+        let mut rs = Self::new();
+
+        // === Power laws (useful for tensor index manipulation) ===
+        // x^a * x^b = x^(a+b)
+        rs.add(rule(
+            "pow_mul_same_base",
+            p_mul(p_pow(x(), a()), p_pow(x(), b())),
+            p_pow(x(), p_add(a(), b())),
+        ));
+
+        // (x^a)^b = x^(a*b)
+        rs.add(rule(
+            "pow_pow",
+            p_pow(p_pow(x(), a()), b()),
+            p_pow(x(), p_mul(a(), b())),
+        ));
+
+        // (x * y)^a = x^a * y^a
+        rs.add(rule(
+            "pow_mul_distribute",
+            p_pow(p_mul(x(), y()), a()),
+            p_mul(p_pow(x(), a()), p_pow(y(), a())),
+        ));
+
+        // (x / y)^a = x^a / y^a (represented as x^a * (1/y)^a)
+        rs.add(rule(
+            "pow_div_distribute",
+            p_pow(p_mul(x(), p_inv(y())), a()),
+            p_mul(p_pow(x(), a()), p_pow(p_inv(y()), a())),
+        ));
+
+        // x^(-a) = 1/x^a
+        rs.add(rule(
+            "pow_neg_exp",
+            p_pow(x(), p_neg(a())),
+            p_inv(p_pow(x(), a())),
+        ));
+
+        // === Inverse distribution ===
+        // 1/(x * y) = (1/x) * (1/y)
+        rs.add(rule(
+            "inv_mul_distribute",
+            p_inv(p_mul(x(), y())),
+            p_mul(p_inv(x()), p_inv(y())),
+        ));
+
+        // === Multiplication associativity (for reordering) ===
+        // (x * y) * z = x * (y * z)
+        rs.add(rule(
+            "mul_assoc_right",
+            p_mul(p_mul(x(), y()), wildcard("z")),
+            p_mul(x(), p_mul(y(), wildcard("z"))),
+        ));
+
+        // x * (y * z) = (x * y) * z
+        rs.add(rule(
+            "mul_assoc_left",
+            p_mul(x(), p_mul(y(), wildcard("z"))),
+            p_mul(p_mul(x(), y()), wildcard("z")),
+        ));
+
+        // === Addition associativity ===
+        // (x + y) + z = x + (y + z)
+        rs.add(rule(
+            "add_assoc_right",
+            p_add(p_add(x(), y()), wildcard("z")),
+            p_add(x(), p_add(y(), wildcard("z"))),
+        ));
+
+        // x + (y + z) = (x + y) + z
+        rs.add(rule(
+            "add_assoc_left",
+            p_add(x(), p_add(y(), wildcard("z"))),
+            p_add(p_add(x(), y()), wildcard("z")),
+        ));
+
+        // === Distribution (for expanding/factoring) ===
+        // x * (y + z) = x*y + x*z
+        rs.add(rule(
+            "distribute_left",
+            p_mul(x(), p_add(y(), wildcard("z"))),
+            p_add(p_mul(x(), y()), p_mul(x(), wildcard("z"))),
+        ));
+
+        // (x + y) * z = x*z + y*z
+        rs.add(rule(
+            "distribute_right",
+            p_mul(p_add(x(), y()), wildcard("z")),
+            p_add(p_mul(x(), wildcard("z")), p_mul(y(), wildcard("z"))),
+        ));
+
+        // === Negation distribution ===
+        // -(x + y) = -x + -y
+        rs.add(rule(
+            "neg_add_distribute",
+            p_neg(p_add(x(), y())),
+            p_add(p_neg(x()), p_neg(y())),
+        ));
+
+        // -(x * y) = -x * y = x * -y (choose first form)
+        rs.add(rule("neg_mul", p_neg(p_mul(x(), y())), p_mul(p_neg(x()), y())));
+
+        rs
     }
 
     pub fn new() -> Self {
@@ -902,5 +1021,150 @@ mod tests {
             .and_then(|r| r.apply_ltr(&expr));
 
         assert_eq!(result, Some(scalar("a")));
+    }
+
+    // === Tensor RuleSet tests ===
+
+    #[test]
+    fn tensor_ruleset_has_rules() {
+        let rs = RuleSet::tensor();
+        assert!(!rs.is_empty());
+        assert!(rs.len() >= 10); // We have at least 10 tensor rules
+    }
+
+    #[test]
+    fn tensor_pow_mul_same_base() {
+        let rs = RuleSet::tensor();
+        // x^2 * x^3 = x^(2+3)
+        let expr = mul(
+            pow(scalar("x"), constant(2.0)),
+            pow(scalar("x"), constant(3.0)),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "pow_mul_same_base")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(pow(scalar("x"), add(constant(2.0), constant(3.0))))
+        );
+    }
+
+    #[test]
+    fn tensor_pow_pow() {
+        let rs = RuleSet::tensor();
+        // (x^2)^3 = x^(2*3)
+        let expr = pow(pow(scalar("x"), constant(2.0)), constant(3.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "pow_pow")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(pow(scalar("x"), mul(constant(2.0), constant(3.0))))
+        );
+    }
+
+    #[test]
+    fn tensor_pow_mul_distribute() {
+        let rs = RuleSet::tensor();
+        // (x * y)^2 = x^2 * y^2
+        let expr = pow(mul(scalar("x"), scalar("y")), constant(2.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "pow_mul_distribute")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(mul(
+                pow(scalar("x"), constant(2.0)),
+                pow(scalar("y"), constant(2.0))
+            ))
+        );
+    }
+
+    #[test]
+    fn tensor_pow_neg_exp() {
+        let rs = RuleSet::tensor();
+        // x^(-2) = 1/x^2
+        let expr = pow(scalar("x"), neg(constant(2.0)));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "pow_neg_exp")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(inv(pow(scalar("x"), constant(2.0)))));
+    }
+
+    #[test]
+    fn tensor_inv_mul_distribute() {
+        let rs = RuleSet::tensor();
+        // 1/(x * y) = (1/x) * (1/y)
+        let expr = inv(mul(scalar("x"), scalar("y")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "inv_mul_distribute")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(mul(inv(scalar("x")), inv(scalar("y")))));
+    }
+
+    #[test]
+    fn tensor_distribute_left() {
+        let rs = RuleSet::tensor();
+        // a * (b + c) = a*b + a*c
+        let expr = mul(scalar("a"), add(scalar("b"), scalar("c")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "distribute_left")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(add(
+                mul(scalar("a"), scalar("b")),
+                mul(scalar("a"), scalar("c"))
+            ))
+        );
+    }
+
+    #[test]
+    fn tensor_mul_assoc() {
+        let rs = RuleSet::tensor();
+        // (a * b) * c = a * (b * c)
+        let expr = mul(mul(scalar("a"), scalar("b")), scalar("c"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "mul_assoc_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(mul(scalar("a"), mul(scalar("b"), scalar("c"))))
+        );
+    }
+
+    #[test]
+    fn tensor_neg_add_distribute() {
+        let rs = RuleSet::tensor();
+        // -(a + b) = -a + -b
+        let expr = neg(add(scalar("a"), scalar("b")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "neg_add_distribute")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(add(neg(scalar("a")), neg(scalar("b")))));
     }
 }
