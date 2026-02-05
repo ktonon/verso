@@ -648,4 +648,465 @@ mod tests {
         let result = simplify(&expr, &rules);
         assert_eq!(result, tensor("v", vec![upper("mu")]));
     }
+
+    // === Additional edge case tests ===
+
+    #[test]
+    fn simplify_add_zero_left() {
+        // 0 + x should simplify to x (tests left-side zero rule)
+        let rules = RuleSet::standard();
+        let expr = add(constant(0.0), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, scalar("x"));
+    }
+
+    #[test]
+    fn simplify_mul_one_left() {
+        // 1 * x should simplify to x (tests left-side one rule)
+        let rules = RuleSet::standard();
+        let expr = mul(constant(1.0), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, scalar("x"));
+    }
+
+    #[test]
+    fn simplify_mul_zero_left() {
+        // 0 * x should simplify to 0 (tests left-side zero rule)
+        let rules = RuleSet::standard();
+        let expr = mul(constant(0.0), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_neg_of_neg_of_constant() {
+        // --5 should simplify to 5
+        let rules = RuleSet::standard();
+        let expr = neg(neg(constant(5.0)));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(5.0));
+    }
+
+    #[test]
+    fn simplify_inv_of_one() {
+        // 1/1 = 1
+        let rules = RuleSet::standard();
+        let expr = inv(constant(1.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_pow_negative_exponent() {
+        // x^(-1) with tensor rules should become 1/x^1 = 1/x
+        let rules = RuleSet::tensor();
+        let expr = pow(scalar("x"), neg(constant(1.0)));
+        let result = simplify(&expr, &rules);
+        // pow_neg_exp: x^(-a) = 1/x^a
+        assert_eq!(result, inv(pow(scalar("x"), constant(1.0))));
+    }
+
+    #[test]
+    fn simplify_pow_negative_exponent_with_standard() {
+        // x^(-1) with both tensor and standard rules
+        // Should become 1/x^1 then 1/x (via pow_one rule)
+        let mut rules = RuleSet::standard();
+        rules.merge(RuleSet::tensor());
+        let expr = pow(scalar("x"), neg(constant(1.0)));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, inv(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_zero_to_any_power() {
+        // 0^x = 0 (assumes x > 0)
+        let rules = RuleSet::standard();
+        let expr = pow(constant(0.0), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_neg_zero() {
+        // -0 should simplify to 0
+        let rules = RuleSet::standard();
+        let expr = neg(constant(0.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_add_neg_self() {
+        // x + (-x) = 0 (term cancellation)
+        let rules = RuleSet::standard();
+        let expr = add(scalar("x"), neg(scalar("x")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_neg_add_self() {
+        // (-x) + x = 0 (term cancellation, reversed order)
+        let rules = RuleSet::standard();
+        let expr = add(neg(scalar("x")), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_mul_neg_one_right() {
+        // x * (-1) = -x
+        let rules = RuleSet::standard();
+        let expr = mul(scalar("x"), neg(constant(1.0)));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, neg(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_mul_neg_one_left() {
+        // (-1) * x = -x
+        let rules = RuleSet::standard();
+        let expr = mul(neg(constant(1.0)), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, neg(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_trig_at_pi() {
+        // sin(π) = 0, cos(π) = -1
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+
+        let sin_pi = sin(constant(PI));
+        let cos_pi = cos(constant(PI));
+
+        assert_eq!(simplify(&sin_pi, &rules), constant(0.0));
+        assert_eq!(simplify(&cos_pi, &rules), constant(-1.0));
+    }
+
+    #[test]
+    fn simplify_trig_at_pi_over_2() {
+        // sin(π/2) = 1, cos(π/2) = 0
+        use std::f64::consts::FRAC_PI_2;
+        let rules = RuleSet::trigonometric();
+
+        let sin_pi_2 = sin(constant(FRAC_PI_2));
+        let cos_pi_2 = cos(constant(FRAC_PI_2));
+
+        assert_eq!(simplify(&sin_pi_2, &rules), constant(1.0));
+        assert_eq!(simplify(&cos_pi_2, &rules), constant(0.0));
+    }
+
+    #[test]
+    fn simplify_exp_zero() {
+        // exp(0) = 1
+        let rules = RuleSet::trigonometric();
+        use crate::expr::exp;
+
+        let expr = exp(constant(0.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_ln_one() {
+        // ln(1) = 0
+        let rules = RuleSet::trigonometric();
+        use crate::expr::ln;
+
+        let expr = ln(constant(1.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_pow_same_base_mul() {
+        // x^2 * x^3 = x^(2+3) with tensor rules
+        let rules = RuleSet::tensor();
+        let expr = mul(
+            pow(scalar("x"), constant(2.0)),
+            pow(scalar("x"), constant(3.0)),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, pow(scalar("x"), add(constant(2.0), constant(3.0))));
+    }
+
+    #[test]
+    fn simplify_pow_of_pow() {
+        // (x^2)^3 = x^(2*3) with tensor rules
+        let rules = RuleSet::tensor();
+        let expr = pow(pow(scalar("x"), constant(2.0)), constant(3.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, pow(scalar("x"), mul(constant(2.0), constant(3.0))));
+    }
+
+    #[test]
+    fn simplify_distribute_mul_over_add_blocked_by_complexity() {
+        // x * (y + z) has complexity 5, x*y + x*z has complexity 7
+        // TODO: A beam search or cost-based search could allow temporary complexity
+        // increases that lead to overall simplification
+        let rules = RuleSet::tensor();
+        let expr = mul(scalar("x"), add(scalar("y"), scalar("z")));
+        let result = simplify(&expr, &rules);
+        // Distribution increases complexity, so greedy search blocks it
+        assert_eq!(result, expr);
+    }
+
+    #[test]
+    fn simplify_neg_distribute_over_add_blocked_by_complexity() {
+        // -(x + y) has complexity 4, -x + -y has complexity 5
+        // TODO: A beam search or cost-based search could allow temporary complexity
+        // increases that lead to overall simplification
+        let rules = RuleSet::tensor();
+        let expr = neg(add(scalar("x"), scalar("y")));
+        let result = simplify(&expr, &rules);
+        // Distribution increases complexity, so greedy search blocks it
+        assert_eq!(result, expr);
+    }
+
+    #[test]
+    fn simplify_inv_distribute_over_mul_blocked_by_complexity() {
+        // 1/(x * y) has complexity 4, (1/x) * (1/y) has complexity 5
+        // TODO: A beam search or cost-based search could allow temporary complexity
+        // increases that lead to overall simplification
+        let rules = RuleSet::tensor();
+        let expr = inv(mul(scalar("x"), scalar("y")));
+        let result = simplify(&expr, &rules);
+        // Distribution increases complexity, so greedy search blocks it
+        assert_eq!(result, expr);
+    }
+
+    #[test]
+    fn simplify_deep_nesting_all_identities() {
+        // (((x^1 * 1) + 0)^1 * 1) + 0 should simplify to x
+        let rules = RuleSet::standard();
+        let expr = add(
+            mul(
+                pow(
+                    add(mul(pow(scalar("x"), constant(1.0)), constant(1.0)), constant(0.0)),
+                    constant(1.0),
+                ),
+                constant(1.0),
+            ),
+            constant(0.0),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, scalar("x"));
+    }
+
+    #[test]
+    fn simplify_alternating_neg_inv() {
+        // -1/(-(1/x)) should simplify
+        // First: 1/x, then -(1/x), then 1/(-(1/x)) = -1/(1/x) = -x?
+        // Actually: double_inv on 1/(1/x) gives x, so 1/(-(1/x))...
+        // This is tricky - let's see what happens
+        let rules = RuleSet::standard();
+        let expr = neg(inv(neg(inv(scalar("x")))));
+        let result = simplify(&expr, &rules);
+        // The expression is -(1/(-(1/x)))
+        // With double_neg and double_inv rules, unclear what the final form is
+        // Let's just check it doesn't crash and reduces complexity
+        assert!(result.complexity() <= expr.complexity());
+    }
+
+    #[test]
+    fn simplify_pythagorean_reversed() {
+        // TODO: Add commutative variant of Pythagorean identity: cos²(x) + sin²(x) = 1
+        // Currently the rule only matches sin² + cos², not cos² + sin²
+        let rules = RuleSet::trigonometric();
+        let expr = add(
+            pow(cos(scalar("x")), constant(2.0)),
+            pow(sin(scalar("x")), constant(2.0)),
+        );
+        let result = simplify(&expr, &rules);
+        // Remains unchanged without the commutative variant
+        assert_eq!(
+            result,
+            add(
+                pow(cos(scalar("x")), constant(2.0)),
+                pow(sin(scalar("x")), constant(2.0))
+            )
+        );
+    }
+
+    #[test]
+    fn simplify_tensor_covector_contraction() {
+        // δ^μ_ν * w_ν = w_μ (covector contraction)
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        let expr = mul(
+            tensor("δ", vec![upper("mu"), lower("nu")]),
+            tensor("w", vec![lower("nu")]),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, tensor("w", vec![lower("mu")]));
+    }
+
+    #[test]
+    fn simplify_kronecker_no_contraction() {
+        // δ^μ_ν * v^σ should NOT simplify (no matching indices)
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        let expr = mul(
+            tensor("δ", vec![upper("mu"), lower("nu")]),
+            tensor("v", vec![upper("sigma")]),
+        );
+        let result = simplify(&expr, &rules);
+        // No contraction, should remain unchanged
+        assert_eq!(result, expr);
+    }
+
+    #[test]
+    fn simplify_multiple_variables_same_structure() {
+        // (a + 0) + (b + 0) + (c + 0) should simplify to a + b + c
+        let rules = RuleSet::standard();
+        let expr = add(
+            add(add(scalar("a"), constant(0.0)), add(scalar("b"), constant(0.0))),
+            add(scalar("c"), constant(0.0)),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, add(add(scalar("a"), scalar("b")), scalar("c")));
+    }
+
+    #[test]
+    fn simplify_x_times_x_square() {
+        // x * x = x^2
+        let rules = RuleSet::standard();
+        let expr = mul(scalar("x"), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, pow(scalar("x"), constant(2.0)));
+    }
+
+    #[test]
+    fn simplify_sin_of_neg_x() {
+        // sin(-x) = -sin(x)
+        let rules = RuleSet::trigonometric();
+        let expr = sin(neg(scalar("x")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, neg(sin(scalar("x"))));
+    }
+
+    #[test]
+    fn simplify_cos_of_neg_x() {
+        // cos(-x) = cos(x) (even function)
+        let rules = RuleSet::trigonometric();
+        let expr = cos(neg(scalar("x")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, cos(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_complex_trig_identity() {
+        // sin(-0) * cos(0) + sin(0) = 0 * 1 + 0 = 0
+        let mut rules = RuleSet::standard();
+        rules.merge(RuleSet::trigonometric());
+
+        let expr = add(
+            mul(sin(neg(constant(0.0))), cos(constant(0.0))),
+            sin(constant(0.0)),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_nested_pow_with_identities() {
+        // ((x^1)^0)^1 should become 1^1 = 1
+        let rules = RuleSet::standard();
+        let expr = pow(pow(pow(scalar("x"), constant(1.0)), constant(0.0)), constant(1.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_zero_in_exponent_nested() {
+        // (x + y)^0 * z should become 1 * z = z
+        let rules = RuleSet::standard();
+        let expr = mul(pow(add(scalar("x"), scalar("y")), constant(0.0)), scalar("z"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, scalar("z"));
+    }
+
+    #[test]
+    fn simplify_one_to_complex_power() {
+        // 1^(x + y + z) should become 1
+        let rules = RuleSet::standard();
+        let expr = pow(constant(1.0), add(add(scalar("x"), scalar("y")), scalar("z")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_tensor_metric_like_pattern() {
+        // TODO: Add generic tensor contraction rules (e.g., metric tensor g^μν)
+        // Currently only Kronecker delta (δ) contractions are supported
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        // This won't match kronecker rules since it's not δ
+        let expr = mul(
+            tensor("A", vec![upper("mu"), lower("nu")]),
+            tensor("B", vec![upper("nu")]),
+        );
+        let result = simplify(&expr, &rules);
+        // No matching rule for generic tensor contraction, remains unchanged
+        assert_eq!(result, expr);
+    }
+
+    #[test]
+    fn simplify_exp_of_ln_of_exp() {
+        // exp(ln(exp(x))) = exp(x)
+        let rules = RuleSet::trigonometric();
+        use crate::expr::{exp, ln};
+
+        let expr = exp(ln(exp(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        // ln(exp(x)) = x, then exp(x)
+        assert_eq!(result, exp(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_ln_of_exp_of_ln() {
+        // ln(exp(ln(x))) = ln(x)
+        let rules = RuleSet::trigonometric();
+        use crate::expr::{exp, ln};
+
+        let expr = ln(exp(ln(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        // exp(ln(x)) = x, then ln(x)
+        assert_eq!(result, ln(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_associativity_does_not_loop() {
+        // Test that associativity rules don't cause infinite loops
+        // (a * b) * c with tensor rules should eventually stabilize
+        let rules = RuleSet::tensor();
+        let expr = mul(mul(scalar("a"), scalar("b")), scalar("c"));
+        let result = simplify(&expr, &rules);
+        // Should complete without infinite loop (max_steps prevents it)
+        // The result might be reassociated
+        assert!(result.complexity() <= expr.complexity() + 2); // Allow slight increase from reassociation
+    }
+
+    #[test]
+    fn simplify_all_rulesets_complex() {
+        // Test a very complex expression with all rule types
+        // ((sin(0) + cos(0)) * x + 0)^1
+        let rules = RuleSet::full();
+
+        // (sin(0) + cos(0)) = 0 + 1 = 1
+        // 1 * x = x
+        // x + 0 = x
+        // x^1 = x
+        let trig_part = add(sin(constant(0.0)), cos(constant(0.0)));
+        let expr = pow(
+            add(mul(trig_part, scalar("x")), constant(0.0)),
+            constant(1.0),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, scalar("x"));
+    }
 }

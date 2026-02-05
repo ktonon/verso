@@ -439,10 +439,45 @@ impl RuleSet {
         // Double inverse: 1/(1/x) = x
         rs.add(rule("double_inv", p_inv(p_inv(x())), x()));
 
+        // Inverse of one: 1/1 = 1
+        rs.add(rule("inv_one", p_inv(p_const(1.0)), p_const(1.0)));
+
         // Power identities
         rs.add(rule("pow_one", p_pow(x(), p_const(1.0)), x())); // x^1 = x
         rs.add(rule("pow_zero", p_pow(x(), p_const(0.0)), p_const(1.0))); // x^0 = 1
         rs.add(rule("one_pow", p_pow(p_const(1.0), x()), p_const(1.0))); // 1^x = 1
+        rs.add(rule("zero_pow", p_pow(p_const(0.0), x()), p_const(0.0))); // 0^x = 0 (for x > 0)
+
+        // Term cancellation: x + (-x) = 0
+        rs.add(rule(
+            "add_neg_self_right",
+            p_add(x(), p_neg(x())),
+            p_const(0.0),
+        ));
+        rs.add(rule(
+            "add_neg_self_left",
+            p_add(p_neg(x()), x()),
+            p_const(0.0),
+        ));
+
+        // Multiplication by negative one: x * (-1) = -x
+        rs.add(rule(
+            "mul_neg_one_right",
+            p_mul(x(), p_neg(p_const(1.0))),
+            p_neg(x()),
+        ));
+        rs.add(rule(
+            "mul_neg_one_left",
+            p_mul(p_neg(p_const(1.0)), x()),
+            p_neg(x()),
+        ));
+
+        // Squaring: x * x = x^2
+        rs.add(rule(
+            "mul_self_square",
+            p_mul(x(), x()),
+            p_pow(x(), p_const(2.0)),
+        ));
 
         rs
     }
