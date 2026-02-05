@@ -1,4 +1,4 @@
-use crate::expr::{count_contractions, Expr, FnKind, Index, IndexPosition};
+use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind};
 use std::fmt::Display;
 
 impl Display for Index {
@@ -66,18 +66,19 @@ impl std::fmt::Display for Expr {
                     write!(f, "{} / {}", maybe_paren(a, self), maybe_paren(inner, self))
                 }
                 _ => {
-                    let contractions = count_contractions(a, b);
+                    let mul_kind = classify_mul(a, b);
                     // Coefficient notation: 2x instead of 2 * x
                     if let Expr::Const(n) = a.as_ref() {
-                        if contractions == 0 {
+                        if mul_kind == MulKind::Scalar {
                             return write!(f, "{}{}", n, maybe_paren(b, self));
                         }
                     }
-                    // Choose operator based on contraction count (Einstein notation)
-                    let op = match contractions {
-                        0 => " * ", // scalar multiplication
-                        1 => " ⋅ ", // single contraction (dot product)
-                        _ => " : ", // double contraction
+                    // Choose operator based on multiplication kind (Einstein notation)
+                    let op = match mul_kind {
+                        MulKind::Scalar => " * ", // scalar multiplication
+                        MulKind::Outer => " ⊗ ",  // outer/tensor product
+                        MulKind::Single => " ⋅ ", // single contraction (dot product)
+                        MulKind::Double => " : ", // double contraction
                     };
                     write!(f, "{}{}{}", maybe_paren(a, self), op, maybe_paren(b, self))
                 }
@@ -162,10 +163,10 @@ mod tests {
     }
 
     #[test]
-    fn display_mul_no_contraction_tensors() {
-        // A^i B^j has no contractions (both upper) → scalar multiplication
+    fn display_mul_outer_product() {
+        // A^i B^j has no contractions (both upper) → outer/tensor product
         let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]));
-        assert_eq!(format!("{}", e), "A^i * B^j");
+        assert_eq!(format!("{}", e), "A^i ⊗ B^j");
     }
 
     #[test]

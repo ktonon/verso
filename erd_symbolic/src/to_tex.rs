@@ -1,4 +1,4 @@
-use crate::expr::{count_contractions, Expr, FnKind, Index, IndexPosition};
+use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind};
 
 pub trait ToTex {
     fn to_tex(&self) -> String;
@@ -76,11 +76,12 @@ impl ToTex for Expr {
                     _ => {
                         let a_tex = maybe_paren(a, self);
                         let b_tex = maybe_paren(b, self);
-                        // Choose operator based on contraction count (Einstein notation)
-                        let op = match count_contractions(a, b) {
-                            0 => " ",        // scalar/tensor product (juxtaposition)
-                            1 => " \\cdot ", // single contraction (dot product)
-                            _ => " : ",      // double contraction
+                        // Choose operator based on multiplication kind (Einstein notation)
+                        let op = match classify_mul(a, b) {
+                            MulKind::Scalar => " ",         // scalar multiplication (juxtaposition)
+                            MulKind::Outer => " \\otimes ", // outer/tensor product
+                            MulKind::Single => " \\cdot ",  // single contraction (dot product)
+                            MulKind::Double => " : ",       // double contraction
                         };
                         format!("{}{}{}", a_tex, op, b_tex)
                     }
@@ -185,10 +186,10 @@ mod tests {
     }
 
     #[test]
-    fn to_tex_mul_no_contraction_tensors() {
-        // A^i B^j has no contractions (both upper) - juxtaposition
+    fn to_tex_mul_outer_product() {
+        // A^i B^j has no contractions (both upper) - outer/tensor product
         let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]));
-        assert_eq!(e.to_tex(), "A^{i} B^{j}");
+        assert_eq!(e.to_tex(), "A^{i} \\otimes B^{j}");
     }
 
     #[test]

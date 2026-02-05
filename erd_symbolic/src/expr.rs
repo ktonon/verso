@@ -126,10 +126,15 @@ pub fn sin(a: Expr) -> Expr {
     Expr::Fn(FnKind::Sin, Box::new(a))
 }
 
+/// Returns true if the expression has tensor indices.
+pub fn has_indices(expr: &Expr) -> bool {
+    matches!(expr, Expr::Var { indices, .. } if !indices.is_empty())
+}
+
 /// Count index contractions between two expressions using Einstein notation.
 /// A contraction occurs when the same index name appears with opposite positions
 /// (one upper, one lower) in the two expressions.
-pub fn count_contractions(left: &Expr, right: &Expr) -> usize {
+fn count_contractions(left: &Expr, right: &Expr) -> usize {
     if let (
         Expr::Var {
             indices: left_indices,
@@ -152,5 +157,29 @@ pub fn count_contractions(left: &Expr, right: &Expr) -> usize {
         count
     } else {
         0
+    }
+}
+
+/// Determines the type of tensor multiplication based on Einstein notation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MulKind {
+    /// Scalar multiplication (at least one operand has no indices)
+    Scalar,
+    /// Outer/tensor product (both have indices, none contract)
+    Outer,
+    /// Single contraction (dot product)
+    Single,
+    /// Double contraction
+    Double,
+}
+
+/// Classify the multiplication type based on Einstein notation.
+pub fn classify_mul(left: &Expr, right: &Expr) -> MulKind {
+    let contractions = count_contractions(left, right);
+    match contractions {
+        0 if has_indices(left) && has_indices(right) => MulKind::Outer,
+        0 => MulKind::Scalar,
+        1 => MulKind::Single,
+        _ => MulKind::Double,
     }
 }
