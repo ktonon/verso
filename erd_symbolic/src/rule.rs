@@ -123,11 +123,16 @@ fn bind(name: &str, expr: Expr, bindings: &mut Bindings) -> bool {
 }
 
 impl Rule {
+    /// Apply rule left-to-right: match lhs, substitute into rhs.
     pub fn apply_ltr(&self, expr: &Expr) -> Option<Expr> {
-        None // TODO: implement me
+        let bindings = self.lhs.match_expr(expr)?;
+        Some(self.rhs.substitute(&bindings))
     }
+
+    /// Apply rule right-to-left: match rhs, substitute into lhs.
     pub fn apply_rtl(&self, expr: &Expr) -> Option<Expr> {
-        None // TODO: implement me
+        let bindings = self.rhs.match_expr(expr)?;
+        Some(self.lhs.substitute(&bindings))
     }
 }
 
@@ -171,7 +176,8 @@ impl RuleSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::{add, constant, mul, neg, pow, scalar};
+    use crate::expr::{add, constant, mul, neg, scalar};
+    use crate::pow;
 
     // Pattern builder helpers
     fn wildcard(name: &str) -> Pattern {
@@ -407,5 +413,149 @@ mod tests {
             .add(make_rule("r2"))
             .add(make_rule("r3"));
         assert_eq!(rs.len(), 3);
+    }
+
+    // === Rule apply tests ===
+
+    #[test]
+    fn apply_ltr_identity() {
+        // Rule: x + 0 -> x (additive identity)
+        let rule = Rule {
+            name: "add_zero".to_string(),
+            lhs: p_add(wildcard("x"), Pattern::Const(0.0)),
+            rhs: wildcard("x"),
+        };
+
+        // Expression: a + 0
+        let expr = add(scalar("a"), constant(0.0));
+        let result = rule.apply_ltr(&expr).unwrap();
+        assert_eq!(result, scalar("a"));
+    }
+
+    #[test]
+    fn apply_ltr_no_match() {
+        // Rule: x + 0 -> x
+        let rule = Rule {
+            name: "add_zero".to_string(),
+            lhs: p_add(wildcard("x"), Pattern::Const(0.0)),
+            rhs: wildcard("x"),
+        };
+
+        // Expression: a + b (doesn't match x + 0)
+        let expr = add(scalar("a"), scalar("b"));
+        assert!(rule.apply_ltr(&expr).is_none());
+    }
+
+    #[test]
+    fn apply_rtl_identity() {
+        // Rule: x + 0 -> x (apply in reverse: x -> x + 0)
+        let rule = Rule {
+            name: "add_zero".to_string(),
+            lhs: p_add(wildcard("x"), Pattern::Const(0.0)),
+            rhs: wildcard("x"),
+        };
+
+        // Expression: a (matches rhs pattern "x")
+        let expr = scalar("a");
+        let result = rule.apply_rtl(&expr).unwrap();
+        assert_eq!(result, add(scalar("a"), constant(0.0)));
+    }
+
+    #[test]
+    fn apply_ltr_double_negation() {
+        // Rule: --x -> x (double negation elimination)
+        let rule = Rule {
+            name: "double_neg".to_string(),
+            lhs: p_neg(p_neg(wildcard("x"))),
+            rhs: wildcard("x"),
+        };
+
+        // Expression: --a
+        let expr = neg(neg(scalar("a")));
+        let result = rule.apply_ltr(&expr).unwrap();
+        assert_eq!(result, scalar("a"));
+    }
+
+    #[test]
+    fn apply_rtl_double_negation() {
+        // Rule: --x -> x (apply in reverse: x -> --x)
+        let rule = Rule {
+            name: "double_neg".to_string(),
+            lhs: p_neg(p_neg(wildcard("x"))),
+            rhs: wildcard("x"),
+        };
+
+        // Expression: a
+        let expr = scalar("a");
+        let result = rule.apply_rtl(&expr).unwrap();
+        assert_eq!(result, neg(neg(scalar("a"))));
+    }
+
+    #[test]
+    fn apply_ltr_with_repeated_wildcard() {
+        // Rule: x * x -> x^2 (squaring)
+        let rule = Rule {
+            name: "square".to_string(),
+            lhs: p_mul(wildcard("x"), wildcard("x")),
+            rhs: Pattern::Pow(Box::new(wildcard("x")), Box::new(Pattern::Const(2.0))),
+        };
+
+        // Expression: a * a
+        let expr = mul(scalar("a"), scalar("a"));
+        let result = rule.apply_ltr(&expr).unwrap();
+        assert_eq!(result, pow(scalar("a"), constant(2.0)));
+    }
+
+    #[test]
+    fn apply_ltr_repeated_wildcard_no_match() {
+        // Rule: x * x -> x^2
+        let rule = Rule {
+            name: "square".to_string(),
+            lhs: p_mul(wildcard("x"), wildcard("x")),
+            rhs: Pattern::Pow(Box::new(wildcard("x")), Box::new(Pattern::Const(2.0))),
+        };
+
+        // Expression: a * b (different operands, won't match x * x)
+        let expr = mul(scalar("a"), scalar("b"));
+        assert!(rule.apply_ltr(&expr).is_none());
+    }
+
+    #[test]
+    fn apply_ltr_nested() {
+        // Rule: (x + y) * z -> x*z + y*z (distribution, simplified)
+        let rule = Rule {
+            name: "distribute".to_string(),
+            lhs: p_mul(p_add(wildcard("x"), wildcard("y")), wildcard("z")),
+            rhs: p_add(
+                p_mul(wildcard("x"), wildcard("z")),
+                p_mul(wildcard("y"), wildcard("z")),
+            ),
+        };
+
+        // Expression: (a + b) * c
+        let expr = mul(add(scalar("a"), scalar("b")), scalar("c"));
+        let result = rule.apply_ltr(&expr).unwrap();
+        assert_eq!(
+            result,
+            add(mul(scalar("a"), scalar("c")), mul(scalar("b"), scalar("c")))
+        );
+    }
+
+    #[test]
+    fn apply_rtl_factoring() {
+        // Rule: (x + y) * z -> x*z + y*z (apply in reverse to factor)
+        let rule = Rule {
+            name: "distribute".to_string(),
+            lhs: p_mul(p_add(wildcard("x"), wildcard("y")), wildcard("z")),
+            rhs: p_add(
+                p_mul(wildcard("x"), wildcard("z")),
+                p_mul(wildcard("y"), wildcard("z")),
+            ),
+        };
+
+        // Expression: a*c + b*c (matches rhs pattern)
+        let expr = add(mul(scalar("a"), scalar("c")), mul(scalar("b"), scalar("c")));
+        let result = rule.apply_rtl(&expr).unwrap();
+        assert_eq!(result, mul(add(scalar("a"), scalar("b")), scalar("c")));
     }
 }
