@@ -13,6 +13,39 @@ pub enum Pattern {
     Fn(FnKind, Box<Pattern>),
 }
 
+// Pattern builder functions
+pub fn wildcard(name: &str) -> Pattern {
+    Pattern::Wildcard(name.to_string())
+}
+
+pub fn const_wild(name: &str) -> Pattern {
+    Pattern::ConstWild(name.to_string())
+}
+
+pub fn p_const(n: f64) -> Pattern {
+    Pattern::Const(n)
+}
+
+pub fn p_add(a: Pattern, b: Pattern) -> Pattern {
+    Pattern::Add(Box::new(a), Box::new(b))
+}
+
+pub fn p_mul(a: Pattern, b: Pattern) -> Pattern {
+    Pattern::Mul(Box::new(a), Box::new(b))
+}
+
+pub fn p_neg(a: Pattern) -> Pattern {
+    Pattern::Neg(Box::new(a))
+}
+
+pub fn p_inv(a: Pattern) -> Pattern {
+    Pattern::Inv(Box::new(a))
+}
+
+pub fn p_pow(base: Pattern, exp: Pattern) -> Pattern {
+    Pattern::Pow(Box::new(base), Box::new(exp))
+}
+
 pub struct Rule {
     pub name: String,
     pub lhs: Pattern,
@@ -140,7 +173,59 @@ pub struct RuleSet {
     rules: Vec<Rule>,
 }
 
+/// Helper to create a rule.
+pub fn rule(name: &str, lhs: Pattern, rhs: Pattern) -> Rule {
+    Rule {
+        name: name.to_string(),
+        lhs,
+        rhs,
+    }
+}
+
 impl RuleSet {
+    /// Standard arithmetic identities.
+    pub fn standard() -> RuleSet {
+        let x = || wildcard("x");
+
+        let mut rs = Self::new();
+
+        // Additive identity: x + 0 = x
+        rs.add(rule("add_zero_right", p_add(x(), p_const(0.0)), x()));
+        rs.add(rule("add_zero_left", p_add(p_const(0.0), x()), x()));
+
+        // Multiplicative identity: x * 1 = x
+        rs.add(rule("mul_one_right", p_mul(x(), p_const(1.0)), x()));
+        rs.add(rule("mul_one_left", p_mul(p_const(1.0), x()), x()));
+
+        // Multiplicative zero: x * 0 = 0
+        rs.add(rule("mul_zero_right", p_mul(x(), p_const(0.0)), p_const(0.0)));
+        rs.add(rule("mul_zero_left", p_mul(p_const(0.0), x()), p_const(0.0)));
+
+        // Double negation: --x = x
+        rs.add(rule("double_neg", p_neg(p_neg(x())), x()));
+
+        // Negation of zero: -0 = 0
+        rs.add(rule("neg_zero", p_neg(p_const(0.0)), p_const(0.0)));
+
+        // Double inverse: 1/(1/x) = x
+        rs.add(rule("double_inv", p_inv(p_inv(x())), x()));
+
+        // Power identities
+        rs.add(rule("pow_one", p_pow(x(), p_const(1.0)), x())); // x^1 = x
+        rs.add(rule("pow_zero", p_pow(x(), p_const(0.0)), p_const(1.0))); // x^0 = 1
+        rs.add(rule("one_pow", p_pow(p_const(1.0), x()), p_const(1.0))); // 1^x = 1
+
+        rs
+    }
+
+    pub fn trigonometric() -> RuleSet {
+        Self::new() // sin²x + cos²x = 1, etc.
+    }
+
+    pub fn tensor() -> RuleSet {
+        Self::new() // index contraction, symmetries
+    }
+
     pub fn new() -> Self {
         RuleSet { rules: Vec::new() }
     }
@@ -176,29 +261,8 @@ impl RuleSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::{add, constant, mul, neg, scalar};
+    use crate::expr::{add, constant, inv, mul, neg, scalar};
     use crate::pow;
-
-    // Pattern builder helpers
-    fn wildcard(name: &str) -> Pattern {
-        Pattern::Wildcard(name.to_string())
-    }
-
-    fn const_wild(name: &str) -> Pattern {
-        Pattern::ConstWild(name.to_string())
-    }
-
-    fn p_add(a: Pattern, b: Pattern) -> Pattern {
-        Pattern::Add(Box::new(a), Box::new(b))
-    }
-
-    fn p_mul(a: Pattern, b: Pattern) -> Pattern {
-        Pattern::Mul(Box::new(a), Box::new(b))
-    }
-
-    fn p_neg(a: Pattern) -> Pattern {
-        Pattern::Neg(Box::new(a))
-    }
 
     #[test]
     fn match_wildcard() {
@@ -557,5 +621,106 @@ mod tests {
         let expr = add(mul(scalar("a"), scalar("c")), mul(scalar("b"), scalar("c")));
         let result = rule.apply_rtl(&expr).unwrap();
         assert_eq!(result, mul(add(scalar("a"), scalar("b")), scalar("c")));
+    }
+
+    // === Standard RuleSet tests ===
+
+    #[test]
+    fn standard_ruleset_has_rules() {
+        let rs = RuleSet::standard();
+        assert!(!rs.is_empty());
+        assert!(rs.len() >= 10); // We have at least 10 standard rules
+    }
+
+    #[test]
+    fn standard_add_zero() {
+        let rs = RuleSet::standard();
+        let expr = add(scalar("a"), constant(0.0));
+
+        // Find and apply the add_zero_right rule
+        let result = rs
+            .iter()
+            .find(|r| r.name == "add_zero_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn standard_mul_one() {
+        let rs = RuleSet::standard();
+        let expr = mul(scalar("a"), constant(1.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "mul_one_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn standard_mul_zero() {
+        let rs = RuleSet::standard();
+        let expr = mul(scalar("a"), constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "mul_zero_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(0.0)));
+    }
+
+    #[test]
+    fn standard_double_neg() {
+        let rs = RuleSet::standard();
+        let expr = neg(neg(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "double_neg")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn standard_double_inv() {
+        let rs = RuleSet::standard();
+        let expr = inv(inv(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "double_inv")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn standard_pow_one() {
+        let rs = RuleSet::standard();
+        let expr = pow(scalar("a"), constant(1.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "pow_one")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn standard_pow_zero() {
+        let rs = RuleSet::standard();
+        let expr = pow(scalar("a"), constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "pow_zero")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(1.0)));
     }
 }
