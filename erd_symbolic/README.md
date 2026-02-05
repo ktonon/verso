@@ -7,10 +7,11 @@ This library is a support to tool for developing ERD.
 
 Purpose
 A symbolic mathematics library in Rust for the ERD project, designed to:
-	1.	Represent mathematical expressions as executable, testable ASTs
-	2.	Render expressions to LaTeX for paper writing
-	3.	Support tensor algebra from the ground up
-	4.	Compile to efficient numeric evaluation for simulations
+
+1.	Represent mathematical expressions as executable, testable ASTs
+2.	Render expressions to LaTeX for paper writing
+3.	Support tensor algebra from the ground up
+4.	Compile to efficient numeric evaluation for simulations
 
 ### Goals
 
