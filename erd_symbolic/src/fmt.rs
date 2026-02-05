@@ -1,4 +1,4 @@
-use crate::expr::{Expr, FnKind, Index, IndexPosition};
+use crate::expr::{count_contractions, Expr, FnKind, Index, IndexPosition};
 use std::fmt::Display;
 
 impl Display for Index {
@@ -65,14 +65,22 @@ impl std::fmt::Display for Expr {
                 Expr::Inv(inner) => {
                     write!(f, "{} / {}", maybe_paren(a, self), maybe_paren(inner, self))
                 }
-                _ => match a.as_ref() {
-                    Expr::Const(n) => {
-                        write!(f, "{}{}", n, maybe_paren(b, self))
+                _ => {
+                    let contractions = count_contractions(a, b);
+                    // Coefficient notation: 2x instead of 2 * x
+                    if let Expr::Const(n) = a.as_ref() {
+                        if contractions == 0 {
+                            return write!(f, "{}{}", n, maybe_paren(b, self));
+                        }
                     }
-                    _ => {
-                        write!(f, "{} ⋅ {}", maybe_paren(a, self), maybe_paren(b, self))
-                    }
-                },
+                    // Choose operator based on contraction count (Einstein notation)
+                    let op = match contractions {
+                        0 => " * ", // scalar multiplication
+                        1 => " ⋅ ", // single contraction (dot product)
+                        _ => " : ", // double contraction
+                    };
+                    write!(f, "{}{}{}", maybe_paren(a, self), op, maybe_paren(b, self))
+                }
             },
             Expr::Neg(a) => write!(f, "-{}", maybe_paren(a, self)),
             Expr::Inv(a) => write!(f, "1/{}", maybe_paren(a, self)),
@@ -129,9 +137,35 @@ mod tests {
     }
 
     #[test]
-    fn display_mul() {
-        assert_eq!(format!("{}", mul(scalar("x"), scalar("y"))), "x ⋅ y");
+    fn display_mul_scalar() {
+        // Scalar multiplication (no indices, no contractions)
+        assert_eq!(format!("{}", mul(scalar("x"), scalar("y"))), "x * y");
+        // Coefficient notation preserved
         assert_eq!(format!("{}", mul(constant(2.0), scalar("y"))), "2y");
+    }
+
+    #[test]
+    fn display_mul_single_contraction() {
+        // A^i B_i contracts on i → single contraction → dot
+        let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![lower("i")]));
+        assert_eq!(format!("{}", e), "A^i ⋅ B_i");
+    }
+
+    #[test]
+    fn display_mul_double_contraction() {
+        // A^ij B_ij contracts on both i and j → double contraction → colon
+        let e = mul(
+            tensor("A", vec![upper("i"), upper("j")]),
+            tensor("B", vec![lower("i"), lower("j")]),
+        );
+        assert_eq!(format!("{}", e), "A^ij : B_ij");
+    }
+
+    #[test]
+    fn display_mul_no_contraction_tensors() {
+        // A^i B^j has no contractions (both upper) → scalar multiplication
+        let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]));
+        assert_eq!(format!("{}", e), "A^i * B^j");
     }
 
     #[test]

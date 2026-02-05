@@ -125,3 +125,32 @@ pub fn sqrt(a: Expr) -> Expr {
 pub fn sin(a: Expr) -> Expr {
     Expr::Fn(FnKind::Sin, Box::new(a))
 }
+
+/// Count index contractions between two expressions using Einstein notation.
+/// A contraction occurs when the same index name appears with opposite positions
+/// (one upper, one lower) in the two expressions.
+pub fn count_contractions(left: &Expr, right: &Expr) -> usize {
+    if let (
+        Expr::Var {
+            indices: left_indices,
+            ..
+        },
+        Expr::Var {
+            indices: right_indices,
+            ..
+        },
+    ) = (left, right)
+    {
+        let mut count = 0;
+        for li in left_indices {
+            for ri in right_indices {
+                if li.name == ri.name && li.position != ri.position {
+                    count += 1;
+                }
+            }
+        }
+        count
+    } else {
+        0
+    }
+}

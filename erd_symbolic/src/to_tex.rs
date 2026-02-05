@@ -1,4 +1,4 @@
-use crate::expr::{Expr, FnKind, Index, IndexPosition};
+use crate::expr::{count_contractions, Expr, FnKind, Index, IndexPosition};
 
 pub trait ToTex {
     fn to_tex(&self) -> String;
@@ -76,7 +76,13 @@ impl ToTex for Expr {
                     _ => {
                         let a_tex = maybe_paren(a, self);
                         let b_tex = maybe_paren(b, self);
-                        format!("{} {}", a_tex, b_tex)
+                        // Choose operator based on contraction count (Einstein notation)
+                        let op = match count_contractions(a, b) {
+                            0 => " ",        // scalar/tensor product (juxtaposition)
+                            1 => " \\cdot ", // single contraction (dot product)
+                            _ => " : ",      // double contraction
+                        };
+                        format!("{}{}{}", a_tex, op, b_tex)
                     }
                 }
             }
@@ -155,9 +161,34 @@ mod tests {
     }
 
     #[test]
-    fn to_tex_mul() {
+    fn to_tex_mul_scalar() {
+        // Scalar multiplication (no contractions) - juxtaposition
         let e = mul(scalar("a"), scalar("b"));
         assert_eq!(e.to_tex(), "a b");
+    }
+
+    #[test]
+    fn to_tex_mul_single_contraction() {
+        // A^i B_i contracts on i → \cdot
+        let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![lower("i")]));
+        assert_eq!(e.to_tex(), "A^{i} \\cdot B_{i}");
+    }
+
+    #[test]
+    fn to_tex_mul_double_contraction() {
+        // A^{ij} B_{ij} contracts on both → :
+        let e = mul(
+            tensor("A", vec![upper("i"), upper("j")]),
+            tensor("B", vec![lower("i"), lower("j")]),
+        );
+        assert_eq!(e.to_tex(), "A^{ij} : B_{ij}");
+    }
+
+    #[test]
+    fn to_tex_mul_no_contraction_tensors() {
+        // A^i B^j has no contractions (both upper) - juxtaposition
+        let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]));
+        assert_eq!(e.to_tex(), "A^{i} B^{j}");
     }
 
     #[test]
