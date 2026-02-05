@@ -6,5 +6,5 @@ public/*.webp
 public/erd_viewer*
 scripts/.cdk-outputs.json
 target/
-viewer-app/build-date.ts
-viewer-lib/pkg/
+erd_app/build-date.ts
+erd_viewer/pkg/
