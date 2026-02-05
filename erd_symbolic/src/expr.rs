@@ -1,7 +1,8 @@
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     // Atoms
     Const(f64),
-    Var(String),
+    Var { name: String, indices: Vec<Index> },
 
     // Arithmetic
     Add(Box<Expr>, Box<Expr>),
@@ -14,6 +15,19 @@ pub enum Expr {
     Fn(FnKind, Box<Expr>),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Index {
+    pub name: String,
+    pub position: IndexPosition,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum IndexPosition {
+    Upper, // contravariant
+    Lower, // covariant
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum FnKind {
     Sin,
     Cos,
@@ -22,34 +36,54 @@ pub enum FnKind {
     // extend as needed
 }
 
-impl std::fmt::Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Expr {
+    pub fn complexity(&self) -> usize {
         match self {
-            Expr::Const(n) => write!(f, "{}", n),
-            Expr::Var(name) => write!(f, "{}", name),
-            Expr::Add(a, b) => write!(f, "({} + {})", a, b),
-            Expr::Mul(a, b) => write!(f, "({} * {})", a, b),
-            Expr::Neg(a) => write!(f, "(-{})", a),
-            Expr::Inv(a) => write!(f, "(1/{})", a),
-            Expr::Pow(base, exp) => write!(f, "({})^({})", base, exp),
-            Expr::Fn(kind, arg) => write!(f, "{}({})", kind, arg),
+            Expr::Const(_) | Expr::Var { .. } => 1,
+            Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + a.complexity(),
+            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+                1 + a.complexity() + b.complexity()
+            }
+        }
+    }
+
+    pub fn precedence(&self) -> u8 {
+        match self {
+            Expr::Const(_) | Expr::Var { .. } | Expr::Fn(_, _) => 100,
+            Expr::Pow(_, _) => 80,
+            Expr::Neg(_) | Expr::Inv(_) => 70,
+            Expr::Mul(_, _) => 60,
+            Expr::Add(_, _) => 50,
         }
     }
 }
 
-impl std::fmt::Display for FnKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FnKind::Sin => write!(f, "sin"),
-            FnKind::Cos => write!(f, "cos"),
-            FnKind::Exp => write!(f, "exp"),
-            FnKind::Ln => write!(f, "ln"),
-        }
+pub fn scalar(name: &str) -> Expr {
+    Expr::Var {
+        name: name.to_string(),
+        indices: vec![],
     }
 }
 
-pub fn var(name: &str) -> Expr {
-    Expr::Var(name.to_string())
+pub fn tensor(name: &str, indices: Vec<Index>) -> Expr {
+    Expr::Var {
+        name: name.to_string(),
+        indices,
+    }
+}
+
+pub fn upper(name: &str) -> Index {
+    Index {
+        name: name.to_string(),
+        position: IndexPosition::Upper,
+    }
+}
+
+pub fn lower(name: &str) -> Index {
+    Index {
+        name: name.to_string(),
+        position: IndexPosition::Lower,
+    }
 }
 
 pub fn constant(n: f64) -> Expr {
@@ -90,87 +124,4 @@ pub fn sqrt(a: Expr) -> Expr {
 
 pub fn sin(a: Expr) -> Expr {
     Expr::Fn(FnKind::Sin, Box::new(a))
-}
-
-// etc.
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn display_const() {
-        let e = constant(3.0);
-        assert_eq!(format!("{}", e), "3");
-    }
-
-    #[test]
-    fn display_var() {
-        let e = var("x");
-        assert_eq!(format!("{}", e), "x");
-    }
-
-    #[test]
-    fn display_add() {
-        let e = add(var("x"), constant(2.0));
-        assert_eq!(format!("{}", e), "(x + 2)");
-    }
-
-    #[test]
-    fn display_sub() {
-        let e = sub(var("x"), constant(2.0));
-        assert_eq!(format!("{}", e), "(x + (-2))");
-    }
-
-    #[test]
-    fn display_mul() {
-        let e = mul(var("x"), var("y"));
-        assert_eq!(format!("{}", e), "(x * y)");
-    }
-
-    #[test]
-    fn display_div() {
-        let e = div(var("x"), var("y"));
-        assert_eq!(format!("{}", e), "(x * (1/y))");
-    }
-
-    #[test]
-    fn display_neg() {
-        let e = neg(var("x"));
-        assert_eq!(format!("{}", e), "(-x)");
-    }
-
-    #[test]
-    fn display_inv() {
-        let e = inv(var("x"));
-        assert_eq!(format!("{}", e), "(1/x)");
-    }
-
-    #[test]
-    fn display_pow() {
-        let e = pow(var("x"), constant(2.0));
-        assert_eq!(format!("{}", e), "(x)^(2)");
-    }
-
-    #[test]
-    fn display_sqrt() {
-        let e = sqrt(var("x"));
-        assert_eq!(format!("{}", e), "(x)^((1/2))");
-    }
-
-    #[test]
-    fn display_fn_sin() {
-        let e = sin(var("x"));
-        assert_eq!(format!("{}", e), "sin(x)");
-    }
-
-    #[test]
-    fn display_nested() {
-        // x^2 + 2x + 1
-        let e = add(
-            add(pow(var("x"), constant(2.0)), mul(constant(2.0), var("x"))),
-            constant(1.0),
-        );
-        assert_eq!(format!("{}", e), "(((x)^(2) + (2 * x)) + 1)");
-    }
 }
