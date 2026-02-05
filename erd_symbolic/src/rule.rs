@@ -398,7 +398,7 @@ impl RuleSet {
     pub fn full() -> Self {
         let mut rules = Self::new();
         rules
-            .merge(Self::trigonometric())
+            .merge(Self::standard())
             .merge(Self::trigonometric())
             .merge(Self::tensor());
         rules
