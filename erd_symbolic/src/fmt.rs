@@ -61,31 +61,40 @@ impl std::fmt::Display for Expr {
                     write!(f, "{} + {}", a, b)
                 }
             },
-            Expr::Mul(a, b) => match b.as_ref() {
-                Expr::Inv(inner) => {
-                    write!(f, "{} / {}", maybe_paren(a, self), maybe_paren(inner, self))
+            Expr::Mul(a, b) => {
+                if let Some((base, arg)) = match_log_base(a, b) {
+                    return write!(f, "log_{}({})", fmt_log_base(base), arg);
                 }
-                _ => {
-                    let mul_kind = classify_mul(a, b);
-                    // Coefficient notation: 2x instead of 2 * x
-                    if let Expr::Const(n) = a.as_ref() {
-                        if mul_kind == MulKind::Scalar {
-                            return write!(f, "{}{}", n, maybe_paren(b, self));
-                        }
+
+                match b.as_ref() {
+                    Expr::Inv(inner) => {
+                        write!(f, "{} / {}", maybe_paren(a, self), maybe_paren(inner, self))
                     }
-                    // Choose operator based on multiplication kind (Einstein notation)
-                    let op = match mul_kind {
-                        MulKind::Scalar => " * ", // scalar multiplication
-                        MulKind::Outer => " ⊗ ",  // outer/tensor product
-                        MulKind::Single => " ⋅ ", // single contraction (dot product)
-                        MulKind::Double => " : ", // double contraction
-                    };
-                    write!(f, "{}{}{}", maybe_paren(a, self), op, maybe_paren(b, self))
+                    _ => {
+                        let mul_kind = classify_mul(a, b);
+                        // Coefficient notation: 2x instead of 2 * x
+                        if let Expr::Const(n) = a.as_ref() {
+                            if mul_kind == MulKind::Scalar {
+                                return write!(f, "{}{}", n, maybe_paren(b, self));
+                            }
+                        }
+                        // Choose operator based on multiplication kind (Einstein notation)
+                        let op = match mul_kind {
+                            MulKind::Scalar => " * ", // scalar multiplication
+                            MulKind::Outer => " ⊗ ",  // outer/tensor product
+                            MulKind::Single => " ⋅ ", // single contraction (dot product)
+                            MulKind::Double => " : ", // double contraction
+                        };
+                        write!(f, "{}{}{}", maybe_paren(a, self), op, maybe_paren(b, self))
+                    }
                 }
-            },
+            }
             Expr::Neg(a) => write!(f, "-{}", maybe_paren(a, self)),
             Expr::Inv(a) => write!(f, "1/{}", maybe_paren(a, self)),
             Expr::Pow(base, exp) => {
+                if is_sqrt_exp(exp) {
+                    return write!(f, "sqrt({})", base);
+                }
                 write!(f, "{}**{}", maybe_paren(base, self), maybe_paren(exp, self))
             }
             Expr::Fn(kind, arg) => write!(f, "{}({})", kind, arg),
@@ -98,6 +107,35 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
         format!("({})", child)
     } else {
         format!("{}", child)
+    }
+}
+
+fn is_sqrt_exp(exp: &Expr) -> bool {
+    match exp {
+        Expr::Const(n) => *n == 0.5,
+        Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
+        _ => false,
+    }
+}
+
+fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a Expr)> {
+    match (left, right) {
+        (Expr::Fn(FnKind::Ln, arg), Expr::Inv(inner)) => match inner.as_ref() {
+            Expr::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+            _ => None,
+        },
+        (Expr::Inv(inner), Expr::Fn(FnKind::Ln, arg)) => match inner.as_ref() {
+            Expr::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn fmt_log_base(base: &Expr) -> String {
+    match base {
+        Expr::Const(_) | Expr::Var { .. } => format!("{}", base),
+        _ => format!("({})", base),
     }
 }
 
@@ -208,13 +246,19 @@ mod tests {
     #[test]
     fn display_sqrt() {
         let e = sqrt(scalar("x"));
-        assert_eq!(format!("{}", e), "x**(1/2)");
+        assert_eq!(format!("{}", e), "sqrt(x)");
     }
 
     #[test]
     fn display_fn_sin() {
         let e = sin(scalar("x"));
         assert_eq!(format!("{}", e), "sin(x)");
+    }
+
+    #[test]
+    fn display_log_base() {
+        let e = mul(ln(scalar("x")), inv(ln(constant(10.0))));
+        assert_eq!(format!("{}", e), "log_10(x)");
     }
 
     #[test]

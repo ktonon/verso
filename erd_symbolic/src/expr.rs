@@ -119,7 +119,7 @@ pub fn pow(a: Expr, b: Expr) -> Expr {
 }
 
 pub fn sqrt(a: Expr) -> Expr {
-    pow(a, inv(constant(2.0)))
+    pow(a, constant(0.5))
 }
 
 pub fn sin(a: Expr) -> Expr {

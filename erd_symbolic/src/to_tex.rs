@@ -68,6 +68,10 @@ impl ToTex for Expr {
                 }
             }
             Expr::Mul(a, b) => {
+                if let Some((base, arg)) = match_log_base(a, b) {
+                    return format!("\\log_{{{}}}{{{}}}", base.to_tex(), arg.to_tex());
+                }
+
                 // Detect division: Mul(a, Inv(b)) -> \frac{a}{b}
                 match b.as_ref() {
                     Expr::Inv(inner) => {
@@ -94,6 +98,9 @@ impl ToTex for Expr {
                 format!("\\frac{{1}}{{{}}}", a.to_tex())
             }
             Expr::Pow(base, exp) => {
+                if is_sqrt_exp(exp) {
+                    return format!("\\sqrt{{{}}}", base.to_tex());
+                }
                 format!("{}^{{{}}}", maybe_paren(base, self), exp.to_tex())
             }
             Expr::Fn(kind, arg) => {
@@ -108,6 +115,28 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
         format!("\\left( {} \\right)", child.to_tex())
     } else {
         child.to_tex()
+    }
+}
+
+fn is_sqrt_exp(exp: &Expr) -> bool {
+    match exp {
+        Expr::Const(n) => *n == 0.5,
+        Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
+        _ => false,
+    }
+}
+
+fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a Expr)> {
+    match (left, right) {
+        (Expr::Fn(FnKind::Ln, arg), Expr::Inv(inner)) => match inner.as_ref() {
+            Expr::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+            _ => None,
+        },
+        (Expr::Inv(inner), Expr::Fn(FnKind::Ln, arg)) => match inner.as_ref() {
+            Expr::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -211,9 +240,21 @@ mod tests {
     }
 
     #[test]
+    fn to_tex_sqrt() {
+        let e = sqrt(scalar("x"));
+        assert_eq!(e.to_tex(), "\\sqrt{x}");
+    }
+
+    #[test]
     fn to_tex_sin() {
         let e = sin(scalar("x"));
         assert_eq!(e.to_tex(), "\\sin{x}");
+    }
+
+    #[test]
+    fn to_tex_log_base() {
+        let e = mul(ln(scalar("x")), inv(ln(constant(10.0))));
+        assert_eq!(e.to_tex(), "\\log_{10}{x}");
     }
 
     #[test]
