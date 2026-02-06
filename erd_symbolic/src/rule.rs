@@ -542,7 +542,6 @@ impl RuleSet {
     /// Standard arithmetic identities.
     pub fn standard() -> RuleSet {
         let x = || wildcard("x");
-        let y = || wildcard("y");
         let lo = || wildcard("lo");
         let hi = || wildcard("hi");
         let v = || p_var_wild("v", vec![]);
@@ -627,46 +626,6 @@ impl RuleSet {
             "mul_self_square",
             p_mul(x(), x()),
             p_pow(x(), p_const(2.0)),
-        ));
-
-        // Targeted distribution: x * (1 + y) = x + x*y
-        rs.add(rule(
-            "mul_one_plus_right",
-            p_mul(x(), p_add(p_const(1.0), wildcard("y"))),
-            p_add(x(), p_mul(x(), wildcard("y"))),
-        ));
-        rs.add(rule(
-            "mul_one_plus_left",
-            p_mul(p_add(p_const(1.0), wildcard("y")), x()),
-            p_add(x(), p_mul(x(), wildcard("y"))),
-        ));
-
-        // (x + 1) * (y + 1) = x*y + x + y + 1
-        rs.add(rule(
-            "mul_one_plus_one",
-            p_mul(p_add(x(), p_const(1.0)), p_add(y(), p_const(1.0))),
-            p_add(
-                p_add(p_add(p_mul(x(), y()), x()), y()),
-                p_const(1.0),
-            ),
-        ));
-
-        // Targeted cancellation: x*(a+b) - x*b = x*a and x*(a+b) - x*a = x*b
-        rs.add(rule(
-            "mul_add_cancel_right",
-            p_add(
-                p_mul(x(), p_add(wildcard("a"), wildcard("b"))),
-                p_neg(p_mul(x(), wildcard("b"))),
-            ),
-            p_mul(x(), wildcard("a")),
-        ));
-        rs.add(rule(
-            "mul_add_cancel_left",
-            p_add(
-                p_mul(x(), p_add(wildcard("a"), wildcard("b"))),
-                p_neg(p_mul(x(), wildcard("a"))),
-            ),
-            p_mul(x(), wildcard("b")),
         ));
 
         // Combine like terms (variables only)

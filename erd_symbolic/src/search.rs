@@ -300,9 +300,23 @@ pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
     // Re-run rules after constant folding so identities like cos(pi/2) apply.
     let simplified = BeamSearch::default().simplify(&simplified, rules);
     let simplified = fold_constants(&simplified);
-    let simplified = expand_one_plus_one(&simplified);
     let simplified = collect_linear_terms(&simplified);
-    fold_constants(&simplified)
+    let simplified = fold_constants(&simplified);
+
+    // Try expansion and see if it helps
+    let expanded = expand_products(&simplified);
+    let expanded = collect_linear_terms(&expanded);
+    let expanded = fold_constants(&expanded);
+    let expanded = BeamSearch::default().simplify(&expanded, rules);
+    let expanded = fold_constants(&expanded);
+    let expanded = collect_linear_terms(&expanded);
+
+    // Only use expanded form if it's simpler
+    if expanded.complexity() < simplified.complexity() {
+        expanded
+    } else {
+        simplified
+    }
 }
 
 pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
@@ -313,12 +327,6 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
     if folded != current {
         trace.push(folded.clone());
         current = folded;
-    }
-
-    let expanded = expand_one_plus_one(&current);
-    if expanded != current {
-        trace.push(expanded.clone());
-        current = expanded;
     }
 
     let collected = collect_linear_terms(&current);
@@ -333,57 +341,23 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
         current = final_fold;
     }
 
-    (current, trace)
-}
+    // Try expansion and see if it helps
+    let expanded = expand_products(&current);
+    let expanded = collect_linear_terms(&expanded);
+    let expanded = fold_constants(&expanded);
+    let (expanded_best, _) = BeamSearch::default().simplify_with_trace(&expanded, rules);
+    let expanded_best = fold_constants(&expanded_best);
+    let expanded_best = collect_linear_terms(&expanded_best);
 
-fn expand_one_plus_one(expr: &Expr) -> Expr {
-    match expr {
-        Expr::Mul(a, b) => {
-            let left = expand_one_plus_one(a);
-            let right = expand_one_plus_one(b);
-            if let (Some(x), Some(y)) = (strip_add_one(&left), strip_add_one(&right)) {
-                return Expr::Add(
-                    Box::new(Expr::Add(
-                        Box::new(Expr::Add(
-                            Box::new(Expr::Mul(Box::new(x.clone()), Box::new(y.clone()))),
-                            Box::new(x),
-                        )),
-                        Box::new(y),
-                    )),
-                    Box::new(Expr::Const(1.0)),
-                );
-            }
-            Expr::Mul(Box::new(left), Box::new(right))
+    // Only use expanded form if it's simpler
+    if expanded_best.complexity() < current.complexity() {
+        if expanded_best != current {
+            trace.push(expanded_best.clone());
         }
-        Expr::Add(a, b) => Expr::Add(
-            Box::new(expand_one_plus_one(a)),
-            Box::new(expand_one_plus_one(b)),
-        ),
-        Expr::Neg(a) => Expr::Neg(Box::new(expand_one_plus_one(a))),
-        Expr::Inv(a) => Expr::Inv(Box::new(expand_one_plus_one(a))),
-        Expr::Pow(base, exp) => Expr::Pow(
-            Box::new(expand_one_plus_one(base)),
-            Box::new(expand_one_plus_one(exp)),
-        ),
-        Expr::Fn(kind, arg) => Expr::Fn(kind.clone(), Box::new(expand_one_plus_one(arg))),
-        Expr::FnN(kind, args) => Expr::FnN(
-            kind.clone(),
-            args.iter().map(expand_one_plus_one).collect(),
-        ),
-        Expr::Const(_) | Expr::Var { .. } => expr.clone(),
+        (expanded_best, trace)
+    } else {
+        (current, trace)
     }
-}
-
-fn strip_add_one(expr: &Expr) -> Option<Expr> {
-    match expr {
-        Expr::Add(a, b) if is_one(a) => Some(b.as_ref().clone()),
-        Expr::Add(a, b) if is_one(b) => Some(a.as_ref().clone()),
-        _ => None,
-    }
-}
-
-fn is_one(expr: &Expr) -> bool {
-    matches!(expr, Expr::Const(n) if (*n - 1.0).abs() < f64::EPSILON)
 }
 
 fn fold_constants(expr: &Expr) -> Expr {
@@ -435,6 +409,62 @@ fn fold_constants(expr: &Expr) -> Expr {
             args.iter().map(fold_constants).collect(),
         ),
     }
+}
+
+/// Expand products by applying the distributive law recursively.
+/// x * (y + z) = x*y + x*z and (x + y) * z = x*z + y*z
+fn expand_products(expr: &Expr) -> Expr {
+    match expr {
+        Expr::Const(_) | Expr::Var { .. } => expr.clone(),
+        Expr::Neg(a) => Expr::Neg(Box::new(expand_products(a))),
+        Expr::Inv(a) => Expr::Inv(Box::new(expand_products(a))),
+        Expr::Add(a, b) => Expr::Add(
+            Box::new(expand_products(a)),
+            Box::new(expand_products(b)),
+        ),
+        Expr::Pow(base, exp) => Expr::Pow(
+            Box::new(expand_products(base)),
+            Box::new(expand_products(exp)),
+        ),
+        Expr::Fn(kind, a) => Expr::Fn(kind.clone(), Box::new(expand_products(a))),
+        Expr::FnN(kind, args) => Expr::FnN(
+            kind.clone(),
+            args.iter().map(expand_products).collect(),
+        ),
+        Expr::Mul(a, b) => {
+            let left = expand_products(a);
+            let right = expand_products(b);
+            expand_mul(&left, &right)
+        }
+    }
+}
+
+/// Expand a single multiplication, applying distribution if one operand is a sum.
+fn expand_mul(left: &Expr, right: &Expr) -> Expr {
+    // x * (y + z) = x*y + x*z
+    if let Expr::Add(ra, rb) = right {
+        return Expr::Add(
+            Box::new(expand_mul(left, ra)),
+            Box::new(expand_mul(left, rb)),
+        );
+    }
+    // (x + y) * z = x*z + y*z
+    if let Expr::Add(la, lb) = left {
+        return Expr::Add(
+            Box::new(expand_mul(la, right)),
+            Box::new(expand_mul(lb, right)),
+        );
+    }
+    // x * (-y) = -(x * y)
+    if let Expr::Neg(inner) = right {
+        return Expr::Neg(Box::new(expand_mul(left, inner)));
+    }
+    // (-x) * y = -(x * y)
+    if let Expr::Neg(inner) = left {
+        return Expr::Neg(Box::new(expand_mul(inner, right)));
+    }
+    // No expansion needed
+    Expr::Mul(Box::new(left.clone()), Box::new(right.clone()))
 }
 
 fn collect_linear_terms(expr: &Expr) -> Expr {
