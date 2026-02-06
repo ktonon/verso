@@ -308,8 +308,15 @@ pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
     // Try expansion and see if it helps
     let expanded = expand_products(&simplified);
     let expanded = fold_constants(&expanded);
-    // Run beam search first to normalize (e.g., x*x -> x^2) before collecting terms
-    let expanded = BeamSearch::default().simplify(&expanded, rules);
+    // Run beam search to normalize (e.g., x*x -> x^2) and simplify
+    // Use wider beam for complex expanded expressions
+    let wide_search = BeamSearch::new(20, 200);
+    let expanded = wide_search.simplify(&expanded, rules);
+    let expanded = fold_constants(&expanded);
+    let expanded = collect_linear_terms(&expanded);
+    let expanded = fold_constants(&expanded);
+    // Run again to catch any remaining simplifications
+    let expanded = wide_search.simplify(&expanded, rules);
     let expanded = fold_constants(&expanded);
     let expanded = collect_linear_terms(&expanded);
     let expanded = fold_constants(&expanded);
@@ -347,8 +354,14 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
     // Try expansion and see if it helps
     let expanded = expand_products(&current);
     let expanded = fold_constants(&expanded);
-    // Run beam search first to normalize (e.g., x*x -> x^2) before collecting terms
-    let (expanded_best, _) = BeamSearch::default().simplify_with_trace(&expanded, rules);
+    // Use wider beam search to normalize (e.g., x*x -> x^2) before collecting terms
+    let wide_search = BeamSearch::new(20, 200);
+    let (expanded_best, _) = wide_search.simplify_with_trace(&expanded, rules);
+    let expanded_best = fold_constants(&expanded_best);
+    let expanded_best = collect_linear_terms(&expanded_best);
+    let expanded_best = fold_constants(&expanded_best);
+    // Run again to catch any remaining simplifications
+    let (expanded_best, _) = wide_search.simplify_with_trace(&expanded_best, rules);
     let expanded_best = fold_constants(&expanded_best);
     let expanded_best = collect_linear_terms(&expanded_best);
     let expanded_best = fold_constants(&expanded_best);
@@ -438,10 +451,19 @@ fn expand_products(expr: &Expr) -> Expr {
             Box::new(expand_products(a)),
             Box::new(expand_products(b)),
         ),
-        Expr::Pow(base, exp) => Expr::Pow(
-            Box::new(expand_products(base)),
-            Box::new(expand_products(exp)),
-        ),
+        Expr::Pow(base, exp) => {
+            let base_expanded = expand_products(base);
+            let exp_expanded = expand_products(exp);
+            // Expand (sum)^2 = sum * sum, then let expand_mul handle it
+            if let Expr::Const(n) = &exp_expanded {
+                if (*n - 2.0).abs() < f64::EPSILON {
+                    if matches!(&base_expanded, Expr::Add(_, _)) {
+                        return expand_mul(&base_expanded, &base_expanded);
+                    }
+                }
+            }
+            Expr::Pow(Box::new(base_expanded), Box::new(exp_expanded))
+        }
         Expr::Fn(kind, a) => Expr::Fn(kind.clone(), Box::new(expand_products(a))),
         Expr::FnN(kind, args) => Expr::FnN(
             kind.clone(),
@@ -483,6 +505,44 @@ fn expand_mul(left: &Expr, right: &Expr) -> Expr {
     Expr::Mul(Box::new(left.clone()), Box::new(right.clone()))
 }
 
+/// Create a canonical key for an expression, handling commutativity of Mul.
+/// Also normalizes Mul(x, x) to match Pow(x, 2) for term collection.
+fn canonical_key(expr: &Expr) -> String {
+    match expr {
+        Expr::Mul(a, b) => {
+            let ka = canonical_key(a);
+            let kb = canonical_key(b);
+            // Normalize x * x to match x^2
+            if ka == kb {
+                format!("Pow({}, 2)", ka)
+            } else if ka <= kb {
+                format!("Mul({}, {})", ka, kb)
+            } else {
+                format!("Mul({}, {})", kb, ka)
+            }
+        }
+        Expr::Add(a, b) => {
+            format!("Add({}, {})", canonical_key(a), canonical_key(b))
+        }
+        Expr::Neg(a) => format!("Neg({})", canonical_key(a)),
+        Expr::Inv(a) => format!("Inv({})", canonical_key(a)),
+        Expr::Pow(base, exp) => {
+            // Normalize Pow(x, 2) for consistency with Mul(x, x)
+            if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON) {
+                format!("Pow({}, 2)", canonical_key(base))
+            } else {
+                format!("Pow({}, {})", canonical_key(base), canonical_key(exp))
+            }
+        }
+        Expr::Fn(kind, a) => format!("Fn({:?}, {})", kind, canonical_key(a)),
+        Expr::FnN(kind, args) => {
+            let arg_keys: Vec<_> = args.iter().map(canonical_key).collect();
+            format!("FnN({:?}, [{}])", kind, arg_keys.join(", "))
+        }
+        _ => format!("{:?}", expr),
+    }
+}
+
 fn collect_linear_terms(expr: &Expr) -> Expr {
     let mut terms = Vec::new();
     flatten_add(expr, &mut terms);
@@ -497,7 +557,7 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
                 const_sum += coeff;
                 continue;
             }
-            let key = format!("{:?}", base);
+            let key = canonical_key(&base);
             let entry = coeffs.entry(key).or_insert((base, 0.0));
             entry.1 += coeff;
         } else {
@@ -580,6 +640,23 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
         Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
             (Expr::Const(c), other) => Some((other.clone(), *c)),
             (other, Expr::Const(c)) => Some((other.clone(), *c)),
+            // Handle Neg inside Mul: Mul(Neg(x), y) => -1 * Mul(x, y)
+            (Expr::Neg(inner_a), _) => {
+                let new_mul = Expr::Mul(inner_a.clone(), b.clone());
+                if let Some((base, coeff)) = extract_term(&new_mul) {
+                    Some((base, -coeff))
+                } else {
+                    Some((new_mul, -1.0))
+                }
+            }
+            (_, Expr::Neg(inner_b)) => {
+                let new_mul = Expr::Mul(a.clone(), inner_b.clone());
+                if let Some((base, coeff)) = extract_term(&new_mul) {
+                    Some((base, -coeff))
+                } else {
+                    Some((new_mul, -1.0))
+                }
+            }
             _ => {
                 let mut left = a.clone();
                 let mut right = b.clone();
@@ -2465,5 +2542,36 @@ mod tests {
         let expr = mul(mul(scalar("y"), scalar("y")), scalar("y"));
         let result = simplify(&expr, &rules);
         assert_eq!(result, pow(scalar("y"), constant(3.0)));
+    }
+
+    #[test]
+    fn simplify_mul_self_minus_power() {
+        // x*x + y - x² = y
+        let rules = RuleSet::full();
+        let expr = add(
+            add(mul(scalar("x"), scalar("x")), scalar("y")),
+            neg(pow(scalar("x"), constant(2.0))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, scalar("y"));
+    }
+
+    #[test]
+    fn simplify_trinomial_squared_to_zero() {
+        // (x + y + 1)^2 - x^2 - y^2 - 1 - 2*x*y - 2*x - 2*y = 0
+        let rules = RuleSet::full();
+        let x = || scalar("x");
+        let y = || scalar("y");
+        let sum = add(add(x(), y()), constant(1.0));
+        let term1 = pow(sum, constant(2.0));
+        let term2 = neg(pow(x(), constant(2.0)));
+        let term3 = neg(pow(y(), constant(2.0)));
+        let term4 = neg(constant(1.0));
+        let term5 = neg(mul(constant(2.0), mul(x(), y())));
+        let term6 = neg(mul(constant(2.0), x()));
+        let term7 = neg(mul(constant(2.0), y()));
+        let expr = add(add(add(add(add(add(term1, term2), term3), term4), term5), term6), term7);
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
     }
 }
