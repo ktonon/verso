@@ -17,6 +17,7 @@ pub enum ParseError {
 enum Token {
     Number(String),
     Ident(String),
+    Pi,
     Plus,
     Minus,
     Star,
@@ -89,6 +90,10 @@ fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
         }
 
         match ch {
+            'π' => {
+                chars.next();
+                tokens.push(Token::Pi);
+            }
             '+' => {
                 chars.next();
                 tokens.push(Token::Plus);
@@ -270,7 +275,11 @@ impl Parser {
                     .map_err(|_| ParseError::InvalidNumber(s.clone()))?;
                 Ok(constant(n))
             }
+            Some(Token::Pi) => Ok(constant(std::f64::consts::PI)),
             Some(Token::Ident(name)) => {
+                if name == "pi" {
+                    return Ok(constant(std::f64::consts::PI));
+                }
                 if name == "log" && self.peek() == Some(&Token::Underscore) {
                     return self.parse_log_base_tokens();
                 }
@@ -475,6 +484,7 @@ impl Parser {
             Some(Token::Number(_))
                 | Some(Token::Ident(_))
                 | Some(Token::LParen)
+                | Some(Token::Pi)
         )
     }
 }
@@ -781,6 +791,18 @@ mod tests {
             expr,
             mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]))
         );
+    }
+
+    #[test]
+    fn parse_pi_symbol() {
+        let expr = parse_expr("π").unwrap();
+        assert_eq!(expr, constant(std::f64::consts::PI));
+
+        let expr = parse_expr("pi").unwrap();
+        assert_eq!(expr, constant(std::f64::consts::PI));
+
+        let expr = parse_expr("2π").unwrap();
+        assert_eq!(expr, mul(constant(2.0), constant(std::f64::consts::PI)));
     }
 
     #[test]
