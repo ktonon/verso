@@ -9,6 +9,7 @@
 		"clean": "run-p clean:model",
 		"build:app": "./scripts/build-app.js",
 		"lint": "eslint .",
+		"repl": "cargo run -p erd_symbolic --release --bin repl",
 		"start": "./scripts/build-app.js --server"
 	},
 	"devDependencies": {

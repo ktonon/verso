@@ -450,19 +450,6 @@ impl Parser {
     }
 }
 
-trait SingleArg {
-    fn single(self) -> Result<crate::expr::Expr, ParseError>;
-}
-
-impl SingleArg for Vec<crate::expr::Expr> {
-    fn single(self) -> Result<crate::expr::Expr, ParseError> {
-        if self.len() != 1 {
-            return Err(ParseError::Expected("arity 1".to_string()));
-        }
-        Ok(self.into_iter().next().unwrap())
-    }
-}
-
 fn expect_arity(
     args: Vec<crate::expr::Expr>,
     n: usize,

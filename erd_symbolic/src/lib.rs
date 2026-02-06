@@ -1,6 +1,7 @@
 mod expr;
 mod fmt;
 mod parser;
+pub mod repl;
 mod rule;
 mod search;
 mod to_tex;
