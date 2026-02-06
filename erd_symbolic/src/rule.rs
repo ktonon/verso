@@ -79,6 +79,22 @@ pub fn p_cos(a: Pattern) -> Pattern {
     Pattern::Fn(FnKind::Cos, Box::new(a))
 }
 
+pub fn p_tan(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Tan, Box::new(a))
+}
+
+pub fn p_asin(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Asin, Box::new(a))
+}
+
+pub fn p_acos(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Acos, Box::new(a))
+}
+
+pub fn p_atan(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Atan, Box::new(a))
+}
+
 pub fn p_exp(a: Pattern) -> Pattern {
     Pattern::Fn(FnKind::Exp, Box::new(a))
 }

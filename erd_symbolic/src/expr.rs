@@ -31,6 +31,10 @@ pub enum IndexPosition {
 pub enum FnKind {
     Sin,
     Cos,
+    Tan,
+    Asin,
+    Acos,
+    Atan,
     Exp,
     Ln,
     // extend as needed
@@ -128,6 +132,22 @@ pub fn sin(a: Expr) -> Expr {
 
 pub fn cos(a: Expr) -> Expr {
     Expr::Fn(FnKind::Cos, Box::new(a))
+}
+
+pub fn tan(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Tan, Box::new(a))
+}
+
+pub fn asin(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Asin, Box::new(a))
+}
+
+pub fn acos(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Acos, Box::new(a))
+}
+
+pub fn atan(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Atan, Box::new(a))
 }
 
 pub fn exp(a: Expr) -> Expr {

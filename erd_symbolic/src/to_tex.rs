@@ -15,6 +15,10 @@ impl ToTex for FnKind {
         match self {
             FnKind::Sin => "\\sin".to_string(),
             FnKind::Cos => "\\cos".to_string(),
+            FnKind::Tan => "\\tan".to_string(),
+            FnKind::Asin => "\\arcsin".to_string(),
+            FnKind::Acos => "\\arccos".to_string(),
+            FnKind::Atan => "\\arctan".to_string(),
             FnKind::Exp => "\\exp".to_string(),
             FnKind::Ln => "\\ln".to_string(),
         }
@@ -249,6 +253,14 @@ mod tests {
     fn to_tex_sin() {
         let e = sin(scalar("x"));
         assert_eq!(e.to_tex(), "\\sin{x}");
+    }
+
+    #[test]
+    fn to_tex_trig_inv() {
+        assert_eq!(tan(scalar("x")).to_tex(), "\\tan{x}");
+        assert_eq!(asin(scalar("x")).to_tex(), "\\arcsin{x}");
+        assert_eq!(acos(scalar("x")).to_tex(), "\\arccos{x}");
+        assert_eq!(atan(scalar("x")).to_tex(), "\\arctan{x}");
     }
 
     #[test]

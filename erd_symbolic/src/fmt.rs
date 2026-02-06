@@ -12,6 +12,10 @@ impl Display for FnKind {
         match self {
             FnKind::Sin => write!(f, "sin"),
             FnKind::Cos => write!(f, "cos"),
+            FnKind::Tan => write!(f, "tan"),
+            FnKind::Asin => write!(f, "asin"),
+            FnKind::Acos => write!(f, "acos"),
+            FnKind::Atan => write!(f, "atan"),
             FnKind::Exp => write!(f, "exp"),
             FnKind::Ln => write!(f, "ln"),
         }
@@ -253,6 +257,14 @@ mod tests {
     fn display_fn_sin() {
         let e = sin(scalar("x"));
         assert_eq!(format!("{}", e), "sin(x)");
+    }
+
+    #[test]
+    fn display_fn_trig_inv() {
+        assert_eq!(format!("{}", tan(scalar("x"))), "tan(x)");
+        assert_eq!(format!("{}", asin(scalar("x"))), "asin(x)");
+        assert_eq!(format!("{}", acos(scalar("x"))), "acos(x)");
+        assert_eq!(format!("{}", atan(scalar("x"))), "atan(x)");
     }
 
     #[test]
