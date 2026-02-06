@@ -1199,6 +1199,39 @@ mod tests {
     }
 
     #[test]
+    fn simplify_tensor_metric_symmetry_enables_contraction() {
+        // g_νμ * v^ν = v_μ
+        // The metric g_νμ has indices in "wrong" order for metric_lower_right,
+        // but symmetry rule g_νμ = g_μν allows beam search to find the contraction.
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        let expr = mul(
+            tensor("g", vec![lower("nu"), lower("mu")]), // indices swapped
+            tensor("v", vec![upper("nu")]),
+        );
+        let result = simplify(&expr, &rules);
+        // Via symmetry: g_νμ → g_μν, then metric_lower_right: g_μν * v^ν → v_μ
+        assert_eq!(result, tensor("v", vec![lower("mu")]));
+    }
+
+    #[test]
+    fn simplify_tensor_metric_inverse_with_symmetry() {
+        // g^κμ * g_κν = δ^μ_ν
+        // The first metric has indices swapped, but symmetry allows matching.
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        let expr = mul(
+            tensor("g", vec![upper("kappa"), upper("mu")]), // swapped from g^μκ
+            tensor("g", vec![lower("kappa"), lower("nu")]),
+        );
+        let result = simplify(&expr, &rules);
+        // Via symmetry: g^κμ → g^μκ, then metric_inverse_right: g^μκ * g_κν → δ^μ_ν
+        assert_eq!(result, tensor("δ", vec![upper("mu"), lower("nu")]));
+    }
+
+    #[test]
     fn simplify_exp_of_ln_of_exp() {
         // exp(ln(exp(x))) = exp(x)
         let rules = RuleSet::trigonometric();

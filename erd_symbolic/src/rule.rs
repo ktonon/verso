@@ -547,9 +547,11 @@ impl RuleSet {
     /// - Metric tensor index lowering: g_ij v^j = v_i
     /// - Metric tensor index raising: g^ij v_j = v^i
     /// - Metric tensor identity: g^ik g_kj = δ^i_j
+    /// - Metric tensor symmetry: g_ij = g_ji, g^ij = g^ji
     ///
     /// Future extensions:
-    /// - Symmetry annotations: A^{ij} = A^{ji} for symmetric tensors
+    /// - Generic symmetry annotations for arbitrary tensors
+    /// - Antisymmetric tensors: A^{ij} = -A^{ji}
     pub fn tensor() -> RuleSet {
         let x = || wildcard("x");
         let y = || wildcard("y");
@@ -765,6 +767,28 @@ impl RuleSet {
             ),
             p_var("δ", vec![idx_upper("i"), idx_lower("j")]),
         ));
+
+        // === Tensor symmetry ===
+        // The metric tensor is symmetric: g_ij = g_ji, g^ij = g^ji
+        // These rules allow beam search to explore equivalent index orderings.
+
+        // g_ij = g_ji (covariant metric symmetry)
+        rs.add(rule(
+            "metric_symmetric_lower",
+            p_var("g", vec![idx_lower("i"), idx_lower("j")]),
+            p_var("g", vec![idx_lower("j"), idx_lower("i")]),
+        ));
+
+        // g^ij = g^ji (contravariant metric symmetry)
+        rs.add(rule(
+            "metric_symmetric_upper",
+            p_var("g", vec![idx_upper("i"), idx_upper("j")]),
+            p_var("g", vec![idx_upper("j"), idx_upper("i")]),
+        ));
+
+        // The Kronecker delta is also symmetric in a generalized sense:
+        // δ^i_j with indices swapped yields the same contraction behavior
+        // (though typically written with upper first, lower second)
 
         rs
     }
@@ -1890,5 +1914,53 @@ mod tests {
             .and_then(|r| r.apply_ltr(&expr));
 
         assert!(result.is_none());
+    }
+
+    // === Tensor symmetry rule tests ===
+
+    #[test]
+    fn metric_symmetric_lower() {
+        // g_μν = g_νμ (covariant metric is symmetric)
+        let rs = RuleSet::tensor();
+        let expr = tensor("g", vec![lower("mu"), lower("nu")]);
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_symmetric_lower")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("g", vec![lower("nu"), lower("mu")])));
+    }
+
+    #[test]
+    fn metric_symmetric_upper() {
+        // g^μν = g^νμ (contravariant metric is symmetric)
+        let rs = RuleSet::tensor();
+        let expr = tensor("g", vec![upper("mu"), upper("nu")]);
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_symmetric_upper")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("g", vec![upper("nu"), upper("mu")])));
+    }
+
+    #[test]
+    fn metric_symmetry_roundtrip() {
+        // Applying symmetry twice returns to original
+        let rs = RuleSet::tensor();
+        let original = tensor("g", vec![lower("alpha"), lower("beta")]);
+
+        let rule = rs
+            .iter()
+            .find(|r| r.name == "metric_symmetric_lower")
+            .unwrap();
+
+        let swapped = rule.apply_ltr(&original).unwrap();
+        assert_eq!(swapped, tensor("g", vec![lower("beta"), lower("alpha")]));
+
+        let back = rule.apply_ltr(&swapped).unwrap();
+        assert_eq!(back, original);
     }
 }
