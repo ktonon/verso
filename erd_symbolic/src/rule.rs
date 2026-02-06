@@ -484,7 +484,7 @@ impl RuleSet {
 
     /// Trigonometric identities.
     pub fn trigonometric() -> RuleSet {
-        use std::f64::consts::{FRAC_PI_2, PI};
+        use std::f64::consts::{E, FRAC_PI_2, FRAC_PI_3, FRAC_PI_4, FRAC_PI_6, PI, TAU};
 
         let x = || wildcard("x");
 
@@ -497,6 +497,22 @@ impl RuleSet {
         rs.add(rule("cos_pi", p_cos(p_const(PI)), p_const(-1.0))); // cos(π) = -1
         rs.add(rule("sin_pi_2", p_sin(p_const(FRAC_PI_2)), p_const(1.0))); // sin(π/2) = 1
         rs.add(rule("cos_pi_2", p_cos(p_const(FRAC_PI_2)), p_const(0.0))); // cos(π/2) = 0
+
+        // Additional special values
+        let sqrt_2_over_2 = std::f64::consts::FRAC_1_SQRT_2; // √2/2 ≈ 0.7071
+        let sqrt_3_over_2 = 3.0_f64.sqrt() / 2.0; // √3/2 ≈ 0.8660
+        let three_pi_over_2 = 3.0 * FRAC_PI_2; // 3π/2
+
+        rs.add(rule("sin_pi_4", p_sin(p_const(FRAC_PI_4)), p_const(sqrt_2_over_2))); // sin(π/4) = √2/2
+        rs.add(rule("cos_pi_4", p_cos(p_const(FRAC_PI_4)), p_const(sqrt_2_over_2))); // cos(π/4) = √2/2
+        rs.add(rule("sin_pi_3", p_sin(p_const(FRAC_PI_3)), p_const(sqrt_3_over_2))); // sin(π/3) = √3/2
+        rs.add(rule("cos_pi_3", p_cos(p_const(FRAC_PI_3)), p_const(0.5))); // cos(π/3) = 1/2
+        rs.add(rule("sin_pi_6", p_sin(p_const(FRAC_PI_6)), p_const(0.5))); // sin(π/6) = 1/2
+        rs.add(rule("cos_pi_6", p_cos(p_const(FRAC_PI_6)), p_const(sqrt_3_over_2))); // cos(π/6) = √3/2
+        rs.add(rule("sin_2pi", p_sin(p_const(TAU)), p_const(0.0))); // sin(2π) = 0
+        rs.add(rule("cos_2pi", p_cos(p_const(TAU)), p_const(1.0))); // cos(2π) = 1
+        rs.add(rule("sin_3pi_2", p_sin(p_const(three_pi_over_2)), p_const(-1.0))); // sin(3π/2) = -1
+        rs.add(rule("cos_3pi_2", p_cos(p_const(three_pi_over_2)), p_const(0.0))); // cos(3π/2) = 0
 
         // === Parity (odd/even functions) ===
         // sin(-x) = -sin(x)
@@ -534,8 +550,36 @@ impl RuleSet {
         // === Exponential/Log identities ===
         rs.add(rule("exp_zero", p_exp(p_const(0.0)), p_const(1.0))); // e^0 = 1
         rs.add(rule("ln_one", p_ln(p_const(1.0)), p_const(0.0))); // ln(1) = 0
+        rs.add(rule("ln_e", p_ln(p_const(E)), p_const(1.0))); // ln(e) = 1
         rs.add(rule("exp_ln", p_exp(p_ln(x())), x())); // e^(ln(x)) = x
         rs.add(rule("ln_exp", p_ln(p_exp(x())), x())); // ln(e^x) = x
+
+        // === Future extensions (TODO) ===
+        // Angle shift identities:
+        //   - sin(π/2 - x) = cos(x), cos(π/2 - x) = sin(x) (complementary)
+        //   - sin(π - x) = sin(x), cos(π - x) = -cos(x) (supplementary)
+        //   - sin(x + 2π) = sin(x), cos(x + 2π) = cos(x) (periodicity)
+        //
+        // Double/half angle formulas (requires matching 2*x pattern):
+        //   - sin(2x) = 2·sin(x)·cos(x)
+        //   - cos(2x) = cos²(x) - sin²(x)
+        //   - sin²(x) = (1 - cos(2x))/2 (power reduction)
+        //   - cos²(x) = (1 + cos(2x))/2 (power reduction)
+        //
+        // Sum/difference formulas (requires two wildcards a, b):
+        //   - sin(a + b) = sin(a)·cos(b) + cos(a)·sin(b)
+        //   - cos(a + b) = cos(a)·cos(b) - sin(a)·sin(b)
+        //
+        // Product-to-sum identities:
+        //   - sin(a)·cos(b) = ½[sin(a+b) + sin(a-b)]
+        //   - cos(a)·cos(b) = ½[cos(a+b) + cos(a-b)]
+        //   - sin(a)·sin(b) = ½[cos(a-b) - cos(a+b)]
+        //
+        // Logarithm extensions:
+        //   - ln(a·b) = ln(a) + ln(b)
+        //   - ln(a/b) = ln(a) - ln(b)
+        //   - ln(a^n) = n·ln(a)
+        //   - exp(a + b) = exp(a)·exp(b)
 
         rs
     }

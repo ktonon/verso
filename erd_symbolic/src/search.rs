@@ -338,6 +338,110 @@ mod tests {
     }
 
     #[test]
+    fn simplify_trig_sin_pi_4() {
+        use std::f64::consts::{FRAC_1_SQRT_2, FRAC_PI_4};
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(FRAC_PI_4));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(FRAC_1_SQRT_2)); // √2/2
+    }
+
+    #[test]
+    fn simplify_trig_cos_pi_4() {
+        use std::f64::consts::{FRAC_1_SQRT_2, FRAC_PI_4};
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(FRAC_PI_4));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(FRAC_1_SQRT_2)); // √2/2
+    }
+
+    #[test]
+    fn simplify_trig_sin_pi_3() {
+        use std::f64::consts::FRAC_PI_3;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(FRAC_PI_3));
+        let result = simplify(&expr, &rules);
+        let sqrt_3_over_2 = 3.0_f64.sqrt() / 2.0;
+        assert_eq!(result, constant(sqrt_3_over_2)); // √3/2
+    }
+
+    #[test]
+    fn simplify_trig_cos_pi_3() {
+        use std::f64::consts::FRAC_PI_3;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(FRAC_PI_3));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.5)); // 1/2
+    }
+
+    #[test]
+    fn simplify_trig_sin_pi_6() {
+        use std::f64::consts::FRAC_PI_6;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(FRAC_PI_6));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.5)); // 1/2
+    }
+
+    #[test]
+    fn simplify_trig_cos_pi_6() {
+        use std::f64::consts::FRAC_PI_6;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(FRAC_PI_6));
+        let result = simplify(&expr, &rules);
+        let sqrt_3_over_2 = 3.0_f64.sqrt() / 2.0;
+        assert_eq!(result, constant(sqrt_3_over_2)); // √3/2
+    }
+
+    #[test]
+    fn simplify_trig_sin_2pi() {
+        use std::f64::consts::TAU;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(TAU)); // 2π
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_trig_cos_2pi() {
+        use std::f64::consts::TAU;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(TAU)); // 2π
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_trig_sin_3pi_2() {
+        use std::f64::consts::FRAC_PI_2;
+        let rules = RuleSet::trigonometric();
+        let three_pi_over_2 = 3.0 * FRAC_PI_2;
+        let expr = sin(constant(three_pi_over_2));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(-1.0));
+    }
+
+    #[test]
+    fn simplify_trig_cos_3pi_2() {
+        use std::f64::consts::FRAC_PI_2;
+        let rules = RuleSet::trigonometric();
+        let three_pi_over_2 = 3.0 * FRAC_PI_2;
+        let expr = cos(constant(three_pi_over_2));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_ln_e() {
+        use crate::expr::ln;
+        use std::f64::consts::E;
+        let rules = RuleSet::trigonometric();
+        let expr = ln(constant(E));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
     fn simplify_pythagorean() {
         // sin²(x) + cos²(x) = 1
         let rules = RuleSet::trigonometric();
