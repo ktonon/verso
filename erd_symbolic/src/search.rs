@@ -1,4 +1,4 @@
-use crate::expr::{classify_mul, Expr, MulKind, NamedConst};
+use crate::expr::{classify_mul, Expr, FnKind, MulKind, NamedConst};
 use crate::rule::RuleSet;
 use std::collections::{HashMap, HashSet};
 
@@ -429,6 +429,118 @@ fn try_fold_pi_fraction(left: &Expr, right: &Expr) -> Option<NamedConst> {
     None
 }
 
+/// Try to evaluate a constant expression to a numeric value.
+/// Handles Const, Named, and operations on constants (Mul, Add, Neg, Inv, Pow).
+fn try_eval_const(expr: &Expr) -> Option<f64> {
+    match expr {
+        Expr::Const(n) => Some(*n),
+        Expr::Named(nc) => Some(nc.value()),
+        Expr::Neg(a) => try_eval_const(a).map(|v| -v),
+        Expr::Inv(a) => try_eval_const(a).map(|v| 1.0 / v),
+        Expr::Add(a, b) => {
+            let va = try_eval_const(a)?;
+            let vb = try_eval_const(b)?;
+            Some(va + vb)
+        }
+        Expr::Mul(a, b) => {
+            let va = try_eval_const(a)?;
+            let vb = try_eval_const(b)?;
+            Some(va * vb)
+        }
+        Expr::Pow(base, exp) => {
+            let vb = try_eval_const(base)?;
+            let ve = try_eval_const(exp)?;
+            Some(vb.powf(ve))
+        }
+        _ => None,
+    }
+}
+
+/// Try to fold trig functions when the argument is a constant.
+/// Evaluates sin/cos/tan and checks for "nice" values like 0, ±1, ±0.5, ±√2/2, ±√3/2.
+fn try_fold_trig(kind: &FnKind, arg: &Expr) -> Option<Expr> {
+    // Try to evaluate the argument to a numeric value
+    let val = try_eval_const(arg)?;
+
+    const EPS: f64 = 1e-10;
+
+    // Evaluate the trig function
+    let result = match kind {
+        FnKind::Sin => val.sin(),
+        FnKind::Cos => val.cos(),
+        FnKind::Tan => {
+            // Avoid evaluating tan at odd multiples of π/2
+            let cos_val = val.cos();
+            if cos_val.abs() < EPS {
+                return None;
+            }
+            val.tan()
+        }
+        _ => return None,
+    };
+
+    // Check for "nice" values
+    // Using a slightly larger epsilon for trig results due to accumulated floating point error
+    const TRIG_EPS: f64 = 1e-9;
+
+    let sqrt2_over_2 = std::f64::consts::FRAC_1_SQRT_2;
+    let sqrt3_over_2 = 3.0_f64.sqrt() / 2.0;
+
+    // Check exact values first
+    if result.abs() < TRIG_EPS {
+        return Some(Expr::Const(0.0));
+    }
+    if (result - 1.0).abs() < TRIG_EPS {
+        return Some(Expr::Const(1.0));
+    }
+    if (result + 1.0).abs() < TRIG_EPS {
+        return Some(Expr::Const(-1.0));
+    }
+    if (result - 0.5).abs() < TRIG_EPS {
+        return Some(Expr::Const(0.5));
+    }
+    if (result + 0.5).abs() < TRIG_EPS {
+        return Some(Expr::Const(-0.5));
+    }
+    // √2/2
+    if (result - sqrt2_over_2).abs() < TRIG_EPS {
+        return Some(Expr::Named(NamedConst::Frac1Sqrt2));
+    }
+    if (result + sqrt2_over_2).abs() < TRIG_EPS {
+        return Some(Expr::Neg(Box::new(Expr::Named(NamedConst::Frac1Sqrt2))));
+    }
+    // √3/2
+    if (result - sqrt3_over_2).abs() < TRIG_EPS {
+        return Some(Expr::Named(NamedConst::FracSqrt3By2));
+    }
+    if (result + sqrt3_over_2).abs() < TRIG_EPS {
+        return Some(Expr::Neg(Box::new(Expr::Named(NamedConst::FracSqrt3By2))));
+    }
+    // √3 (for tan(π/3))
+    if (result - 3.0_f64.sqrt()).abs() < TRIG_EPS {
+        return Some(Expr::Named(NamedConst::Sqrt3));
+    }
+    if (result + 3.0_f64.sqrt()).abs() < TRIG_EPS {
+        return Some(Expr::Neg(Box::new(Expr::Named(NamedConst::Sqrt3))));
+    }
+    // 1/√3 = √3/3 (for tan(π/6))
+    let inv_sqrt3 = 1.0 / 3.0_f64.sqrt();
+    if (result - inv_sqrt3).abs() < TRIG_EPS {
+        return Some(Expr::Mul(
+            Box::new(Expr::Named(NamedConst::Sqrt3)),
+            Box::new(Expr::Inv(Box::new(Expr::Const(3.0)))),
+        ));
+    }
+    if (result + inv_sqrt3).abs() < TRIG_EPS {
+        return Some(Expr::Neg(Box::new(Expr::Mul(
+            Box::new(Expr::Named(NamedConst::Sqrt3)),
+            Box::new(Expr::Inv(Box::new(Expr::Const(3.0)))),
+        ))));
+    }
+
+    None
+}
+
 fn fold_constants(expr: &Expr) -> Expr {
     match expr {
         Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
@@ -479,7 +591,14 @@ fn fold_constants(expr: &Expr) -> Expr {
                 _ => Expr::Pow(Box::new(b), Box::new(e)),
             }
         }
-        Expr::Fn(kind, a) => Expr::Fn(kind.clone(), Box::new(fold_constants(a))),
+        Expr::Fn(kind, a) => {
+            let folded_arg = fold_constants(a);
+            // Try to evaluate trig functions on constant arguments
+            if let Some(result) = try_fold_trig(kind, &folded_arg) {
+                return result;
+            }
+            Expr::Fn(kind.clone(), Box::new(folded_arg))
+        }
         Expr::FnN(kind, args) => Expr::FnN(
             kind.clone(),
             args.iter().map(fold_constants).collect(),
@@ -2630,5 +2749,105 @@ mod tests {
         let expr = add(add(add(add(add(add(term1, term2), term3), term4), term5), term6), term7);
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_trig_sin_4pi() {
+        // sin(4π) = 0 (cyclical: 4π = 2 * 2π)
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(4.0 * PI));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_trig_cos_6pi() {
+        // cos(6π) = 1 (cyclical: 6π = 3 * 2π)
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(6.0 * PI));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_trig_sin_5pi_4() {
+        // sin(5π/4) = -√2/2
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(5.0 * PI / 4.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, neg(named(NamedConst::Frac1Sqrt2)));
+    }
+
+    #[test]
+    fn simplify_trig_cos_5pi_4() {
+        // cos(5π/4) = -√2/2
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(5.0 * PI / 4.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, neg(named(NamedConst::Frac1Sqrt2)));
+    }
+
+    #[test]
+    fn simplify_trig_sin_7pi_6() {
+        // sin(7π/6) = -1/2
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(7.0 * PI / 6.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(-0.5));
+    }
+
+    #[test]
+    fn simplify_trig_cos_7pi_6() {
+        // cos(7π/6) = -√3/2
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(7.0 * PI / 6.0));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, neg(named(NamedConst::FracSqrt3By2)));
+    }
+
+    #[test]
+    fn simplify_trig_sin_negative_2pi() {
+        // sin(-2π) = 0
+        use std::f64::consts::TAU;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(-TAU));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_trig_cos_negative_4pi() {
+        // cos(-4π) = 1
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(-4.0 * PI));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_trig_sin_100pi() {
+        // sin(100π) = 0 (large multiple of 2π)
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(constant(100.0 * PI));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_trig_cos_100pi() {
+        // cos(100π) = 1 (large multiple of 2π)
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(constant(100.0 * PI));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
     }
 }
