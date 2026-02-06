@@ -1259,6 +1259,57 @@ mod tests {
     }
 
     #[test]
+    fn simplify_tensor_antisymmetric_sum_cancels() {
+        // ε_μν + ε_νμ = 0 (antisymmetric tensor + swapped form = 0)
+        // This is a fundamental property of antisymmetric tensors.
+        //
+        // Path: ε_μν + ε_νμ (complexity 3)
+        //    → ε_μν + (-ε_μν) via antisymmetry on second term (complexity 4 - INCREASE!)
+        //    → 0 via add_neg_self (complexity 1)
+        //
+        // Beam search must explore the complexity-increasing step to find the simplification.
+        use crate::expr::lower;
+        let rules = RuleSet::full();
+
+        let expr = add(
+            tensor("ε", vec![lower("mu"), lower("nu")]),
+            tensor("ε", vec![lower("nu"), lower("mu")]),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_tensor_antisymmetric_em_field_sum_cancels() {
+        // F^μν + F^νμ = 0 (electromagnetic field tensor is antisymmetric)
+        // Same principle as Levi-Civita: F^νμ = -F^μν, so F^μν + F^νμ = F^μν + (-F^μν) = 0
+        let rules = RuleSet::full();
+
+        let expr = add(
+            tensor("F", vec![upper("mu"), upper("nu")]),
+            tensor("F", vec![upper("nu"), upper("mu")]),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_tensor_custom_antisymmetric_cancels() {
+        // Test that custom antisymmetric tensors also exhibit cancellation
+        // ω_ij + ω_ji = 0 for antisymmetric ω (e.g., vorticity tensor)
+        use crate::expr::lower;
+        let mut rules = RuleSet::full();
+        rules.add_antisymmetric("ω");
+
+        let expr = add(
+            tensor("ω", vec![lower("i"), lower("j")]),
+            tensor("ω", vec![lower("j"), lower("i")]),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
     fn simplify_tensor_custom_symmetric() {
         // Test custom symmetric tensor using add_symmetric
         // Symmetry rules have same complexity, but rule-based forms are preferred
