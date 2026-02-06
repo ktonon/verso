@@ -49,8 +49,10 @@ impl BeamSearch {
         // Try applying each rule at the root
         for rule in rules.iter() {
             if let Some(rewritten) = rule.apply_ltr(expr) {
+                // Fold constants immediately so complexity is accurate
+                let folded = fold_constants(&rewritten);
                 results.push(Rewrite {
-                    expr: rewritten,
+                    expr: folded,
                     from_rule: true,
                 });
             }
@@ -305,11 +307,12 @@ pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
 
     // Try expansion and see if it helps
     let expanded = expand_products(&simplified);
-    let expanded = collect_linear_terms(&expanded);
     let expanded = fold_constants(&expanded);
+    // Run beam search first to normalize (e.g., x*x -> x^2) before collecting terms
     let expanded = BeamSearch::default().simplify(&expanded, rules);
     let expanded = fold_constants(&expanded);
     let expanded = collect_linear_terms(&expanded);
+    let expanded = fold_constants(&expanded);
 
     // Only use expanded form if it's simpler
     if expanded.complexity() < simplified.complexity() {
@@ -343,11 +346,12 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
 
     // Try expansion and see if it helps
     let expanded = expand_products(&current);
-    let expanded = collect_linear_terms(&expanded);
     let expanded = fold_constants(&expanded);
+    // Run beam search first to normalize (e.g., x*x -> x^2) before collecting terms
     let (expanded_best, _) = BeamSearch::default().simplify_with_trace(&expanded, rules);
     let expanded_best = fold_constants(&expanded_best);
     let expanded_best = collect_linear_terms(&expanded_best);
+    let expanded_best = fold_constants(&expanded_best);
 
     // Only use expanded form if it's simpler
     if expanded_best.complexity() < current.complexity() {
@@ -413,10 +417,22 @@ fn fold_constants(expr: &Expr) -> Expr {
 
 /// Expand products by applying the distributive law recursively.
 /// x * (y + z) = x*y + x*z and (x + y) * z = x*z + y*z
+/// Also distributes negation over addition: -(x + y) = -x + -y
 fn expand_products(expr: &Expr) -> Expr {
     match expr {
         Expr::Const(_) | Expr::Var { .. } => expr.clone(),
-        Expr::Neg(a) => Expr::Neg(Box::new(expand_products(a))),
+        Expr::Neg(a) => {
+            let inner = expand_products(a);
+            // Distribute negation over addition: -(x + y) = -x + -y
+            if let Expr::Add(left, right) = inner {
+                Expr::Add(
+                    Box::new(expand_products(&Expr::Neg(left))),
+                    Box::new(expand_products(&Expr::Neg(right))),
+                )
+            } else {
+                Expr::Neg(Box::new(inner))
+            }
+        }
         Expr::Inv(a) => Expr::Inv(Box::new(expand_products(a))),
         Expr::Add(a, b) => Expr::Add(
             Box::new(expand_products(a)),
@@ -1705,7 +1721,10 @@ mod tests {
             neg(constant(1.0)),
         );
         let result = simplify(&expr, &rules);
-        assert_eq!(result, mul(scalar("x"), scalar("y")));
+        // Result is x*y (order may vary due to commutativity)
+        let xy = mul(scalar("x"), scalar("y"));
+        let yx = mul(scalar("y"), scalar("x"));
+        assert!(result == xy || result == yx, "Expected x*y or y*x, got {:?}", result);
     }
 
     #[test]
@@ -2417,5 +2436,34 @@ mod tests {
         let expr = pow(constant(1.0), neg(add(scalar("x"), scalar("y"))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_binomial_with_square_cancellation() {
+        // (x + y)(1 - x) + x² = x + y - xy
+        let rules = RuleSet::full();
+        let expr = add(
+            mul(
+                add(scalar("x"), scalar("y")),
+                add(constant(1.0), neg(scalar("x"))),
+            ),
+            pow(scalar("x"), constant(2.0)),
+        );
+        let result = simplify(&expr, &rules);
+        // Result should be x + y - xy (terms may be reordered)
+        // Check that complexity is reduced and the x² term cancelled
+        assert!(result.complexity() < expr.complexity());
+        // Verify no Pow node remains (x² should have cancelled)
+        let result_str = format!("{:?}", result);
+        assert!(!result_str.contains("Pow"), "x² should have cancelled");
+    }
+
+    #[test]
+    fn simplify_triple_product_to_cube() {
+        // y * y * y = y^3
+        let rules = RuleSet::full();
+        let expr = mul(mul(scalar("y"), scalar("y")), scalar("y"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, pow(scalar("y"), constant(3.0)));
     }
 }

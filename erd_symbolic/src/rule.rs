@@ -470,6 +470,7 @@ impl RuleSet {
         let mut rules = Self::new();
         rules
             .merge(Self::standard())
+            .merge(Self::extended())
             .merge(Self::trigonometric())
             .merge(Self::tensor());
         rules
@@ -1316,6 +1317,13 @@ impl RuleSet {
             "pow_mul_same_base",
             p_mul(p_pow(x(), a()), p_pow(x(), b())),
             p_pow(x(), p_add(a(), b())),
+        ));
+
+        // x^a * x = x^(a+1) (commutativity handles x * x^a)
+        rs.add(rule(
+            "pow_mul_base",
+            p_mul(p_pow(x(), a()), x()),
+            p_pow(x(), p_add(a(), p_const(1.0))),
         ));
 
         // (x^a)^b = x^(a*b)
