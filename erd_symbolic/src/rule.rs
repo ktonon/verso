@@ -816,6 +816,121 @@ impl RuleSet {
             p_cos(p_add(a(), p_neg(b()))),
         ));
 
+        // === Product-to-sum identities ===
+        // These convert products of trig functions to sums/differences.
+
+        // sin(a)·cos(b) = ½[sin(a+b) + sin(a-b)]
+        rs.add(rule(
+            "sin_cos_product_to_sum",
+            p_mul(p_sin(a()), p_cos(b())),
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(
+                    p_sin(p_add(a(), b())),
+                    p_sin(p_add(a(), p_neg(b()))),
+                ),
+            ),
+        ));
+
+        // ½[sin(a+b) + sin(a-b)] = sin(a)·cos(b) (contraction - reduces complexity!)
+        rs.add(rule(
+            "sum_to_sin_cos_product",
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(
+                    p_sin(p_add(a(), b())),
+                    p_sin(p_add(a(), p_neg(b()))),
+                ),
+            ),
+            p_mul(p_sin(a()), p_cos(b())),
+        ));
+        // Also match (sum) * (1/2)
+        rs.add(rule(
+            "sum_to_sin_cos_product_rev",
+            p_mul(
+                p_add(
+                    p_sin(p_add(a(), b())),
+                    p_sin(p_add(a(), p_neg(b()))),
+                ),
+                p_inv(p_const(2.0)),
+            ),
+            p_mul(p_sin(a()), p_cos(b())),
+        ));
+
+        // cos(a)·cos(b) = ½[cos(a+b) + cos(a-b)]
+        rs.add(rule(
+            "cos_cos_product_to_sum",
+            p_mul(p_cos(a()), p_cos(b())),
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(
+                    p_cos(p_add(a(), b())),
+                    p_cos(p_add(a(), p_neg(b()))),
+                ),
+            ),
+        ));
+
+        // ½[cos(a+b) + cos(a-b)] = cos(a)·cos(b) (contraction)
+        rs.add(rule(
+            "sum_to_cos_cos_product",
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(
+                    p_cos(p_add(a(), b())),
+                    p_cos(p_add(a(), p_neg(b()))),
+                ),
+            ),
+            p_mul(p_cos(a()), p_cos(b())),
+        ));
+        rs.add(rule(
+            "sum_to_cos_cos_product_rev",
+            p_mul(
+                p_add(
+                    p_cos(p_add(a(), b())),
+                    p_cos(p_add(a(), p_neg(b()))),
+                ),
+                p_inv(p_const(2.0)),
+            ),
+            p_mul(p_cos(a()), p_cos(b())),
+        ));
+
+        // sin(a)·sin(b) = ½[cos(a-b) - cos(a+b)]
+        rs.add(rule(
+            "sin_sin_product_to_sum",
+            p_mul(p_sin(a()), p_sin(b())),
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(
+                    p_cos(p_add(a(), p_neg(b()))),
+                    p_neg(p_cos(p_add(a(), b()))),
+                ),
+            ),
+        ));
+
+        // ½[cos(a-b) - cos(a+b)] = sin(a)·sin(b) (contraction)
+        rs.add(rule(
+            "sum_to_sin_sin_product",
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(
+                    p_cos(p_add(a(), p_neg(b()))),
+                    p_neg(p_cos(p_add(a(), b()))),
+                ),
+            ),
+            p_mul(p_sin(a()), p_sin(b())),
+        ));
+        rs.add(rule(
+            "sum_to_sin_sin_product_rev",
+            p_mul(
+                p_add(
+                    p_cos(p_add(a(), p_neg(b()))),
+                    p_neg(p_cos(p_add(a(), b()))),
+                ),
+                p_inv(p_const(2.0)),
+            ),
+            p_mul(p_sin(a()), p_sin(b())),
+        ));
+
         // === Exponential/Log identities ===
         rs.add(rule("exp_zero", p_exp(p_const(0.0)), p_const(1.0))); // e^0 = 1
         rs.add(rule("ln_one", p_ln(p_const(1.0)), p_const(0.0))); // ln(1) = 0
@@ -823,17 +938,83 @@ impl RuleSet {
         rs.add(rule("exp_ln", p_exp(p_ln(x())), x())); // e^(ln(x)) = x
         rs.add(rule("ln_exp", p_ln(p_exp(x())), x())); // ln(e^x) = x
 
-        // === Future extensions (TODO) ===
-        // Product-to-sum identities:
-        //   - sin(a)·cos(b) = ½[sin(a+b) + sin(a-b)]
-        //   - cos(a)·cos(b) = ½[cos(a+b) + cos(a-b)]
-        //   - sin(a)·sin(b) = ½[cos(a-b) - cos(a+b)]
-        //
-        // Logarithm extensions:
-        //   - ln(a·b) = ln(a) + ln(b)
-        //   - ln(a/b) = ln(a) - ln(b)
-        //   - ln(a^n) = n·ln(a)
-        //   - exp(a + b) = exp(a)·exp(b)
+        // === Logarithm/Exponential extensions ===
+
+        // ln(a·b) = ln(a) + ln(b) (expansion)
+        rs.add(rule(
+            "ln_product",
+            p_ln(p_mul(a(), b())),
+            p_add(p_ln(a()), p_ln(b())),
+        ));
+
+        // ln(a) + ln(b) = ln(a·b) (contraction - reduces complexity!)
+        rs.add(rule(
+            "ln_product_contract",
+            p_add(p_ln(a()), p_ln(b())),
+            p_ln(p_mul(a(), b())),
+        ));
+
+        // ln(a/b) = ln(a) - ln(b), where a/b is represented as a * (1/b)
+        rs.add(rule(
+            "ln_quotient",
+            p_ln(p_mul(a(), p_inv(b()))),
+            p_add(p_ln(a()), p_neg(p_ln(b()))),
+        ));
+
+        // ln(a) - ln(b) = ln(a/b) (contraction)
+        rs.add(rule(
+            "ln_quotient_contract",
+            p_add(p_ln(a()), p_neg(p_ln(b()))),
+            p_ln(p_mul(a(), p_inv(b()))),
+        ));
+
+        // ln(a^n) = n·ln(a) (expansion)
+        rs.add(rule(
+            "ln_power",
+            p_ln(p_pow(a(), b())),
+            p_mul(b(), p_ln(a())),
+        ));
+
+        // n·ln(a) = ln(a^n) (contraction - reduces complexity!)
+        rs.add(rule(
+            "ln_power_contract",
+            p_mul(b(), p_ln(a())),
+            p_ln(p_pow(a(), b())),
+        ));
+        // Also match ln(a) * n
+        rs.add(rule(
+            "ln_power_contract_rev",
+            p_mul(p_ln(a()), b()),
+            p_ln(p_pow(a(), b())),
+        ));
+
+        // exp(a + b) = exp(a)·exp(b) (expansion)
+        rs.add(rule(
+            "exp_sum",
+            p_exp(p_add(a(), b())),
+            p_mul(p_exp(a()), p_exp(b())),
+        ));
+
+        // exp(a)·exp(b) = exp(a + b) (contraction - reduces complexity!)
+        rs.add(rule(
+            "exp_sum_contract",
+            p_mul(p_exp(a()), p_exp(b())),
+            p_exp(p_add(a(), b())),
+        ));
+
+        // exp(a - b) = exp(a)/exp(b) = exp(a) * (1/exp(b))
+        rs.add(rule(
+            "exp_diff",
+            p_exp(p_add(a(), p_neg(b()))),
+            p_mul(p_exp(a()), p_inv(p_exp(b()))),
+        ));
+
+        // exp(a) * (1/exp(b)) = exp(a - b) (contraction)
+        rs.add(rule(
+            "exp_diff_contract",
+            p_mul(p_exp(a()), p_inv(p_exp(b()))),
+            p_exp(p_add(a(), p_neg(b()))),
+        ));
 
         rs
     }

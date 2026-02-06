@@ -603,6 +603,62 @@ mod tests {
     }
 
     #[test]
+    fn simplify_ln_product_contraction() {
+        // ln(a) + ln(b) = ln(a·b)
+        // Complexity: 5 → 3 (reduces!)
+        use crate::expr::ln;
+        let rules = RuleSet::trigonometric();
+        let expr = add(ln(scalar("a")), ln(scalar("b")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, ln(mul(scalar("a"), scalar("b"))));
+    }
+
+    #[test]
+    fn simplify_ln_quotient_contraction() {
+        // ln(a) - ln(b) = ln(a/b)
+        // Complexity: 6 → 4 (reduces!)
+        use crate::expr::ln;
+        let rules = RuleSet::trigonometric();
+        let expr = add(ln(scalar("a")), neg(ln(scalar("b"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, ln(mul(scalar("a"), inv(scalar("b")))));
+    }
+
+    #[test]
+    fn simplify_ln_power_contraction() {
+        // n·ln(a) = ln(a^n)
+        // Complexity: 4 → 3 (reduces!)
+        use crate::expr::ln;
+        let rules = RuleSet::trigonometric();
+        let expr = mul(scalar("n"), ln(scalar("a")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, ln(pow(scalar("a"), scalar("n"))));
+    }
+
+    #[test]
+    fn simplify_exp_product_contraction() {
+        // exp(a)·exp(b) = exp(a + b)
+        // Complexity: 5 → 3 (reduces!)
+        use crate::expr::exp;
+        let rules = RuleSet::trigonometric();
+        let expr = mul(exp(scalar("a")), exp(scalar("b")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, exp(add(scalar("a"), scalar("b"))));
+    }
+
+    #[test]
+    fn simplify_exp_quotient_contraction() {
+        // exp(a) / exp(b) = exp(a - b)
+        // exp(a) * (1/exp(b)) = exp(a + (-b))
+        // Complexity: 6 → 4 (reduces!)
+        use crate::expr::exp;
+        let rules = RuleSet::trigonometric();
+        let expr = mul(exp(scalar("a")), inv(exp(scalar("b"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, exp(add(scalar("a"), neg(scalar("b")))));
+    }
+
+    #[test]
     fn simplify_pythagorean() {
         // sin²(x) + cos²(x) = 1
         let rules = RuleSet::trigonometric();
