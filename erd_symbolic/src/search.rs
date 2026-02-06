@@ -1232,6 +1232,47 @@ mod tests {
     }
 
     #[test]
+    fn simplify_tensor_antisymmetric_standalone_no_change() {
+        // ε_μν alone doesn't simplify - antisymmetry rule increases complexity
+        // (adds negation). The rule exists for pattern matching in multi-step
+        // simplifications, not standalone application.
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        let expr = tensor("ε", vec![lower("mu"), lower("nu")]);
+        let result = simplify(&expr, &rules);
+        // No change - applying antisymmetry would increase complexity
+        assert_eq!(result, expr);
+    }
+
+    #[test]
+    fn simplify_tensor_double_antisymmetry_simplifies() {
+        // -ε_νμ can use antisymmetry to become --ε_μν = ε_μν via double negation
+        // This demonstrates antisymmetry combined with other rules.
+        use crate::expr::lower;
+        let rules = RuleSet::full(); // includes double_neg rule
+
+        let expr = neg(tensor("ε", vec![lower("nu"), lower("mu")]));
+        let result = simplify(&expr, &rules);
+        // Via antisymmetry: -ε_νμ → --ε_μν, then double_neg: --ε_μν → ε_μν
+        assert_eq!(result, tensor("ε", vec![lower("mu"), lower("nu")]));
+    }
+
+    #[test]
+    fn simplify_tensor_custom_symmetric() {
+        // Test custom symmetric tensor using add_symmetric
+        // Symmetry rules have same complexity, but rule-based forms are preferred
+        use crate::expr::lower;
+        let mut rules = RuleSet::tensor();
+        rules.add_symmetric("h"); // perturbation metric
+
+        let expr = tensor("h", vec![lower("nu"), lower("mu")]);
+        let result = simplify(&expr, &rules);
+        // Symmetry allows reordering - rule-based form preferred at equal complexity
+        assert_eq!(result, tensor("h", vec![lower("mu"), lower("nu")]));
+    }
+
+    #[test]
     fn simplify_exp_of_ln_of_exp() {
         // exp(ln(exp(x))) = exp(x)
         let rules = RuleSet::trigonometric();

@@ -543,15 +543,19 @@ impl RuleSet {
     /// Tensor algebra rules.
     ///
     /// Includes index-aware rules using Pattern::Var for tensor operations:
-    /// - Kronecker delta: δ^i_j v^j = v^i
+    /// - Kronecker delta contractions: δ^i_j v^j = v^i
     /// - Metric tensor index lowering: g_ij v^j = v_i
     /// - Metric tensor index raising: g^ij v_j = v^i
     /// - Metric tensor identity: g^ik g_kj = δ^i_j
     /// - Metric tensor symmetry: g_ij = g_ji, g^ij = g^ji
+    /// - Levi-Civita antisymmetry: ε_ij = -ε_ji, ε^ij = -ε^ji
+    /// - Electromagnetic field tensor antisymmetry: F^μν = -F^νμ
     ///
-    /// Future extensions:
-    /// - Generic symmetry annotations for arbitrary tensors
-    /// - Antisymmetric tensors: A^{ij} = -A^{ji}
+    /// For custom tensors, use the helper methods:
+    /// - `add_symmetric(name)`: T_ij = T_ji and T^ij = T^ji
+    /// - `add_antisymmetric(name)`: A_ij = -A_ji and A^ij = -A^ji
+    /// - `add_symmetric_lower/upper(name)`: single index position only
+    /// - `add_antisymmetric_lower/upper(name)`: single index position only
     pub fn tensor() -> RuleSet {
         let x = || wildcard("x");
         let y = || wildcard("y");
@@ -790,6 +794,37 @@ impl RuleSet {
         // δ^i_j with indices swapped yields the same contraction behavior
         // (though typically written with upper first, lower second)
 
+        // === Antisymmetric tensors ===
+        // The Levi-Civita symbol ε is totally antisymmetric.
+        // For rank-2: ε_ij = -ε_ji, ε^ij = -ε^ji
+
+        // ε_ij = -ε_ji (covariant Levi-Civita antisymmetry)
+        rs.add(rule(
+            "levi_civita_antisymmetric_lower",
+            p_var("ε", vec![idx_lower("i"), idx_lower("j")]),
+            p_neg(p_var("ε", vec![idx_lower("j"), idx_lower("i")])),
+        ));
+
+        // ε^ij = -ε^ji (contravariant Levi-Civita antisymmetry)
+        rs.add(rule(
+            "levi_civita_antisymmetric_upper",
+            p_var("ε", vec![idx_upper("i"), idx_upper("j")]),
+            p_neg(p_var("ε", vec![idx_upper("j"), idx_upper("i")])),
+        ));
+
+        // The electromagnetic field tensor F is also antisymmetric: F^μν = -F^νμ
+        rs.add(rule(
+            "em_field_antisymmetric_upper",
+            p_var("F", vec![idx_upper("i"), idx_upper("j")]),
+            p_neg(p_var("F", vec![idx_upper("j"), idx_upper("i")])),
+        ));
+
+        rs.add(rule(
+            "em_field_antisymmetric_lower",
+            p_var("F", vec![idx_lower("i"), idx_lower("j")]),
+            p_neg(p_var("F", vec![idx_lower("j"), idx_lower("i")])),
+        ));
+
         rs
     }
 
@@ -803,6 +838,102 @@ impl RuleSet {
     pub fn merge(&mut self, other: RuleSet) -> &mut Self {
         self.rules.extend(other.rules);
         self
+    }
+
+    /// Add symmetry rules for a rank-2 tensor with two lower indices.
+    /// Generates: T_ij = T_ji
+    ///
+    /// # Example
+    /// ```
+    /// use erd_symbolic::RuleSet;
+    /// let mut rules = RuleSet::new();
+    /// rules.add_symmetric_lower("h"); // h_ij = h_ji (e.g., perturbation metric)
+    /// ```
+    pub fn add_symmetric_lower(&mut self, tensor_name: &str) -> &mut Self {
+        self.add(rule(
+            &format!("{}_symmetric_lower", tensor_name),
+            p_var(tensor_name, vec![idx_lower("i"), idx_lower("j")]),
+            p_var(tensor_name, vec![idx_lower("j"), idx_lower("i")]),
+        ))
+    }
+
+    /// Add symmetry rules for a rank-2 tensor with two upper indices.
+    /// Generates: T^ij = T^ji
+    ///
+    /// # Example
+    /// ```
+    /// use erd_symbolic::RuleSet;
+    /// let mut rules = RuleSet::new();
+    /// rules.add_symmetric_upper("h"); // h^ij = h^ji
+    /// ```
+    pub fn add_symmetric_upper(&mut self, tensor_name: &str) -> &mut Self {
+        self.add(rule(
+            &format!("{}_symmetric_upper", tensor_name),
+            p_var(tensor_name, vec![idx_upper("i"), idx_upper("j")]),
+            p_var(tensor_name, vec![idx_upper("j"), idx_upper("i")]),
+        ))
+    }
+
+    /// Add symmetry rules for a rank-2 tensor (both index positions).
+    /// Generates: T_ij = T_ji and T^ij = T^ji
+    ///
+    /// # Example
+    /// ```
+    /// use erd_symbolic::RuleSet;
+    /// let mut rules = RuleSet::new();
+    /// rules.add_symmetric("S"); // S_ij = S_ji, S^ij = S^ji
+    /// ```
+    pub fn add_symmetric(&mut self, tensor_name: &str) -> &mut Self {
+        self.add_symmetric_lower(tensor_name)
+            .add_symmetric_upper(tensor_name)
+    }
+
+    /// Add antisymmetry rules for a rank-2 tensor with two lower indices.
+    /// Generates: A_ij = -A_ji
+    ///
+    /// # Example
+    /// ```
+    /// use erd_symbolic::RuleSet;
+    /// let mut rules = RuleSet::new();
+    /// rules.add_antisymmetric_lower("ω"); // ω_ij = -ω_ji (e.g., vorticity tensor)
+    /// ```
+    pub fn add_antisymmetric_lower(&mut self, tensor_name: &str) -> &mut Self {
+        self.add(rule(
+            &format!("{}_antisymmetric_lower", tensor_name),
+            p_var(tensor_name, vec![idx_lower("i"), idx_lower("j")]),
+            p_neg(p_var(tensor_name, vec![idx_lower("j"), idx_lower("i")])),
+        ))
+    }
+
+    /// Add antisymmetry rules for a rank-2 tensor with two upper indices.
+    /// Generates: A^ij = -A^ji
+    ///
+    /// # Example
+    /// ```
+    /// use erd_symbolic::RuleSet;
+    /// let mut rules = RuleSet::new();
+    /// rules.add_antisymmetric_upper("ω"); // ω^ij = -ω^ji
+    /// ```
+    pub fn add_antisymmetric_upper(&mut self, tensor_name: &str) -> &mut Self {
+        self.add(rule(
+            &format!("{}_antisymmetric_upper", tensor_name),
+            p_var(tensor_name, vec![idx_upper("i"), idx_upper("j")]),
+            p_neg(p_var(tensor_name, vec![idx_upper("j"), idx_upper("i")])),
+        ))
+    }
+
+    /// Add antisymmetry rules for a rank-2 tensor (both index positions).
+    /// Generates: A_ij = -A_ji and A^ij = -A^ji
+    ///
+    /// # Example
+    /// ```
+    /// use erd_symbolic::RuleSet;
+    /// let mut rules = RuleSet::new();
+    /// rules.add_antisymmetric("A"); // A_ij = -A_ji, A^ij = -A^ji
+    /// ```
+    pub fn add_antisymmetric(&mut self, tensor_name: &str) -> &mut Self {
+        self.add_antisymmetric_lower(tensor_name)
+            .add_antisymmetric_upper(tensor_name)
     }
 
     /// Returns the number of rules in the set.
@@ -1962,5 +2093,149 @@ mod tests {
 
         let back = rule.apply_ltr(&swapped).unwrap();
         assert_eq!(back, original);
+    }
+
+    // === Antisymmetric tensor rule tests ===
+
+    #[test]
+    fn levi_civita_antisymmetric_lower() {
+        // ε_μν = -ε_νμ
+        let rs = RuleSet::tensor();
+        let expr = tensor("ε", vec![lower("mu"), lower("nu")]);
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "levi_civita_antisymmetric_lower")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(neg(tensor("ε", vec![lower("nu"), lower("mu")])))
+        );
+    }
+
+    #[test]
+    fn levi_civita_antisymmetric_upper() {
+        // ε^μν = -ε^νμ
+        let rs = RuleSet::tensor();
+        let expr = tensor("ε", vec![upper("mu"), upper("nu")]);
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "levi_civita_antisymmetric_upper")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(neg(tensor("ε", vec![upper("nu"), upper("mu")])))
+        );
+    }
+
+    #[test]
+    fn em_field_antisymmetric() {
+        // F^μν = -F^νμ (electromagnetic field tensor)
+        let rs = RuleSet::tensor();
+        let expr = tensor("F", vec![upper("mu"), upper("nu")]);
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "em_field_antisymmetric_upper")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(neg(tensor("F", vec![upper("nu"), upper("mu")])))
+        );
+    }
+
+    // === Generic symmetry/antisymmetry helper tests ===
+
+    #[test]
+    fn add_symmetric_lower_custom_tensor() {
+        // Test adding symmetry for a custom tensor "h" (e.g., metric perturbation)
+        let mut rs = RuleSet::new();
+        rs.add_symmetric_lower("h");
+
+        let expr = tensor("h", vec![lower("mu"), lower("nu")]);
+        let result = rs
+            .iter()
+            .find(|r| r.name == "h_symmetric_lower")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("h", vec![lower("nu"), lower("mu")])));
+    }
+
+    #[test]
+    fn add_symmetric_upper_custom_tensor() {
+        let mut rs = RuleSet::new();
+        rs.add_symmetric_upper("T");
+
+        let expr = tensor("T", vec![upper("a"), upper("b")]);
+        let result = rs
+            .iter()
+            .find(|r| r.name == "T_symmetric_upper")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("T", vec![upper("b"), upper("a")])));
+    }
+
+    #[test]
+    fn add_symmetric_both_positions() {
+        let mut rs = RuleSet::new();
+        rs.add_symmetric("S");
+
+        // Should have both lower and upper rules
+        assert!(rs.iter().any(|r| r.name == "S_symmetric_lower"));
+        assert!(rs.iter().any(|r| r.name == "S_symmetric_upper"));
+    }
+
+    #[test]
+    fn add_antisymmetric_lower_custom_tensor() {
+        // Test adding antisymmetry for a custom tensor "ω" (e.g., vorticity)
+        let mut rs = RuleSet::new();
+        rs.add_antisymmetric_lower("ω");
+
+        let expr = tensor("ω", vec![lower("i"), lower("j")]);
+        let result = rs
+            .iter()
+            .find(|r| r.name == "ω_antisymmetric_lower")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(neg(tensor("ω", vec![lower("j"), lower("i")]))));
+    }
+
+    #[test]
+    fn add_antisymmetric_upper_custom_tensor() {
+        let mut rs = RuleSet::new();
+        rs.add_antisymmetric_upper("B");
+
+        let expr = tensor("B", vec![upper("i"), upper("j")]);
+        let result = rs
+            .iter()
+            .find(|r| r.name == "B_antisymmetric_upper")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(neg(tensor("B", vec![upper("j"), upper("i")]))));
+    }
+
+    #[test]
+    fn add_antisymmetric_both_positions() {
+        let mut rs = RuleSet::new();
+        rs.add_antisymmetric("A");
+
+        // Should have both lower and upper rules
+        assert!(rs.iter().any(|r| r.name == "A_antisymmetric_lower"));
+        assert!(rs.iter().any(|r| r.name == "A_antisymmetric_upper"));
+    }
+
+    #[test]
+    fn chained_symmetry_methods() {
+        // Test that methods can be chained
+        let mut rs = RuleSet::new();
+        rs.add_symmetric("g")
+            .add_antisymmetric("F")
+            .add_symmetric_lower("h");
+
+        assert_eq!(rs.len(), 5); // 2 for g, 2 for F, 1 for h
     }
 }
