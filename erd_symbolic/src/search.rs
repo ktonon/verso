@@ -489,7 +489,9 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
         }
     }
 
-    let mut collected: Vec<(String, Expr)> = Vec::new();
+    // Collect terms with their coefficients, separating positive and negative
+    let mut positive_terms: Vec<(String, Expr)> = Vec::new();
+    let mut negative_terms: Vec<(String, Expr)> = Vec::new();
     let mut coeff_keys: Vec<_> = coeffs.keys().cloned().collect();
     coeff_keys.sort();
     for key in coeff_keys {
@@ -497,18 +499,29 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
         if coeff.abs() < f64::EPSILON {
             continue;
         }
-        if (coeff - 1.0).abs() < f64::EPSILON {
-            collected.push((key, var));
+        let term = if (coeff - 1.0).abs() < f64::EPSILON {
+            var
+        } else if (coeff + 1.0).abs() < f64::EPSILON {
+            Expr::Neg(Box::new(var))
+        } else if coeff < 0.0 {
+            Expr::Neg(Box::new(Expr::Mul(
+                Box::new(Expr::Const(-coeff)),
+                Box::new(var),
+            )))
         } else {
-            collected.push((
-                key,
-                Expr::Mul(Box::new(Expr::Const(coeff)), Box::new(var)),
-            ));
+            Expr::Mul(Box::new(Expr::Const(coeff)), Box::new(var))
+        };
+        if coeff > 0.0 {
+            positive_terms.push((key, term));
+        } else {
+            negative_terms.push((key, term));
         }
     }
 
     rest.sort_by_key(|e| format!("{:?}", e));
-    let mut ordered: Vec<Expr> = collected.into_iter().map(|(_, e)| e).collect();
+    // Put positive terms first, then negative terms
+    let mut ordered: Vec<Expr> = positive_terms.into_iter().map(|(_, e)| e).collect();
+    ordered.extend(negative_terms.into_iter().map(|(_, e)| e));
     if const_sum.abs() >= f64::EPSILON {
         ordered.push(Expr::Const(const_sum));
     }
@@ -1663,6 +1676,36 @@ mod tests {
             result,
             add(scalar("x"), mul(constant(2.0), scalar("y")))
         );
+    }
+
+    #[test]
+    fn simplify_subtraction_preserves_order() {
+        // y - x should stay as y - x, not become -x + y
+        let rules = RuleSet::standard();
+        let expr = add(scalar("y"), neg(scalar("x")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, add(scalar("y"), neg(scalar("x"))));
+    }
+
+    #[test]
+    fn simplify_binomial_minus_linear_terms() {
+        // (x + 1)(y + 1) - y - x - 1 = x*y
+        let rules = RuleSet::full();
+        let expr = add(
+            add(
+                add(
+                    mul(
+                        add(scalar("x"), constant(1.0)),
+                        add(scalar("y"), constant(1.0)),
+                    ),
+                    neg(scalar("y")),
+                ),
+                neg(scalar("x")),
+            ),
+            neg(constant(1.0)),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, mul(scalar("x"), scalar("y")));
     }
 
     #[test]
