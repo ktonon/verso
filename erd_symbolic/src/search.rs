@@ -236,7 +236,51 @@ impl SearchStrategy for BeamSearch {
 
 /// Convenience function to simplify an expression with default settings.
 pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
-    BeamSearch::default().simplify(expr, rules)
+    let simplified = BeamSearch::default().simplify(expr, rules);
+    fold_constants(&simplified)
+}
+
+fn fold_constants(expr: &Expr) -> Expr {
+    match expr {
+        Expr::Const(_) | Expr::Var { .. } => expr.clone(),
+        Expr::Neg(a) => match fold_constants(a) {
+            Expr::Const(n) => Expr::Const(-n),
+            other => Expr::Neg(Box::new(other)),
+        },
+        Expr::Inv(a) => match fold_constants(a) {
+            Expr::Const(n) => Expr::Const(1.0 / n),
+            other => Expr::Inv(Box::new(other)),
+        },
+        Expr::Add(a, b) => {
+            let left = fold_constants(a);
+            let right = fold_constants(b);
+            match (&left, &right) {
+                (Expr::Const(x), Expr::Const(y)) => Expr::Const(x + y),
+                _ => Expr::Add(Box::new(left), Box::new(right)),
+            }
+        }
+        Expr::Mul(a, b) => {
+            let left = fold_constants(a);
+            let right = fold_constants(b);
+            match (&left, &right) {
+                (Expr::Const(x), Expr::Const(y)) => Expr::Const(x * y),
+                _ => Expr::Mul(Box::new(left), Box::new(right)),
+            }
+        }
+        Expr::Pow(base, exp) => {
+            let b = fold_constants(base);
+            let e = fold_constants(exp);
+            match (&b, &e) {
+                (Expr::Const(x), Expr::Const(y)) => Expr::Const(x.powf(*y)),
+                _ => Expr::Pow(Box::new(b), Box::new(e)),
+            }
+        }
+        Expr::Fn(kind, a) => Expr::Fn(kind.clone(), Box::new(fold_constants(a))),
+        Expr::FnN(kind, args) => Expr::FnN(
+            kind.clone(),
+            args.iter().map(fold_constants).collect(),
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -1205,6 +1249,14 @@ mod tests {
     }
 
     #[test]
+    fn simplify_combine_like_terms() {
+        let rules = RuleSet::standard();
+        let expr = add(mul(constant(12.0), scalar("x")), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, mul(constant(13.0), scalar("x")));
+    }
+
+    #[test]
     fn simplify_mul_neg_one_left() {
         // (-1) * x = -x
         let rules = RuleSet::standard();
@@ -1270,7 +1322,7 @@ mod tests {
             pow(scalar("x"), constant(3.0)),
         );
         let result = simplify(&expr, &rules);
-        assert_eq!(result, pow(scalar("x"), add(constant(2.0), constant(3.0))));
+        assert_eq!(result, pow(scalar("x"), constant(5.0)));
     }
 
     #[test]
@@ -1281,7 +1333,7 @@ mod tests {
         let expr = pow(pow(scalar("x"), constant(2.0)), constant(3.0));
         let result = simplify(&expr, &rules);
         // pow_of_pow: (x^a)^b = x^(a*b)
-        assert_eq!(result, pow(scalar("x"), mul(constant(2.0), constant(3.0))));
+        assert_eq!(result, pow(scalar("x"), constant(6.0)));
     }
 
     #[test]
@@ -1826,11 +1878,7 @@ mod tests {
         );
         let result = simplify(&expr, &rules);
         // Should apply pow_mul_same_base: x^(2 + (-1))
-        // We don't have constant folding, so this is the simplified form
-        assert_eq!(
-            result,
-            pow(scalar("x"), add(constant(2.0), neg(constant(1.0))))
-        );
+        assert_eq!(result, pow(scalar("x"), constant(1.0)));
     }
 
     #[test]

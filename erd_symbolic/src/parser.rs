@@ -281,7 +281,7 @@ impl Parser {
                 if name.starts_with("log_") {
                     return self.parse_log_base(name);
                 }
-                if self.peek() == Some(&Token::LParen) {
+                if self.peek() == Some(&Token::LParen) && is_known_function(&name) {
                     return self.parse_function_call(name);
                 }
                 let mut expr = scalar(&name);
@@ -450,6 +450,31 @@ impl Parser {
     }
 }
 
+fn is_known_function(name: &str) -> bool {
+    matches!(
+        name,
+        "sin"
+            | "cos"
+            | "tan"
+            | "asin"
+            | "acos"
+            | "atan"
+            | "sinh"
+            | "cosh"
+            | "tanh"
+            | "exp"
+            | "ln"
+            | "sign"
+            | "floor"
+            | "ceil"
+            | "round"
+            | "sqrt"
+            | "min"
+            | "max"
+            | "clamp"
+    )
+}
+
 fn expect_arity(
     args: Vec<crate::expr::Expr>,
     n: usize,
@@ -559,6 +584,30 @@ mod tests {
             expr,
             mul(constant(2.0), add(scalar("x"), constant(1.0)))
         );
+    }
+
+    #[test]
+    fn parse_implicit_mul_ident_parens() {
+        let expr = parse_expr("x(y + 1)").unwrap();
+        assert_eq!(
+            expr,
+            mul(scalar("x"), add(scalar("y"), constant(1.0)))
+        );
+    }
+
+    #[test]
+    fn parse_unknown_ident_parens_as_mul() {
+        let expr = parse_expr("foo(x + 1)").unwrap();
+        assert_eq!(
+            expr,
+            mul(scalar("foo"), add(scalar("x"), constant(1.0)))
+        );
+    }
+
+    #[test]
+    fn parse_known_function_not_mul() {
+        let expr = parse_expr("sin(x + 1)").unwrap();
+        assert_eq!(expr, sin(add(scalar("x"), constant(1.0))));
     }
 
     #[test]

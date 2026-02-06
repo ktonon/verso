@@ -544,6 +544,7 @@ impl RuleSet {
         let x = || wildcard("x");
         let lo = || wildcard("lo");
         let hi = || wildcard("hi");
+        let v = || p_var_wild("v", vec![]);
 
         let mut rs = Self::new();
 
@@ -614,6 +615,18 @@ impl RuleSet {
             "mul_self_square",
             p_mul(x(), x()),
             p_pow(x(), p_const(2.0)),
+        ));
+
+        // Combine like terms (variables only)
+        rs.add(rule(
+            "combine_like_terms_left",
+            p_add(p_mul(const_wild("a"), v()), v()),
+            p_mul(p_add(const_wild("a"), p_const(1.0)), v()),
+        ));
+        rs.add(rule(
+            "combine_like_terms_right",
+            p_add(v(), p_mul(const_wild("a"), v())),
+            p_mul(p_add(const_wild("a"), p_const(1.0)), v()),
         ));
 
         // Min/max/clamp identities (idempotent)

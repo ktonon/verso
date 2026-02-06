@@ -1,5 +1,6 @@
 use crate::parser::parse_expr;
-use crate::to_tex::ToTex;
+use crate::rule::RuleSet;
+use crate::search;
 use std::io::{self, Write};
 
 pub fn run() -> io::Result<()> {
@@ -25,8 +26,8 @@ pub fn run() -> io::Result<()> {
 
         match parse_expr(input) {
             Ok(expr) => {
-                writeln!(stdout, "AST: {}", expr)?;
-                writeln!(stdout, "TeX: {}", expr.to_tex())?;
+                let simplified = search::simplify(&expr, &RuleSet::full());
+                writeln!(stdout, "{}\n", simplified)?;
             }
             Err(err) => {
                 writeln!(stdout, "Error: {:?}", err)?;
