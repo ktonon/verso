@@ -529,12 +529,22 @@ impl RuleSet {
         rs.add(rule("cos_2pi", p_cos(p_const(TAU)), p_const(1.0))); // cos(2π) = 1
         rs.add(rule("sin_3pi_2", p_sin(p_const(three_pi_over_2)), p_const(-1.0))); // sin(3π/2) = -1
         rs.add(rule("cos_3pi_2", p_cos(p_const(three_pi_over_2)), p_const(0.0))); // cos(3π/2) = 0
+        rs.add(rule("tan_zero", p_tan(p_const(0.0)), p_const(0.0))); // tan(0) = 0
+        rs.add(rule("tan_pi", p_tan(p_const(PI)), p_const(0.0))); // tan(π) = 0
+        rs.add(rule("tan_pi_4", p_tan(p_const(FRAC_PI_4)), p_const(1.0))); // tan(π/4) = 1
+        rs.add(rule("asin_zero", p_asin(p_const(0.0)), p_const(0.0))); // asin(0) = 0
+        rs.add(rule("acos_one", p_acos(p_const(1.0)), p_const(0.0))); // acos(1) = 0
+        rs.add(rule("acos_zero", p_acos(p_const(0.0)), p_const(FRAC_PI_2))); // acos(0) = π/2
+        rs.add(rule("atan_zero", p_atan(p_const(0.0)), p_const(0.0))); // atan(0) = 0
+        rs.add(rule("atan_one", p_atan(p_const(1.0)), p_const(FRAC_PI_4))); // atan(1) = π/4
 
         // === Parity (odd/even functions) ===
         // sin(-x) = -sin(x)
         rs.add(rule("sin_neg", p_sin(p_neg(x())), p_neg(p_sin(x()))));
         // cos(-x) = cos(x)
         rs.add(rule("cos_neg", p_cos(p_neg(x())), p_cos(x())));
+        // tan(-x) = -tan(x)
+        rs.add(rule("tan_neg", p_tan(p_neg(x())), p_neg(p_tan(x()))));
 
         // === Pythagorean identity ===
         // sin²x + cos²x = 1
@@ -626,6 +636,31 @@ impl RuleSet {
             "cos_period_rev",
             p_cos(p_add(p_const(TAU), x())),
             p_cos(x()),
+        ));
+
+        // Periodicity: tan(x + π) = tan(x)
+        rs.add(rule(
+            "tan_period",
+            p_tan(p_add(x(), p_const(PI))),
+            p_tan(x()),
+        ));
+        rs.add(rule(
+            "tan_period_rev",
+            p_tan(p_add(p_const(PI), x())),
+            p_tan(x()),
+        ));
+
+        // tan(x) = sin(x) / cos(x)
+        rs.add(rule(
+            "tan_def",
+            p_tan(x()),
+            p_mul(p_sin(x()), p_inv(p_cos(x()))),
+        ));
+        // sin(x) / cos(x) = tan(x)
+        rs.add(rule(
+            "tan_def_contract",
+            p_mul(p_sin(x()), p_inv(p_cos(x()))),
+            p_tan(x()),
         ));
 
         // === Double angle formulas ===
@@ -946,6 +981,11 @@ impl RuleSet {
             ),
             p_mul(p_sin(a()), p_sin(b())),
         ));
+
+        // === Inverse trig compositions (principal value) ===
+        rs.add(rule("asin_sin", p_asin(p_sin(x())), x()));
+        rs.add(rule("acos_cos", p_acos(p_cos(x())), x()));
+        rs.add(rule("atan_tan", p_atan(p_tan(x())), x()));
 
         // === Exponential/Log identities ===
         rs.add(rule("exp_zero", p_exp(p_const(0.0)), p_const(1.0))); // e^0 = 1
@@ -1450,7 +1490,9 @@ impl RuleSet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::{add, constant, cos, exp, inv, ln, mul, neg, scalar, sin};
+    use crate::expr::{
+        acos, add, asin, atan, constant, cos, exp, inv, ln, mul, neg, scalar, sin, tan,
+    };
     use crate::pow;
 
     #[test]
@@ -1979,6 +2021,61 @@ mod tests {
     }
 
     #[test]
+    fn trig_tan_zero() {
+        let rs = RuleSet::trigonometric();
+        let expr = tan(constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "tan_zero")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(0.0)));
+    }
+
+    #[test]
+    fn trig_tan_neg() {
+        let rs = RuleSet::trigonometric();
+        let expr = tan(neg(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "tan_neg")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(neg(tan(scalar("a")))));
+    }
+
+    #[test]
+    fn trig_tan_period() {
+        let rs = RuleSet::trigonometric();
+        let expr = tan(add(scalar("a"), constant(std::f64::consts::PI)));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "tan_period")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tan(scalar("a"))));
+    }
+
+    #[test]
+    fn trig_tan_def() {
+        let rs = RuleSet::trigonometric();
+        let expr = tan(scalar("a"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "tan_def")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(mul(sin(scalar("a")), inv(cos(scalar("a")))))
+        );
+    }
+
+    #[test]
     fn trig_pythagorean() {
         let rs = RuleSet::trigonometric();
         // sin²(a) + cos²(a)
@@ -1993,6 +2090,71 @@ mod tests {
             .and_then(|r| r.apply_ltr(&expr));
 
         assert_eq!(result, Some(constant(1.0)));
+    }
+
+    #[test]
+    fn trig_asin_sin() {
+        let rs = RuleSet::trigonometric();
+        let expr = asin(sin(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "asin_sin")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn trig_acos_cos() {
+        let rs = RuleSet::trigonometric();
+        let expr = acos(cos(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "acos_cos")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn trig_atan_tan() {
+        let rs = RuleSet::trigonometric();
+        let expr = atan(tan(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "atan_tan")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn trig_acos_zero() {
+        let rs = RuleSet::trigonometric();
+        let expr = acos(constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "acos_zero")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(std::f64::consts::FRAC_PI_2)));
+    }
+
+    #[test]
+    fn trig_atan_one() {
+        let rs = RuleSet::trigonometric();
+        let expr = atan(constant(1.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "atan_one")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(std::f64::consts::FRAC_PI_4)));
     }
 
     #[test]
