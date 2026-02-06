@@ -234,12 +234,96 @@ impl SearchStrategy for BeamSearch {
     }
 }
 
+impl BeamSearch {
+    fn simplify_with_trace(&self, expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
+        // Track seen expressions to avoid cycles
+        let mut seen: HashSet<String> = HashSet::new();
+
+        // Current beam of candidates, sorted by complexity
+        let mut beam: Vec<Expr> = vec![expr.clone()];
+        seen.insert(Self::expr_key(expr));
+
+        // Track the best (lowest complexity) expression seen
+        let mut best = expr.clone();
+        let mut best_complexity = expr.complexity();
+        let mut best_from_rule = false;
+
+        let mut trace = vec![expr.clone()];
+
+        for _step in 0..self.max_steps {
+            let mut next_beam: Vec<Expr> = Vec::new();
+
+            for candidate in &beam {
+                for rewrite in self.all_rewrites(candidate, rules) {
+                    let key = Self::expr_key(&rewrite.expr);
+                    if !seen.contains(&key) {
+                        seen.insert(key);
+
+                        let complexity = rewrite.expr.complexity();
+                        let dominated = complexity < best_complexity
+                            || (complexity == best_complexity
+                                && rewrite.from_rule
+                                && !best_from_rule);
+
+                        if dominated {
+                            best = rewrite.expr.clone();
+                            best_complexity = complexity;
+                            best_from_rule = rewrite.from_rule;
+                            if trace.last() != Some(&best) {
+                                trace.push(best.clone());
+                            }
+                        }
+
+                        next_beam.push(rewrite.expr);
+                    }
+                }
+            }
+
+            if next_beam.is_empty() {
+                break;
+            }
+
+            next_beam.sort_by_key(|e| e.complexity());
+            next_beam.truncate(self.beam_width);
+
+            beam = next_beam;
+        }
+
+        (best, trace)
+    }
+}
+
 /// Convenience function to simplify an expression with default settings.
 pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
     let simplified = BeamSearch::default().simplify(expr, rules);
     let simplified = fold_constants(&simplified);
     let simplified = collect_linear_terms(&simplified);
     fold_constants(&simplified)
+}
+
+pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
+    let (best, mut trace) = BeamSearch::default().simplify_with_trace(expr, rules);
+    let mut current = best;
+
+    let folded = fold_constants(&current);
+    if folded != current {
+        trace.push(folded.clone());
+        current = folded;
+    }
+
+    let collected = collect_linear_terms(&current);
+    if collected != current {
+        trace.push(collected.clone());
+        current = collected;
+    }
+
+    let final_fold = fold_constants(&current);
+    if final_fold != current {
+        trace.push(final_fold.clone());
+        current = final_fold;
+    }
+
+    (current, trace)
 }
 
 fn fold_constants(expr: &Expr) -> Expr {
