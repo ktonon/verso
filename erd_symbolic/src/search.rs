@@ -442,6 +442,89 @@ mod tests {
     }
 
     #[test]
+    fn simplify_sin_complementary() {
+        // sin(π/2 - x) = cos(x)
+        use std::f64::consts::FRAC_PI_2;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(add(constant(FRAC_PI_2), neg(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, cos(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_cos_complementary() {
+        // cos(π/2 - x) = sin(x)
+        use std::f64::consts::FRAC_PI_2;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(add(constant(FRAC_PI_2), neg(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, sin(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_sin_supplementary() {
+        // sin(π - x) = sin(x)
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(add(constant(PI), neg(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, sin(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_cos_supplementary() {
+        // cos(π - x) = -cos(x)
+        use std::f64::consts::PI;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(add(constant(PI), neg(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, neg(cos(scalar("x"))));
+    }
+
+    #[test]
+    fn simplify_sin_period() {
+        // sin(x + 2π) = sin(x)
+        use std::f64::consts::TAU;
+        let rules = RuleSet::trigonometric();
+        let expr = sin(add(scalar("x"), constant(TAU)));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, sin(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_cos_period() {
+        // cos(x + 2π) = cos(x)
+        use std::f64::consts::TAU;
+        let rules = RuleSet::trigonometric();
+        let expr = cos(add(scalar("x"), constant(TAU)));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, cos(scalar("x")));
+    }
+
+    #[test]
+    fn simplify_double_angle_sin_contraction() {
+        // 2·sin(x)·cos(x) = sin(2x)
+        // Complexity: 5 → 3 (reduces!)
+        let rules = RuleSet::trigonometric();
+        let expr = mul(constant(2.0), mul(sin(scalar("x")), cos(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, sin(mul(constant(2.0), scalar("x"))));
+    }
+
+    #[test]
+    fn simplify_double_angle_cos_contraction() {
+        // cos²(x) - sin²(x) = cos(2x)
+        // Complexity: 7 → 3 (reduces!)
+        let rules = RuleSet::trigonometric();
+        let expr = add(
+            pow(cos(scalar("x")), constant(2.0)),
+            neg(pow(sin(scalar("x")), constant(2.0))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, cos(mul(constant(2.0), scalar("x"))));
+    }
+
+    #[test]
     fn simplify_pythagorean() {
         // sin²(x) + cos²(x) = 1
         let rules = RuleSet::trigonometric();

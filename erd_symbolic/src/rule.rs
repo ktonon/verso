@@ -543,9 +543,129 @@ impl RuleSet {
             p_add(p_const(1.0), p_neg(p_pow(p_sin(x()), p_const(2.0)))),
         ));
 
-        // === Double angle (useful for simplification) ===
-        // sin(2x) = 2 sin(x) cos(x) — represented with repeated wildcard
-        // Note: Matching 2*x requires a different pattern; these are structural rules
+        // === Angle shift identities ===
+
+        // Complementary angles: sin(π/2 - x) = cos(x), cos(π/2 - x) = sin(x)
+        // π/2 - x is represented as Add(Const(π/2), Neg(x))
+        rs.add(rule(
+            "sin_complementary",
+            p_sin(p_add(p_const(FRAC_PI_2), p_neg(x()))),
+            p_cos(x()),
+        ));
+        rs.add(rule(
+            "sin_complementary_rev",
+            p_sin(p_add(p_neg(x()), p_const(FRAC_PI_2))),
+            p_cos(x()),
+        ));
+        rs.add(rule(
+            "cos_complementary",
+            p_cos(p_add(p_const(FRAC_PI_2), p_neg(x()))),
+            p_sin(x()),
+        ));
+        rs.add(rule(
+            "cos_complementary_rev",
+            p_cos(p_add(p_neg(x()), p_const(FRAC_PI_2))),
+            p_sin(x()),
+        ));
+
+        // Supplementary angles: sin(π - x) = sin(x), cos(π - x) = -cos(x)
+        rs.add(rule(
+            "sin_supplementary",
+            p_sin(p_add(p_const(PI), p_neg(x()))),
+            p_sin(x()),
+        ));
+        rs.add(rule(
+            "sin_supplementary_rev",
+            p_sin(p_add(p_neg(x()), p_const(PI))),
+            p_sin(x()),
+        ));
+        rs.add(rule(
+            "cos_supplementary",
+            p_cos(p_add(p_const(PI), p_neg(x()))),
+            p_neg(p_cos(x())),
+        ));
+        rs.add(rule(
+            "cos_supplementary_rev",
+            p_cos(p_add(p_neg(x()), p_const(PI))),
+            p_neg(p_cos(x())),
+        ));
+
+        // Periodicity: sin(x + 2π) = sin(x), cos(x + 2π) = cos(x)
+        rs.add(rule(
+            "sin_period",
+            p_sin(p_add(x(), p_const(TAU))),
+            p_sin(x()),
+        ));
+        rs.add(rule(
+            "sin_period_rev",
+            p_sin(p_add(p_const(TAU), x())),
+            p_sin(x()),
+        ));
+        rs.add(rule(
+            "cos_period",
+            p_cos(p_add(x(), p_const(TAU))),
+            p_cos(x()),
+        ));
+        rs.add(rule(
+            "cos_period_rev",
+            p_cos(p_add(p_const(TAU), x())),
+            p_cos(x()),
+        ));
+
+        // === Double angle formulas ===
+
+        // sin(2x) = 2·sin(x)·cos(x) (expansion)
+        rs.add(rule(
+            "sin_double_angle",
+            p_sin(p_mul(p_const(2.0), x())),
+            p_mul(p_const(2.0), p_mul(p_sin(x()), p_cos(x()))),
+        ));
+        rs.add(rule(
+            "sin_double_angle_rev",
+            p_sin(p_mul(x(), p_const(2.0))),
+            p_mul(p_const(2.0), p_mul(p_sin(x()), p_cos(x()))),
+        ));
+
+        // 2·sin(x)·cos(x) = sin(2x) (contraction - reduces complexity!)
+        // Pattern: 2 * (sin(x) * cos(x)) or 2 * (cos(x) * sin(x))
+        rs.add(rule(
+            "double_angle_sin",
+            p_mul(p_const(2.0), p_mul(p_sin(x()), p_cos(x()))),
+            p_sin(p_mul(p_const(2.0), x())),
+        ));
+        rs.add(rule(
+            "double_angle_sin_rev",
+            p_mul(p_const(2.0), p_mul(p_cos(x()), p_sin(x()))),
+            p_sin(p_mul(p_const(2.0), x())),
+        ));
+
+        // cos(2x) = cos²(x) - sin²(x) (expansion)
+        rs.add(rule(
+            "cos_double_angle",
+            p_cos(p_mul(p_const(2.0), x())),
+            p_add(
+                p_pow(p_cos(x()), p_const(2.0)),
+                p_neg(p_pow(p_sin(x()), p_const(2.0))),
+            ),
+        ));
+        rs.add(rule(
+            "cos_double_angle_rev",
+            p_cos(p_mul(x(), p_const(2.0))),
+            p_add(
+                p_pow(p_cos(x()), p_const(2.0)),
+                p_neg(p_pow(p_sin(x()), p_const(2.0))),
+            ),
+        ));
+
+        // cos²(x) - sin²(x) = cos(2x) (contraction - reduces complexity!)
+        rs.add(rule(
+            "double_angle_cos",
+            p_add(
+                p_pow(p_cos(x()), p_const(2.0)),
+                p_neg(p_pow(p_sin(x()), p_const(2.0))),
+            ),
+            p_cos(p_mul(p_const(2.0), x())),
+        ));
 
         // === Exponential/Log identities ===
         rs.add(rule("exp_zero", p_exp(p_const(0.0)), p_const(1.0))); // e^0 = 1
@@ -555,16 +675,9 @@ impl RuleSet {
         rs.add(rule("ln_exp", p_ln(p_exp(x())), x())); // ln(e^x) = x
 
         // === Future extensions (TODO) ===
-        // Angle shift identities:
-        //   - sin(π/2 - x) = cos(x), cos(π/2 - x) = sin(x) (complementary)
-        //   - sin(π - x) = sin(x), cos(π - x) = -cos(x) (supplementary)
-        //   - sin(x + 2π) = sin(x), cos(x + 2π) = cos(x) (periodicity)
-        //
-        // Double/half angle formulas (requires matching 2*x pattern):
-        //   - sin(2x) = 2·sin(x)·cos(x)
-        //   - cos(2x) = cos²(x) - sin²(x)
-        //   - sin²(x) = (1 - cos(2x))/2 (power reduction)
-        //   - cos²(x) = (1 + cos(2x))/2 (power reduction)
+        // Power reduction to double angle (increases complexity, rarely useful):
+        //   - sin²(x) = (1 - cos(2x))/2
+        //   - cos²(x) = (1 + cos(2x))/2
         //
         // Sum/difference formulas (requires two wildcards a, b):
         //   - sin(a + b) = sin(a)·cos(b) + cos(a)·sin(b)
