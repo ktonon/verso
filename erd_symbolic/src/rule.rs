@@ -544,9 +544,11 @@ impl RuleSet {
     ///
     /// Includes index-aware rules using Pattern::Var for tensor operations:
     /// - Kronecker delta: δ^i_j v^j = v^i
+    /// - Metric tensor index lowering: g_ij v^j = v_i
+    /// - Metric tensor index raising: g^ij v_j = v^i
+    /// - Metric tensor identity: g^ik g_kj = δ^i_j
     ///
     /// Future extensions:
-    /// - Metric tensor: g^{ij} g_{jk} = δ^i_k
     /// - Symmetry annotations: A^{ij} = A^{ji} for symmetric tensors
     pub fn tensor() -> RuleSet {
         let x = || wildcard("x");
@@ -699,6 +701,69 @@ impl RuleSet {
                 p_var("δ", vec![idx_upper("i"), idx_lower("j")]),
             ),
             p_var_wild("w", vec![idx_lower("i")]),
+        ));
+
+        // === Metric tensor contraction ===
+        // The metric tensor g_ij lowers indices, g^ij raises indices.
+
+        // Index lowering: g_ij * v^j = v_i
+        rs.add(rule(
+            "metric_lower_right",
+            p_mul(
+                p_var("g", vec![idx_lower("i"), idx_lower("j")]),
+                p_var_wild("v", vec![idx_upper("j")]),
+            ),
+            p_var_wild("v", vec![idx_lower("i")]),
+        ));
+
+        // v^j * g_ij = v_i (commuted form)
+        rs.add(rule(
+            "metric_lower_left",
+            p_mul(
+                p_var_wild("v", vec![idx_upper("j")]),
+                p_var("g", vec![idx_lower("i"), idx_lower("j")]),
+            ),
+            p_var_wild("v", vec![idx_lower("i")]),
+        ));
+
+        // Index raising: g^ij * v_j = v^i
+        rs.add(rule(
+            "metric_raise_right",
+            p_mul(
+                p_var("g", vec![idx_upper("i"), idx_upper("j")]),
+                p_var_wild("v", vec![idx_lower("j")]),
+            ),
+            p_var_wild("v", vec![idx_upper("i")]),
+        ));
+
+        // v_j * g^ij = v^i (commuted form)
+        rs.add(rule(
+            "metric_raise_left",
+            p_mul(
+                p_var_wild("v", vec![idx_lower("j")]),
+                p_var("g", vec![idx_upper("i"), idx_upper("j")]),
+            ),
+            p_var_wild("v", vec![idx_upper("i")]),
+        ));
+
+        // Metric tensor identity: g^ik * g_kj = δ^i_j
+        rs.add(rule(
+            "metric_inverse_right",
+            p_mul(
+                p_var("g", vec![idx_upper("i"), idx_upper("k")]),
+                p_var("g", vec![idx_lower("k"), idx_lower("j")]),
+            ),
+            p_var("δ", vec![idx_upper("i"), idx_lower("j")]),
+        ));
+
+        // g_kj * g^ik = δ^i_j (commuted form)
+        rs.add(rule(
+            "metric_inverse_left",
+            p_mul(
+                p_var("g", vec![idx_lower("k"), idx_lower("j")]),
+                p_var("g", vec![idx_upper("i"), idx_upper("k")]),
+            ),
+            p_var("δ", vec![idx_upper("i"), idx_lower("j")]),
         ));
 
         rs
@@ -1684,6 +1749,144 @@ mod tests {
         let result = rs
             .iter()
             .find(|r| r.name == "kronecker_delta_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert!(result.is_none());
+    }
+
+    // === Metric tensor rule tests ===
+
+    #[test]
+    fn metric_lower_right() {
+        // g_μν * v^ν = v_μ
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("g", vec![lower("mu"), lower("nu")]),
+            tensor("v", vec![upper("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_lower_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("v", vec![lower("mu")])));
+    }
+
+    #[test]
+    fn metric_lower_left() {
+        // v^ν * g_μν = v_μ
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("v", vec![upper("nu")]),
+            tensor("g", vec![lower("mu"), lower("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_lower_left")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("v", vec![lower("mu")])));
+    }
+
+    #[test]
+    fn metric_raise_right() {
+        // g^μν * v_ν = v^μ
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("g", vec![upper("mu"), upper("nu")]),
+            tensor("v", vec![lower("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_raise_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("v", vec![upper("mu")])));
+    }
+
+    #[test]
+    fn metric_raise_left() {
+        // v_ν * g^μν = v^μ
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("v", vec![lower("nu")]),
+            tensor("g", vec![upper("mu"), upper("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_raise_left")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("v", vec![upper("mu")])));
+    }
+
+    #[test]
+    fn metric_inverse_right() {
+        // g^μκ * g_κν = δ^μ_ν
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("g", vec![upper("mu"), upper("kappa")]),
+            tensor("g", vec![lower("kappa"), lower("nu")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_inverse_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("δ", vec![upper("mu"), lower("nu")])));
+    }
+
+    #[test]
+    fn metric_inverse_left() {
+        // g_κν * g^μκ = δ^μ_ν
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("g", vec![lower("kappa"), lower("nu")]),
+            tensor("g", vec![upper("mu"), upper("kappa")]),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_inverse_left")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(tensor("δ", vec![upper("mu"), lower("nu")])));
+    }
+
+    #[test]
+    fn metric_no_match_wrong_positions() {
+        // g_μν * v_ν should NOT match metric_lower (expects v^ν not v_ν)
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("g", vec![lower("mu"), lower("nu")]),
+            tensor("v", vec![lower("nu")]), // Wrong: should be upper
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_lower_right")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn metric_no_match_different_indices() {
+        // g_μν * v^σ should NOT match (indices don't contract)
+        let rs = RuleSet::tensor();
+        let expr = mul(
+            tensor("g", vec![lower("mu"), lower("nu")]),
+            tensor("v", vec![upper("sigma")]), // Different index
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "metric_lower_right")
             .and_then(|r| r.apply_ltr(&expr));
 
         assert!(result.is_none());

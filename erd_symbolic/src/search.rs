@@ -1141,13 +1141,12 @@ mod tests {
     }
 
     #[test]
-    fn simplify_tensor_metric_like_pattern() {
-        // TODO: Add generic tensor contraction rules (e.g., metric tensor g^μν)
-        // Currently only Kronecker delta (δ) contractions are supported
+    fn simplify_tensor_generic_no_simplification() {
+        // Generic tensors (not δ or g) don't have contraction rules
         use crate::expr::lower;
         let rules = RuleSet::tensor();
 
-        // This won't match kronecker rules since it's not δ
+        // This won't match any rules since A is not a known tensor
         let expr = mul(
             tensor("A", vec![upper("mu"), lower("nu")]),
             tensor("B", vec![upper("nu")]),
@@ -1155,6 +1154,48 @@ mod tests {
         let result = simplify(&expr, &rules);
         // No matching rule for generic tensor contraction, remains unchanged
         assert_eq!(result, expr);
+    }
+
+    #[test]
+    fn simplify_tensor_metric_lower_index() {
+        // g_μν * v^ν = v_μ (metric tensor lowers the index)
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        let expr = mul(
+            tensor("g", vec![lower("mu"), lower("nu")]),
+            tensor("v", vec![upper("nu")]),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, tensor("v", vec![lower("mu")]));
+    }
+
+    #[test]
+    fn simplify_tensor_metric_raise_index() {
+        // g^μν * v_ν = v^μ (inverse metric tensor raises the index)
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        let expr = mul(
+            tensor("g", vec![upper("mu"), upper("nu")]),
+            tensor("v", vec![lower("nu")]),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, tensor("v", vec![upper("mu")]));
+    }
+
+    #[test]
+    fn simplify_tensor_metric_inverse_gives_delta() {
+        // g^μκ * g_κν = δ^μ_ν (metric times inverse metric gives Kronecker delta)
+        use crate::expr::lower;
+        let rules = RuleSet::tensor();
+
+        let expr = mul(
+            tensor("g", vec![upper("mu"), upper("kappa")]),
+            tensor("g", vec![lower("kappa"), lower("nu")]),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, tensor("δ", vec![upper("mu"), lower("nu")]));
     }
 
     #[test]
