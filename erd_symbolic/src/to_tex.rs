@@ -19,6 +19,16 @@ impl ToTex for FnKind {
             FnKind::Asin => "\\arcsin".to_string(),
             FnKind::Acos => "\\arccos".to_string(),
             FnKind::Atan => "\\arctan".to_string(),
+            FnKind::Sign => "\\operatorname{sign}".to_string(),
+            FnKind::Sinh => "\\sinh".to_string(),
+            FnKind::Cosh => "\\cosh".to_string(),
+            FnKind::Tanh => "\\tanh".to_string(),
+            FnKind::Floor => "\\lfloor".to_string(),
+            FnKind::Ceil => "\\lceil".to_string(),
+            FnKind::Round => "\\operatorname{round}".to_string(),
+            FnKind::Min => "\\min".to_string(),
+            FnKind::Max => "\\max".to_string(),
+            FnKind::Clamp => "\\operatorname{clamp}".to_string(),
             FnKind::Exp => "\\exp".to_string(),
             FnKind::Ln => "\\ln".to_string(),
         }
@@ -107,8 +117,20 @@ impl ToTex for Expr {
                 }
                 format!("{}^{{{}}}", maybe_paren(base, self), exp.to_tex())
             }
-            Expr::Fn(kind, arg) => {
-                format!("{}{{{}}}", kind.to_tex(), arg.to_tex())
+            Expr::Fn(kind, arg) => match kind {
+                FnKind::Floor => format!("\\lfloor {} \\rfloor", arg.to_tex()),
+                FnKind::Ceil => format!("\\lceil {} \\rceil", arg.to_tex()),
+                _ => format!("{}{{{}}}", kind.to_tex(), arg.to_tex()),
+            },
+            Expr::FnN(kind, args) => {
+                let rendered: Vec<String> = args.iter().map(|a| a.to_tex()).collect();
+                let joined = rendered.join(", ");
+                match kind {
+                    FnKind::Min | FnKind::Max => {
+                        format!("{}\\left( {} \\right)", kind.to_tex(), joined)
+                    }
+                    _ => format!("{}\\left( {} \\right)", kind.to_tex(), joined),
+                }
             }
         }
     }
@@ -261,6 +283,27 @@ mod tests {
         assert_eq!(asin(scalar("x")).to_tex(), "\\arcsin{x}");
         assert_eq!(acos(scalar("x")).to_tex(), "\\arccos{x}");
         assert_eq!(atan(scalar("x")).to_tex(), "\\arctan{x}");
+    }
+
+    #[test]
+    fn to_tex_misc_functions() {
+        assert_eq!(sign(scalar("x")).to_tex(), "\\operatorname{sign}{x}");
+        assert_eq!(sinh(scalar("x")).to_tex(), "\\sinh{x}");
+        assert_eq!(cosh(scalar("x")).to_tex(), "\\cosh{x}");
+        assert_eq!(tanh(scalar("x")).to_tex(), "\\tanh{x}");
+        assert_eq!(floor(scalar("x")).to_tex(), "\\lfloor x \\rfloor");
+        assert_eq!(ceil(scalar("x")).to_tex(), "\\lceil x \\rceil");
+        assert_eq!(round(scalar("x")).to_tex(), "\\operatorname{round}{x}");
+    }
+
+    #[test]
+    fn to_tex_multi_arg_functions() {
+        assert_eq!(min(scalar("a"), scalar("b")).to_tex(), "\\min\\left( a, b \\right)");
+        assert_eq!(max(scalar("a"), scalar("b")).to_tex(), "\\max\\left( a, b \\right)");
+        assert_eq!(
+            clamp(scalar("x"), constant(0.0), constant(1.0)).to_tex(),
+            "\\operatorname{clamp}\\left( x, 0, 1 \\right)"
+        );
     }
 
     #[test]

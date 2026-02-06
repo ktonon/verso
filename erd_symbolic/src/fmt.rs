@@ -16,6 +16,16 @@ impl Display for FnKind {
             FnKind::Asin => write!(f, "asin"),
             FnKind::Acos => write!(f, "acos"),
             FnKind::Atan => write!(f, "atan"),
+            FnKind::Sign => write!(f, "sign"),
+            FnKind::Sinh => write!(f, "sinh"),
+            FnKind::Cosh => write!(f, "cosh"),
+            FnKind::Tanh => write!(f, "tanh"),
+            FnKind::Floor => write!(f, "floor"),
+            FnKind::Ceil => write!(f, "ceil"),
+            FnKind::Round => write!(f, "round"),
+            FnKind::Min => write!(f, "min"),
+            FnKind::Max => write!(f, "max"),
+            FnKind::Clamp => write!(f, "clamp"),
             FnKind::Exp => write!(f, "exp"),
             FnKind::Ln => write!(f, "ln"),
         }
@@ -102,6 +112,10 @@ impl std::fmt::Display for Expr {
                 write!(f, "{}**{}", maybe_paren(base, self), maybe_paren(exp, self))
             }
             Expr::Fn(kind, arg) => write!(f, "{}({})", kind, arg),
+            Expr::FnN(kind, args) => {
+                let rendered: Vec<String> = args.iter().map(|a| format!("{}", a)).collect();
+                write!(f, "{}({})", kind, rendered.join(", "))
+            }
         }
     }
 }
@@ -265,6 +279,27 @@ mod tests {
         assert_eq!(format!("{}", asin(scalar("x"))), "asin(x)");
         assert_eq!(format!("{}", acos(scalar("x"))), "acos(x)");
         assert_eq!(format!("{}", atan(scalar("x"))), "atan(x)");
+    }
+
+    #[test]
+    fn display_fn_misc() {
+        assert_eq!(format!("{}", sign(scalar("x"))), "sign(x)");
+        assert_eq!(format!("{}", sinh(scalar("x"))), "sinh(x)");
+        assert_eq!(format!("{}", cosh(scalar("x"))), "cosh(x)");
+        assert_eq!(format!("{}", tanh(scalar("x"))), "tanh(x)");
+        assert_eq!(format!("{}", floor(scalar("x"))), "floor(x)");
+        assert_eq!(format!("{}", ceil(scalar("x"))), "ceil(x)");
+        assert_eq!(format!("{}", round(scalar("x"))), "round(x)");
+    }
+
+    #[test]
+    fn display_fn_multi_arg() {
+        assert_eq!(format!("{}", min(scalar("a"), scalar("b"))), "min(a, b)");
+        assert_eq!(format!("{}", max(scalar("a"), scalar("b"))), "max(a, b)");
+        assert_eq!(
+            format!("{}", clamp(scalar("x"), constant(0.0), constant(1.0))),
+            "clamp(x, 0, 1)"
+        );
     }
 
     #[test]

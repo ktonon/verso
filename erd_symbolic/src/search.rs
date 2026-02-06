@@ -139,6 +139,18 @@ impl BeamSearch {
                     });
                 }
             }
+            Expr::FnN(kind, args) => {
+                for (idx, arg) in args.iter().enumerate() {
+                    for rewrite in self.all_rewrites(arg, rules) {
+                        let mut new_args = args.clone();
+                        new_args[idx] = rewrite.expr;
+                        results.push(Rewrite {
+                            expr: Expr::FnN(kind.clone(), new_args),
+                            from_rule: rewrite.from_rule,
+                        });
+                    }
+                }
+            }
         }
 
         results

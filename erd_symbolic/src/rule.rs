@@ -31,6 +31,7 @@ pub enum Pattern {
     Inv(Box<Pattern>),
     Pow(Box<Pattern>, Box<Pattern>),
     Fn(FnKind, Box<Pattern>),
+    FnN(FnKind, Vec<Pattern>),
     /// Match a variable with specific name pattern and index structure.
     Var {
         name: VarPattern,
@@ -93,6 +94,46 @@ pub fn p_acos(a: Pattern) -> Pattern {
 
 pub fn p_atan(a: Pattern) -> Pattern {
     Pattern::Fn(FnKind::Atan, Box::new(a))
+}
+
+pub fn p_sign(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Sign, Box::new(a))
+}
+
+pub fn p_sinh(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Sinh, Box::new(a))
+}
+
+pub fn p_cosh(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Cosh, Box::new(a))
+}
+
+pub fn p_tanh(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Tanh, Box::new(a))
+}
+
+pub fn p_floor(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Floor, Box::new(a))
+}
+
+pub fn p_ceil(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Ceil, Box::new(a))
+}
+
+pub fn p_round(a: Pattern) -> Pattern {
+    Pattern::Fn(FnKind::Round, Box::new(a))
+}
+
+pub fn p_min(a: Pattern, b: Pattern) -> Pattern {
+    Pattern::FnN(FnKind::Min, vec![a, b])
+}
+
+pub fn p_max(a: Pattern, b: Pattern) -> Pattern {
+    Pattern::FnN(FnKind::Max, vec![a, b])
+}
+
+pub fn p_clamp(x: Pattern, lo: Pattern, hi: Pattern) -> Pattern {
+    Pattern::FnN(FnKind::Clamp, vec![x, lo, hi])
 }
 
 pub fn p_exp(a: Pattern) -> Pattern {
@@ -220,6 +261,16 @@ impl Pattern {
             (Pattern::Fn(pk, p), Expr::Fn(ek, a)) if pk == ek => p.match_expr_inner(a, bindings),
             (Pattern::Fn(_, _), _) => false,
 
+            (Pattern::FnN(pk, ps), Expr::FnN(ek, args)) if pk == ek => {
+                if ps.len() != args.len() {
+                    return false;
+                }
+                ps.iter()
+                    .zip(args.iter())
+                    .all(|(p, a)| p.match_expr_inner(a, bindings))
+            }
+            (Pattern::FnN(_, _), _) => false,
+
             // Variable matching with index patterns
             (
                 Pattern::Var {
@@ -302,6 +353,10 @@ impl Pattern {
             Pattern::Inv(p) => Expr::Inv(Box::new(p.substitute(bindings))),
 
             Pattern::Fn(kind, p) => Expr::Fn(kind.clone(), Box::new(p.substitute(bindings))),
+            Pattern::FnN(kind, args) => Expr::FnN(
+                kind.clone(),
+                args.iter().map(|a| a.substitute(bindings)).collect(),
+            ),
 
             Pattern::Var {
                 name: pat_name,
@@ -420,9 +475,75 @@ impl RuleSet {
         rules
     }
 
+    /// Extended identities that assume a numeric domain with ordering/rounding semantics.
+    /// These are not always safe for symbolic manipulation without domain constraints.
+    pub fn extended() -> RuleSet {
+        let x = || wildcard("x");
+        let y = || wildcard("y");
+        let lo = || wildcard("lo");
+        let hi = || wildcard("hi");
+
+        let mut rs = Self::new();
+
+        // Min/max commutativity
+        rs.add(rule("min_commute", p_min(x(), y()), p_min(y(), x())));
+        rs.add(rule("max_commute", p_max(x(), y()), p_max(y(), x())));
+
+        // Absorption
+        rs.add(rule(
+            "min_absorb",
+            p_min(x(), p_max(x(), y())),
+            x(),
+        ));
+        rs.add(rule(
+            "max_absorb",
+            p_max(x(), p_min(x(), y())),
+            x(),
+        ));
+
+        // min(x, y) + max(x, y) = x + y
+        rs.add(rule(
+            "min_max_sum",
+            p_add(p_min(x(), y()), p_max(x(), y())),
+            p_add(x(), y()),
+        ));
+
+        // clamp(x, lo, hi) = min(max(x, lo), hi)
+        rs.add(rule(
+            "clamp_def",
+            p_clamp(x(), lo(), hi()),
+            p_min(p_max(x(), lo()), hi()),
+        ));
+
+        // sign(-x) = -sign(x)
+        rs.add(rule(
+            "sign_neg",
+            p_sign(p_neg(x())),
+            p_neg(p_sign(x())),
+        ));
+
+        // sign(x)^2 = 1 (for x != 0)
+        rs.add(rule(
+            "sign_square",
+            p_pow(p_sign(x()), p_const(2.0)),
+            p_const(1.0),
+        ));
+
+        // round(x) = floor(x + 1/2) (assumes round-half-up)
+        rs.add(rule(
+            "round_def",
+            p_round(x()),
+            p_floor(p_add(x(), p_inv(p_const(2.0)))),
+        ));
+
+        rs
+    }
+
     /// Standard arithmetic identities.
     pub fn standard() -> RuleSet {
         let x = || wildcard("x");
+        let lo = || wildcard("lo");
+        let hi = || wildcard("hi");
 
         let mut rs = Self::new();
 
@@ -493,6 +614,15 @@ impl RuleSet {
             "mul_self_square",
             p_mul(x(), x()),
             p_pow(x(), p_const(2.0)),
+        ));
+
+        // Min/max/clamp identities (idempotent)
+        rs.add(rule("min_idempotent", p_min(x(), x()), x()));
+        rs.add(rule("max_idempotent", p_max(x(), x()), x()));
+        rs.add(rule(
+            "clamp_idempotent",
+            p_clamp(p_clamp(x(), lo(), hi()), lo(), hi()),
+            p_clamp(x(), lo(), hi()),
         ));
 
         rs
@@ -567,6 +697,58 @@ impl RuleSet {
             "cos_sq_from_sin",
             p_pow(p_cos(x()), p_const(2.0)),
             p_add(p_const(1.0), p_neg(p_pow(p_sin(x()), p_const(2.0)))),
+        ));
+
+        // === Hyperbolic identities ===
+        // sinh(0) = 0
+        rs.add(rule("sinh_zero", p_sinh(p_const(0.0)), p_const(0.0)));
+        // cosh(0) = 1
+        rs.add(rule("cosh_zero", p_cosh(p_const(0.0)), p_const(1.0)));
+        // tanh(0) = 0
+        rs.add(rule("tanh_zero", p_tanh(p_const(0.0)), p_const(0.0)));
+
+        // Parity: sinh(-x) = -sinh(x), cosh(-x) = cosh(x), tanh(-x) = -tanh(x)
+        rs.add(rule("sinh_neg", p_sinh(p_neg(x())), p_neg(p_sinh(x()))));
+        rs.add(rule("cosh_neg", p_cosh(p_neg(x())), p_cosh(x())));
+        rs.add(rule("tanh_neg", p_tanh(p_neg(x())), p_neg(p_tanh(x()))));
+
+        // cosh²x - sinh²x = 1
+        rs.add(rule(
+            "hyperbolic_identity",
+            p_add(
+                p_pow(p_cosh(x()), p_const(2.0)),
+                p_neg(p_pow(p_sinh(x()), p_const(2.0))),
+            ),
+            p_const(1.0),
+        ));
+
+        // sinh(2x) = 2·sinh(x)·cosh(x)
+        rs.add(rule(
+            "sinh_double_angle",
+            p_sinh(p_mul(p_const(2.0), x())),
+            p_mul(p_const(2.0), p_mul(p_sinh(x()), p_cosh(x()))),
+        ));
+        // cosh(2x) = cosh²(x) + sinh²(x)
+        rs.add(rule(
+            "cosh_double_angle",
+            p_cosh(p_mul(p_const(2.0), x())),
+            p_add(
+                p_pow(p_cosh(x()), p_const(2.0)),
+                p_pow(p_sinh(x()), p_const(2.0)),
+            ),
+        ));
+
+        // tanh(x) = sinh(x) / cosh(x)
+        rs.add(rule(
+            "tanh_def",
+            p_tanh(x()),
+            p_mul(p_sinh(x()), p_inv(p_cosh(x()))),
+        ));
+        // sinh(x) / cosh(x) = tanh(x)
+        rs.add(rule(
+            "tanh_def_contract",
+            p_mul(p_sinh(x()), p_inv(p_cosh(x()))),
+            p_tanh(x()),
         ));
 
         // === Angle shift identities ===
@@ -1491,7 +1673,8 @@ impl RuleSet {
 mod tests {
     use super::*;
     use crate::expr::{
-        acos, add, asin, atan, constant, cos, exp, inv, ln, mul, neg, scalar, sin, tan,
+        acos, add, asin, atan, clamp, constant, cos, cosh, exp, floor, inv, ln, max, min, mul,
+        neg, round, scalar, sign, sin, sinh, tan, tanh,
     };
     use crate::pow;
 
@@ -1955,6 +2138,177 @@ mod tests {
         assert_eq!(result, Some(constant(1.0)));
     }
 
+    #[test]
+    fn standard_min_idempotent() {
+        let rs = RuleSet::standard();
+        let expr = min(scalar("a"), scalar("a"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "min_idempotent")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn standard_max_idempotent() {
+        let rs = RuleSet::standard();
+        let expr = max(scalar("a"), scalar("a"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "max_idempotent")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn standard_clamp_idempotent() {
+        let rs = RuleSet::standard();
+        let expr = clamp(
+            clamp(scalar("x"), constant(0.0), constant(1.0)),
+            constant(0.0),
+            constant(1.0),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "clamp_idempotent")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(clamp(scalar("x"), constant(0.0), constant(1.0)))
+        );
+    }
+
+    // === Extended RuleSet tests ===
+
+    #[test]
+    fn extended_min_commute() {
+        let rs = RuleSet::extended();
+        let expr = min(scalar("a"), scalar("b"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "min_commute")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(min(scalar("b"), scalar("a"))));
+    }
+
+    #[test]
+    fn extended_max_commute() {
+        let rs = RuleSet::extended();
+        let expr = max(scalar("a"), scalar("b"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "max_commute")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(max(scalar("b"), scalar("a"))));
+    }
+
+    #[test]
+    fn extended_min_absorb() {
+        let rs = RuleSet::extended();
+        let expr = min(scalar("a"), max(scalar("a"), scalar("b")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "min_absorb")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn extended_max_absorb() {
+        let rs = RuleSet::extended();
+        let expr = max(scalar("a"), min(scalar("a"), scalar("b")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "max_absorb")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(scalar("a")));
+    }
+
+    #[test]
+    fn extended_min_max_sum() {
+        let rs = RuleSet::extended();
+        let expr = add(min(scalar("a"), scalar("b")), max(scalar("a"), scalar("b")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "min_max_sum")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(add(scalar("a"), scalar("b"))));
+    }
+
+    #[test]
+    fn extended_clamp_def() {
+        let rs = RuleSet::extended();
+        let expr = clamp(scalar("x"), scalar("lo"), scalar("hi"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "clamp_def")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(min(max(scalar("x"), scalar("lo")), scalar("hi")))
+        );
+    }
+
+    #[test]
+    fn extended_sign_neg() {
+        let rs = RuleSet::extended();
+        let expr = sign(neg(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "sign_neg")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(neg(sign(scalar("a")))));
+    }
+
+    #[test]
+    fn extended_sign_square() {
+        let rs = RuleSet::extended();
+        let expr = pow(sign(scalar("a")), constant(2.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "sign_square")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(1.0)));
+    }
+
+    #[test]
+    fn extended_round_def() {
+        let rs = RuleSet::extended();
+        let expr = round(scalar("a"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "round_def")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(floor(add(scalar("a"), inv(constant(2.0)))))
+        );
+    }
+
     // === Trigonometric RuleSet tests ===
 
     #[test]
@@ -2090,6 +2444,154 @@ mod tests {
             .and_then(|r| r.apply_ltr(&expr));
 
         assert_eq!(result, Some(constant(1.0)));
+    }
+
+    #[test]
+    fn trig_sinh_zero() {
+        let rs = RuleSet::trigonometric();
+        let expr = sinh(constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "sinh_zero")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(0.0)));
+    }
+
+    #[test]
+    fn trig_cosh_zero() {
+        let rs = RuleSet::trigonometric();
+        let expr = cosh(constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "cosh_zero")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(1.0)));
+    }
+
+    #[test]
+    fn trig_tanh_zero() {
+        let rs = RuleSet::trigonometric();
+        let expr = tanh(constant(0.0));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "tanh_zero")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(0.0)));
+    }
+
+    #[test]
+    fn trig_sinh_neg() {
+        let rs = RuleSet::trigonometric();
+        let expr = sinh(neg(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "sinh_neg")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(neg(sinh(scalar("a")))));
+    }
+
+    #[test]
+    fn trig_cosh_neg() {
+        let rs = RuleSet::trigonometric();
+        let expr = cosh(neg(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "cosh_neg")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(cosh(scalar("a"))));
+    }
+
+    #[test]
+    fn trig_tanh_neg() {
+        let rs = RuleSet::trigonometric();
+        let expr = tanh(neg(scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "tanh_neg")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(neg(tanh(scalar("a")))));
+    }
+
+    #[test]
+    fn trig_hyperbolic_identity() {
+        let rs = RuleSet::trigonometric();
+        let expr = add(
+            pow(cosh(scalar("a")), constant(2.0)),
+            neg(pow(sinh(scalar("a")), constant(2.0))),
+        );
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "hyperbolic_identity")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(result, Some(constant(1.0)));
+    }
+
+    #[test]
+    fn trig_sinh_double_angle() {
+        let rs = RuleSet::trigonometric();
+        let expr = sinh(mul(constant(2.0), scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "sinh_double_angle")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(mul(
+                constant(2.0),
+                mul(sinh(scalar("a")), cosh(scalar("a")))
+            ))
+        );
+    }
+
+    #[test]
+    fn trig_cosh_double_angle() {
+        let rs = RuleSet::trigonometric();
+        let expr = cosh(mul(constant(2.0), scalar("a")));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "cosh_double_angle")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(add(
+                pow(cosh(scalar("a")), constant(2.0)),
+                pow(sinh(scalar("a")), constant(2.0)),
+            ))
+        );
+    }
+
+    #[test]
+    fn trig_tanh_def() {
+        let rs = RuleSet::trigonometric();
+        let expr = tanh(scalar("a"));
+
+        let result = rs
+            .iter()
+            .find(|r| r.name == "tanh_def")
+            .and_then(|r| r.apply_ltr(&expr));
+
+        assert_eq!(
+            result,
+            Some(mul(sinh(scalar("a")), inv(cosh(scalar("a")))))
+        );
     }
 
     #[test]

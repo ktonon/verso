@@ -13,6 +13,7 @@ pub enum Expr {
 
     // Functions
     Fn(FnKind, Box<Expr>),
+    FnN(FnKind, Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +36,16 @@ pub enum FnKind {
     Asin,
     Acos,
     Atan,
+    Sign,
+    Sinh,
+    Cosh,
+    Tanh,
+    Floor,
+    Ceil,
+    Round,
+    Min,
+    Max,
+    Clamp,
     Exp,
     Ln,
     // extend as needed
@@ -45,6 +56,7 @@ impl Expr {
         match self {
             Expr::Const(_) | Expr::Var { .. } => 1,
             Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + a.complexity(),
+            Expr::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
             Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
                 1 + a.complexity() + b.complexity()
             }
@@ -53,7 +65,7 @@ impl Expr {
 
     pub fn precedence(&self) -> u8 {
         match self {
-            Expr::Const(_) | Expr::Var { .. } | Expr::Fn(_, _) => 100,
+            Expr::Const(_) | Expr::Var { .. } | Expr::Fn(_, _) | Expr::FnN(_, _) => 100,
             Expr::Pow(_, _) => 80,
             Expr::Neg(_) | Expr::Inv(_) => 70,
             Expr::Mul(_, _) => 60,
@@ -148,6 +160,46 @@ pub fn acos(a: Expr) -> Expr {
 
 pub fn atan(a: Expr) -> Expr {
     Expr::Fn(FnKind::Atan, Box::new(a))
+}
+
+pub fn sign(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Sign, Box::new(a))
+}
+
+pub fn sinh(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Sinh, Box::new(a))
+}
+
+pub fn cosh(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Cosh, Box::new(a))
+}
+
+pub fn tanh(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Tanh, Box::new(a))
+}
+
+pub fn floor(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Floor, Box::new(a))
+}
+
+pub fn ceil(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Ceil, Box::new(a))
+}
+
+pub fn round(a: Expr) -> Expr {
+    Expr::Fn(FnKind::Round, Box::new(a))
+}
+
+pub fn min(a: Expr, b: Expr) -> Expr {
+    Expr::FnN(FnKind::Min, vec![a, b])
+}
+
+pub fn max(a: Expr, b: Expr) -> Expr {
+    Expr::FnN(FnKind::Max, vec![a, b])
+}
+
+pub fn clamp(x: Expr, lo: Expr, hi: Expr) -> Expr {
+    Expr::FnN(FnKind::Clamp, vec![x, lo, hi])
 }
 
 pub fn exp(a: Expr) -> Expr {
