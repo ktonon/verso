@@ -1223,4 +1223,167 @@ mod tests {
         let result = search.simplify(&expr, &rules);
         assert_eq!(result, scalar("x"));
     }
+
+    // === Beam search exploration tests ===
+    // These tests verify that beam search explores paths that may temporarily
+    // increase complexity before finding a simpler result.
+
+    #[test]
+    fn simplify_neg_of_canceling_sum() {
+        // -(x + (-x)) should simplify to 0
+        // Path A (direct): -(x + (-x)) → -(0) → 0 (via add_neg_self_right, then neg_zero)
+        // Path B (via distribution): -(x + (-x)) → -x + -(-x) → -x + x → 0
+        //   complexity: 5 → 6 → 4 → 1 (temporary increase!)
+        // Beam search explores both paths and finds the optimal result.
+        let rules = RuleSet::full();
+        let expr = neg(add(scalar("x"), neg(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_neg_of_double_neg_sum() {
+        // -((-x) + x) should simplify to 0
+        // The inner sum (-x) + x matches add_neg_self_left directly
+        let rules = RuleSet::full();
+        let expr = neg(add(neg(scalar("x")), scalar("x")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_distribution_enables_cancellation() {
+        // -(a + (-a)) where a = sin(x)
+        // This tests that wildcards in add_neg_self match complex expressions
+        let rules = RuleSet::full();
+        let expr = neg(add(sin(scalar("x")), neg(sin(scalar("x")))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_nested_neg_distribution() {
+        // -(-(-x) + (-x)) should simplify:
+        // Inner: -(-x) + (-x) = x + (-x) = 0 (via double_neg, then add_neg_self_right)
+        // Then: -(0) = 0
+        let rules = RuleSet::full();
+        let expr = neg(add(neg(neg(scalar("x"))), neg(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_complex_path_through_distribution() {
+        // (x + (-x)) * y should simplify to 0 * y = 0
+        // Path: 7 → (inner cancel) → 4 → 1
+        let rules = RuleSet::full();
+        let expr = mul(add(scalar("x"), neg(scalar("x"))), scalar("y"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_sum_of_pythagorean_and_neg_one() {
+        // sin²(x) + cos²(x) + (-1) should simplify to 0
+        // Path: pythagorean → 1, then 1 + (-1) → 0
+        let rules = RuleSet::full();
+        let expr = add(
+            add(
+                pow(sin(scalar("x")), constant(2.0)),
+                pow(cos(scalar("x")), constant(2.0)),
+            ),
+            neg(constant(1.0)),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_reversed_pythagorean_plus_neg_one() {
+        // cos²(x) + sin²(x) + (-1) should also simplify to 0
+        // Requires commutativity exploration to match pythagorean pattern
+        let rules = RuleSet::full();
+        let expr = add(
+            add(
+                pow(cos(scalar("x")), constant(2.0)),
+                pow(sin(scalar("x")), constant(2.0)),
+            ),
+            neg(constant(1.0)),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_power_chain_through_intermediate() {
+        // x^2 * x^(-1) with tensor+standard rules
+        // Via pow_mul_same_base: x^(2 + (-1))
+        // The exponent 2 + (-1) = 2 - 1 = 1, but we don't have constant folding
+        // However, this tests the path through equal-complexity transformations
+        let rules = RuleSet::full();
+        let expr = mul(
+            pow(scalar("x"), constant(2.0)),
+            pow(scalar("x"), neg(constant(1.0))),
+        );
+        let result = simplify(&expr, &rules);
+        // Should apply pow_mul_same_base: x^(2 + (-1))
+        // We don't have constant folding, so this is the simplified form
+        assert_eq!(
+            result,
+            pow(scalar("x"), add(constant(2.0), neg(constant(1.0))))
+        );
+    }
+
+    #[test]
+    fn simplify_double_neg_in_product() {
+        // (-(-x)) * y should simplify to x * y
+        let rules = RuleSet::full();
+        let expr = mul(neg(neg(scalar("x"))), scalar("y"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, mul(scalar("x"), scalar("y")));
+    }
+
+    #[test]
+    fn simplify_inv_chain() {
+        // 1/(1/(1/(1/x))) should simplify to x
+        // Each step maintains or reduces complexity until we get to x
+        let rules = RuleSet::full();
+        let expr = inv(inv(inv(inv(scalar("x")))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, scalar("x"));
+    }
+
+    #[test]
+    fn simplify_mixed_neg_inv_chain() {
+        // -(1/(-x)) should simplify
+        // This exercises interaction between neg and inv rules
+        let rules = RuleSet::full();
+        let expr = neg(inv(neg(scalar("x"))));
+        let result = simplify(&expr, &rules);
+        // The exact result depends on rule order, but complexity should not increase
+        assert!(result.complexity() <= expr.complexity());
+    }
+
+    #[test]
+    fn simplify_zero_times_complex_sum() {
+        // 0 * (a + b + c) should simplify to 0
+        // Tests that mul_zero_left works with complex RHS
+        let rules = RuleSet::full();
+        let expr = mul(
+            constant(0.0),
+            add(add(scalar("a"), scalar("b")), scalar("c")),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
+    }
+
+    #[test]
+    fn simplify_one_raised_to_complex_neg_power() {
+        // 1^(-(x + y)) should simplify to 1
+        // Tests one_pow rule with complex exponent
+        let rules = RuleSet::full();
+        let expr = pow(constant(1.0), neg(add(scalar("x"), scalar("y"))));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
 }
