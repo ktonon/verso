@@ -5,7 +5,6 @@ impl Display for NamedConst {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NamedConst::Pi => write!(f, "π"),
-            NamedConst::E => write!(f, "e"),
             NamedConst::FracPi2 => write!(f, "π / 2"),
             NamedConst::FracPi3 => write!(f, "π / 3"),
             NamedConst::FracPi4 => write!(f, "π / 4"),
@@ -14,6 +13,11 @@ impl Display for NamedConst {
             NamedConst::Frac3Pi4 => write!(f, "3π / 4"),
             NamedConst::Frac5Pi6 => write!(f, "5π / 6"),
             NamedConst::TwoPi => write!(f, "2π"),
+            NamedConst::E => write!(f, "e"),
+            NamedConst::Sqrt2 => write!(f, "√2"),
+            NamedConst::Sqrt3 => write!(f, "√3"),
+            NamedConst::Frac1Sqrt2 => write!(f, "√2 / 2"),
+            NamedConst::FracSqrt3By2 => write!(f, "√3 / 2"),
         }
     }
 }

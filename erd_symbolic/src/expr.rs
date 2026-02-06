@@ -55,8 +55,8 @@ pub enum FnKind {
 /// Named mathematical constants with exact symbolic representation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NamedConst {
+    // Pi-related
     Pi,       // π
-    E,        // e (Euler's number)
     FracPi2,  // π/2
     FracPi3,  // π/3
     FracPi4,  // π/4
@@ -65,6 +65,12 @@ pub enum NamedConst {
     Frac3Pi4, // 3π/4
     Frac5Pi6, // 5π/6
     TwoPi,    // 2π
+    // Other constants
+    E,            // e (Euler's number)
+    Sqrt2,        // √2
+    Sqrt3,        // √3
+    Frac1Sqrt2,   // √2/2 = 1/√2
+    FracSqrt3By2, // √3/2
 }
 
 impl NamedConst {
@@ -73,7 +79,6 @@ impl NamedConst {
         use std::f64::consts::*;
         match self {
             NamedConst::Pi => PI,
-            NamedConst::E => E,
             NamedConst::FracPi2 => FRAC_PI_2,
             NamedConst::FracPi3 => FRAC_PI_3,
             NamedConst::FracPi4 => FRAC_PI_4,
@@ -82,6 +87,11 @@ impl NamedConst {
             NamedConst::Frac3Pi4 => 3.0 * FRAC_PI_4,
             NamedConst::Frac5Pi6 => 5.0 * FRAC_PI_6,
             NamedConst::TwoPi => TAU,
+            NamedConst::E => E,
+            NamedConst::Sqrt2 => SQRT_2,
+            NamedConst::Sqrt3 => 3.0_f64.sqrt(),
+            NamedConst::Frac1Sqrt2 => FRAC_1_SQRT_2,
+            NamedConst::FracSqrt3By2 => 3.0_f64.sqrt() / 2.0,
         }
     }
 
@@ -90,9 +100,9 @@ impl NamedConst {
         use std::f64::consts::*;
         const EPS: f64 = 1e-12;
 
+        let sqrt_3 = 3.0_f64.sqrt();
         let candidates = [
             (PI, NamedConst::Pi),
-            (E, NamedConst::E),
             (FRAC_PI_2, NamedConst::FracPi2),
             (FRAC_PI_3, NamedConst::FracPi3),
             (FRAC_PI_4, NamedConst::FracPi4),
@@ -101,6 +111,11 @@ impl NamedConst {
             (3.0 * FRAC_PI_4, NamedConst::Frac3Pi4),
             (5.0 * FRAC_PI_6, NamedConst::Frac5Pi6),
             (TAU, NamedConst::TwoPi),
+            (E, NamedConst::E),
+            (SQRT_2, NamedConst::Sqrt2),
+            (sqrt_3, NamedConst::Sqrt3),
+            (FRAC_1_SQRT_2, NamedConst::Frac1Sqrt2),
+            (sqrt_3 / 2.0, NamedConst::FracSqrt3By2),
         ];
 
         for (val, nc) in candidates {

@@ -26,6 +26,7 @@ pub enum Pattern {
     Wildcard(String),
     ConstWild(String),
     Const(f64),
+    Named(NamedConst),
     Add(Box<Pattern>, Box<Pattern>),
     Mul(Box<Pattern>, Box<Pattern>),
     Neg(Box<Pattern>),
@@ -51,6 +52,10 @@ pub fn const_wild(name: &str) -> Pattern {
 
 pub fn p_const(n: f64) -> Pattern {
     Pattern::Const(n)
+}
+
+pub fn p_named(nc: NamedConst) -> Pattern {
+    Pattern::Named(nc)
 }
 
 pub fn p_add(a: Pattern, b: Pattern) -> Pattern {
@@ -237,6 +242,11 @@ impl Pattern {
             (Pattern::Const(n), Expr::Named(nc)) => (n - nc.value()).abs() < f64::EPSILON,
             (Pattern::Const(_), _) => false,
 
+            // Named matches named constants exactly, or by value against Const
+            (Pattern::Named(pnc), Expr::Named(enc)) => pnc == enc,
+            (Pattern::Named(pnc), Expr::Const(n)) => (pnc.value() - n).abs() < f64::EPSILON,
+            (Pattern::Named(_), _) => false,
+
             // Structural matching for binary operators
             (Pattern::Add(pa, pb), Expr::Add(a, b)) => {
                 pa.match_expr_inner(a, bindings) && pb.match_expr_inner(b, bindings)
@@ -335,6 +345,8 @@ impl Pattern {
                 .clone(),
 
             Pattern::Const(n) => Expr::Const(*n),
+
+            Pattern::Named(nc) => Expr::Named(*nc),
 
             Pattern::Add(pa, pb) => Expr::Add(
                 Box::new(pa.substitute(bindings)),
@@ -678,16 +690,14 @@ impl RuleSet {
         rs.add(rule("cos_pi_2", p_cos(p_const(FRAC_PI_2)), p_const(0.0))); // cos(π/2) = 0
 
         // Additional special values
-        let sqrt_2_over_2 = std::f64::consts::FRAC_1_SQRT_2; // √2/2 ≈ 0.7071
-        let sqrt_3_over_2 = 3.0_f64.sqrt() / 2.0; // √3/2 ≈ 0.8660
         let three_pi_over_2 = 3.0 * FRAC_PI_2; // 3π/2
 
-        rs.add(rule("sin_pi_4", p_sin(p_const(FRAC_PI_4)), p_const(sqrt_2_over_2))); // sin(π/4) = √2/2
-        rs.add(rule("cos_pi_4", p_cos(p_const(FRAC_PI_4)), p_const(sqrt_2_over_2))); // cos(π/4) = √2/2
-        rs.add(rule("sin_pi_3", p_sin(p_const(FRAC_PI_3)), p_const(sqrt_3_over_2))); // sin(π/3) = √3/2
+        rs.add(rule("sin_pi_4", p_sin(p_const(FRAC_PI_4)), p_named(NamedConst::Frac1Sqrt2))); // sin(π/4) = √2/2
+        rs.add(rule("cos_pi_4", p_cos(p_const(FRAC_PI_4)), p_named(NamedConst::Frac1Sqrt2))); // cos(π/4) = √2/2
+        rs.add(rule("sin_pi_3", p_sin(p_const(FRAC_PI_3)), p_named(NamedConst::FracSqrt3By2))); // sin(π/3) = √3/2
         rs.add(rule("cos_pi_3", p_cos(p_const(FRAC_PI_3)), p_const(0.5))); // cos(π/3) = 1/2
         rs.add(rule("sin_pi_6", p_sin(p_const(FRAC_PI_6)), p_const(0.5))); // sin(π/6) = 1/2
-        rs.add(rule("cos_pi_6", p_cos(p_const(FRAC_PI_6)), p_const(sqrt_3_over_2))); // cos(π/6) = √3/2
+        rs.add(rule("cos_pi_6", p_cos(p_const(FRAC_PI_6)), p_named(NamedConst::FracSqrt3By2))); // cos(π/6) = √3/2
         rs.add(rule("sin_2pi", p_sin(p_const(TAU)), p_const(0.0))); // sin(2π) = 0
         rs.add(rule("cos_2pi", p_cos(p_const(TAU)), p_const(1.0))); // cos(2π) = 1
         rs.add(rule("sin_3pi_2", p_sin(p_const(three_pi_over_2)), p_const(-1.0))); // sin(3π/2) = -1

@@ -14,7 +14,6 @@ impl ToTex for NamedConst {
     fn to_tex(&self) -> String {
         match self {
             NamedConst::Pi => "\\pi".to_string(),
-            NamedConst::E => "e".to_string(),
             NamedConst::FracPi2 => "\\frac{\\pi}{2}".to_string(),
             NamedConst::FracPi3 => "\\frac{\\pi}{3}".to_string(),
             NamedConst::FracPi4 => "\\frac{\\pi}{4}".to_string(),
@@ -23,6 +22,11 @@ impl ToTex for NamedConst {
             NamedConst::Frac3Pi4 => "\\frac{3\\pi}{4}".to_string(),
             NamedConst::Frac5Pi6 => "\\frac{5\\pi}{6}".to_string(),
             NamedConst::TwoPi => "2\\pi".to_string(),
+            NamedConst::E => "e".to_string(),
+            NamedConst::Sqrt2 => "\\sqrt{2}".to_string(),
+            NamedConst::Sqrt3 => "\\sqrt{3}".to_string(),
+            NamedConst::Frac1Sqrt2 => "\\frac{\\sqrt{2}}{2}".to_string(),
+            NamedConst::FracSqrt3By2 => "\\frac{\\sqrt{3}}{2}".to_string(),
         }
     }
 }

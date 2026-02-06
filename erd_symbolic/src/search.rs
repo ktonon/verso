@@ -738,7 +738,7 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::{add, constant, cos, div, inv, mul, neg, pow, scalar, sin, tensor, upper};
+    use crate::expr::{add, constant, cos, div, inv, mul, named, neg, pow, scalar, sin, tensor, upper, NamedConst};
 
     #[test]
     fn simplify_add_zero() {
@@ -917,20 +917,20 @@ mod tests {
 
     #[test]
     fn simplify_trig_sin_pi_4() {
-        use std::f64::consts::{FRAC_1_SQRT_2, FRAC_PI_4};
+        use std::f64::consts::FRAC_PI_4;
         let rules = RuleSet::trigonometric();
         let expr = sin(constant(FRAC_PI_4));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, constant(FRAC_1_SQRT_2)); // √2/2
+        assert_eq!(result, named(NamedConst::Frac1Sqrt2)); // √2/2
     }
 
     #[test]
     fn simplify_trig_cos_pi_4() {
-        use std::f64::consts::{FRAC_1_SQRT_2, FRAC_PI_4};
+        use std::f64::consts::FRAC_PI_4;
         let rules = RuleSet::trigonometric();
         let expr = cos(constant(FRAC_PI_4));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, constant(FRAC_1_SQRT_2)); // √2/2
+        assert_eq!(result, named(NamedConst::Frac1Sqrt2)); // √2/2
     }
 
     #[test]
@@ -939,8 +939,7 @@ mod tests {
         let rules = RuleSet::trigonometric();
         let expr = sin(constant(FRAC_PI_3));
         let result = simplify(&expr, &rules);
-        let sqrt_3_over_2 = 3.0_f64.sqrt() / 2.0;
-        assert_eq!(result, constant(sqrt_3_over_2)); // √3/2
+        assert_eq!(result, named(NamedConst::FracSqrt3By2)); // √3/2
     }
 
     #[test]
@@ -967,8 +966,7 @@ mod tests {
         let rules = RuleSet::trigonometric();
         let expr = cos(constant(FRAC_PI_6));
         let result = simplify(&expr, &rules);
-        let sqrt_3_over_2 = 3.0_f64.sqrt() / 2.0;
-        assert_eq!(result, constant(sqrt_3_over_2)); // √3/2
+        assert_eq!(result, named(NamedConst::FracSqrt3By2)); // √3/2
     }
 
     #[test]
