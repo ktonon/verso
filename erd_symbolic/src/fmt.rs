@@ -1,5 +1,22 @@
-use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind};
+use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind, NamedConst};
 use std::fmt::Display;
+
+impl Display for NamedConst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NamedConst::Pi => write!(f, "π"),
+            NamedConst::E => write!(f, "e"),
+            NamedConst::FracPi2 => write!(f, "π / 2"),
+            NamedConst::FracPi3 => write!(f, "π / 3"),
+            NamedConst::FracPi4 => write!(f, "π / 4"),
+            NamedConst::FracPi6 => write!(f, "π / 6"),
+            NamedConst::Frac2Pi3 => write!(f, "2π / 3"),
+            NamedConst::Frac3Pi4 => write!(f, "3π / 4"),
+            NamedConst::Frac5Pi6 => write!(f, "5π / 6"),
+            NamedConst::TwoPi => write!(f, "2π"),
+        }
+    }
+}
 
 impl Display for Index {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -42,6 +59,7 @@ impl std::fmt::Display for Expr {
                     write!(f, "{}", n)
                 }
             }
+            Expr::Named(nc) => write!(f, "{}", nc),
             Expr::Var { name, indices } => {
                 if indices.is_empty() {
                     write!(f, "{}", name)

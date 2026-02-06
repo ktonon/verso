@@ -1,4 +1,5 @@
-use crate::expr::{Expr, FnKind, Index, IndexPosition};
+#[allow(unused_imports)] // NamedConst is used in pattern matching via nc.value()
+use crate::expr::{Expr, FnKind, Index, IndexPosition, NamedConst};
 use std::collections::HashMap;
 
 /// Pattern for matching index names in tensor expressions.
@@ -226,12 +227,14 @@ impl Pattern {
             // Wildcard matches any expression
             (Pattern::Wildcard(name), _) => bind_expr(name, expr.clone(), bindings),
 
-            // ConstWild matches only constants
+            // ConstWild matches constants and named constants
             (Pattern::ConstWild(name), Expr::Const(_)) => bind_expr(name, expr.clone(), bindings),
+            (Pattern::ConstWild(name), Expr::Named(_)) => bind_expr(name, expr.clone(), bindings),
             (Pattern::ConstWild(_), _) => false,
 
-            // Const matches equal constants
+            // Const matches equal constants (including named constants by value)
             (Pattern::Const(n), Expr::Const(m)) => (n - m).abs() < f64::EPSILON,
+            (Pattern::Const(n), Expr::Named(nc)) => (n - nc.value()).abs() < f64::EPSILON,
             (Pattern::Const(_), _) => false,
 
             // Structural matching for binary operators

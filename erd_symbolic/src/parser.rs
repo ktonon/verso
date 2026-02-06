@@ -1,6 +1,7 @@
 use crate::expr::{
     acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, inv, ln, max, min, mul,
-    neg, pow, round, scalar, sign, sin, sinh, sqrt, tan, tanh, tensor, Index, IndexPosition,
+    named, neg, pow, round, scalar, sign, sin, sinh, sqrt, tan, tanh, tensor, Index, IndexPosition,
+    NamedConst,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -275,10 +276,13 @@ impl Parser {
                     .map_err(|_| ParseError::InvalidNumber(s.clone()))?;
                 Ok(constant(n))
             }
-            Some(Token::Pi) => Ok(constant(std::f64::consts::PI)),
+            Some(Token::Pi) => Ok(named(NamedConst::Pi)),
             Some(Token::Ident(name)) => {
                 if name == "pi" {
-                    return Ok(constant(std::f64::consts::PI));
+                    return Ok(named(NamedConst::Pi));
+                }
+                if name == "e" {
+                    return Ok(named(NamedConst::E));
                 }
                 if name == "log" && self.peek() == Some(&Token::Underscore) {
                     return self.parse_log_base_tokens();
@@ -796,13 +800,53 @@ mod tests {
     #[test]
     fn parse_pi_symbol() {
         let expr = parse_expr("π").unwrap();
-        assert_eq!(expr, constant(std::f64::consts::PI));
+        assert_eq!(expr, named(NamedConst::Pi));
 
         let expr = parse_expr("pi").unwrap();
-        assert_eq!(expr, constant(std::f64::consts::PI));
+        assert_eq!(expr, named(NamedConst::Pi));
 
         let expr = parse_expr("2π").unwrap();
-        assert_eq!(expr, mul(constant(2.0), constant(std::f64::consts::PI)));
+        assert_eq!(expr, mul(constant(2.0), named(NamedConst::Pi)));
+
+        let expr = parse_expr("e").unwrap();
+        assert_eq!(expr, named(NamedConst::E));
+    }
+
+    #[test]
+    fn parse_pi_fractions() {
+        use crate::search::simplify;
+        use crate::rule::RuleSet;
+
+        // pi / 2 should fold to Named(FracPi2)
+        let expr = parse_expr("pi / 2").unwrap();
+        let simplified = simplify(&expr, &RuleSet::full());
+        assert_eq!(simplified, named(NamedConst::FracPi2));
+
+        // pi / 3 should fold to Named(FracPi3)
+        let expr = parse_expr("pi / 3").unwrap();
+        let simplified = simplify(&expr, &RuleSet::full());
+        assert_eq!(simplified, named(NamedConst::FracPi3));
+
+        // 2 * pi should fold to Named(TwoPi)
+        let expr = parse_expr("2 * pi").unwrap();
+        let simplified = simplify(&expr, &RuleSet::full());
+        assert_eq!(simplified, named(NamedConst::TwoPi));
+    }
+
+    #[test]
+    fn parse_trig_with_pi_simplifies() {
+        use crate::search::simplify;
+        use crate::rule::RuleSet;
+
+        // sin(pi/2) = 1
+        let expr = parse_expr("sin(pi / 2)").unwrap();
+        let simplified = simplify(&expr, &RuleSet::full());
+        assert_eq!(simplified, constant(1.0));
+
+        // cos(pi) = -1
+        let expr = parse_expr("cos(pi)").unwrap();
+        let simplified = simplify(&expr, &RuleSet::full());
+        assert_eq!(simplified, constant(-1.0));
     }
 
     #[test]

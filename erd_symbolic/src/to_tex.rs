@@ -1,4 +1,4 @@
-use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind};
+use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind, NamedConst};
 
 pub trait ToTex {
     fn to_tex(&self) -> String;
@@ -7,6 +7,23 @@ pub trait ToTex {
 impl ToTex for Index {
     fn to_tex(&self) -> String {
         self.name.clone()
+    }
+}
+
+impl ToTex for NamedConst {
+    fn to_tex(&self) -> String {
+        match self {
+            NamedConst::Pi => "\\pi".to_string(),
+            NamedConst::E => "e".to_string(),
+            NamedConst::FracPi2 => "\\frac{\\pi}{2}".to_string(),
+            NamedConst::FracPi3 => "\\frac{\\pi}{3}".to_string(),
+            NamedConst::FracPi4 => "\\frac{\\pi}{4}".to_string(),
+            NamedConst::FracPi6 => "\\frac{\\pi}{6}".to_string(),
+            NamedConst::Frac2Pi3 => "\\frac{2\\pi}{3}".to_string(),
+            NamedConst::Frac3Pi4 => "\\frac{3\\pi}{4}".to_string(),
+            NamedConst::Frac5Pi6 => "\\frac{5\\pi}{6}".to_string(),
+            NamedConst::TwoPi => "2\\pi".to_string(),
+        }
     }
 }
 
@@ -45,6 +62,7 @@ impl ToTex for Expr {
                     format!("{}", n)
                 }
             }
+            Expr::Named(nc) => nc.to_tex(),
             Expr::Var { name, indices } => {
                 if indices.is_empty() {
                     name.clone()

@@ -1,4 +1,4 @@
-use crate::expr::{classify_mul, Expr, MulKind};
+use crate::expr::{classify_mul, Expr, MulKind, NamedConst};
 use crate::rule::RuleSet;
 use std::collections::{HashMap, HashSet};
 
@@ -68,7 +68,7 @@ impl BeamSearch {
 
         // Recursively try rewrites in children
         match expr {
-            Expr::Const(_) | Expr::Var { .. } => {}
+            Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => {}
 
             Expr::Add(a, b) => {
                 for rewrite in self.all_rewrites(a, rules) {
@@ -377,9 +377,61 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
     }
 }
 
+/// Try to detect pi-fraction patterns like pi/2, pi/3, 2*pi, etc.
+fn try_fold_pi_fraction(left: &Expr, right: &Expr) -> Option<NamedConst> {
+    // Pattern: pi * (1/n) = pi/n or (1/n) * pi = pi/n
+    // Pattern: n * pi = n*pi or pi * n = n*pi
+    let (coeff, is_pi) = match (left, right) {
+        // pi / n pattern: Mul(Named(Pi), Inv(Const(n)))
+        (Expr::Named(NamedConst::Pi), Expr::Inv(inner)) => {
+            if let Expr::Const(n) = inner.as_ref() {
+                (1.0 / n, true)
+            } else {
+                return None;
+            }
+        }
+        // (1/n) * pi pattern
+        (Expr::Inv(inner), Expr::Named(NamedConst::Pi)) => {
+            if let Expr::Const(n) = inner.as_ref() {
+                (1.0 / n, true)
+            } else {
+                return None;
+            }
+        }
+        // n * pi pattern
+        (Expr::Const(n), Expr::Named(NamedConst::Pi)) => (*n, true),
+        // pi * n pattern
+        (Expr::Named(NamedConst::Pi), Expr::Const(n)) => (*n, true),
+        _ => return None,
+    };
+
+    if !is_pi {
+        return None;
+    }
+
+    const EPS: f64 = 1e-12;
+    let candidates = [
+        (0.5, NamedConst::FracPi2),           // pi/2
+        (1.0 / 3.0, NamedConst::FracPi3),     // pi/3
+        (0.25, NamedConst::FracPi4),          // pi/4
+        (1.0 / 6.0, NamedConst::FracPi6),     // pi/6
+        (2.0 / 3.0, NamedConst::Frac2Pi3),    // 2pi/3
+        (0.75, NamedConst::Frac3Pi4),         // 3pi/4
+        (5.0 / 6.0, NamedConst::Frac5Pi6),    // 5pi/6
+        (2.0, NamedConst::TwoPi),             // 2pi
+    ];
+
+    for (val, nc) in candidates {
+        if (coeff - val).abs() < EPS {
+            return Some(nc);
+        }
+    }
+    None
+}
+
 fn fold_constants(expr: &Expr) -> Expr {
     match expr {
-        Expr::Const(_) | Expr::Var { .. } => expr.clone(),
+        Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
         Expr::Neg(a) => match fold_constants(a) {
             Expr::Const(n) => Expr::Const(-n),
             other => Expr::Neg(Box::new(other)),
@@ -409,7 +461,14 @@ fn fold_constants(expr: &Expr) -> Expr {
                 }
                 (Expr::Const(x), _) if (*x - 1.0).abs() < f64::EPSILON => right,
                 (_, Expr::Const(x)) if (*x - 1.0).abs() < f64::EPSILON => left,
-                _ => Expr::Mul(Box::new(left), Box::new(right)),
+                // Detect pi fractions: pi / n or n * pi
+                _ => {
+                    if let Some(nc) = try_fold_pi_fraction(&left, &right) {
+                        Expr::Named(nc)
+                    } else {
+                        Expr::Mul(Box::new(left), Box::new(right))
+                    }
+                }
             }
         }
         Expr::Pow(base, exp) => {
@@ -433,7 +492,7 @@ fn fold_constants(expr: &Expr) -> Expr {
 /// Also distributes negation over addition: -(x + y) = -x + -y
 fn expand_products(expr: &Expr) -> Expr {
     match expr {
-        Expr::Const(_) | Expr::Var { .. } => expr.clone(),
+        Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
         Expr::Neg(a) => {
             let inner = expand_products(a);
             // Distribute negation over addition: -(x + y) = -x + -y

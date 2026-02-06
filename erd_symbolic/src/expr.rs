@@ -2,6 +2,7 @@
 pub enum Expr {
     // Atoms
     Const(f64),
+    Named(NamedConst), // Named mathematical constant (π, e, π/2, etc.)
     Var { name: String, indices: Vec<Index> },
 
     // Arithmetic
@@ -51,10 +52,70 @@ pub enum FnKind {
     // extend as needed
 }
 
+/// Named mathematical constants with exact symbolic representation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NamedConst {
+    Pi,       // π
+    E,        // e (Euler's number)
+    FracPi2,  // π/2
+    FracPi3,  // π/3
+    FracPi4,  // π/4
+    FracPi6,  // π/6
+    Frac2Pi3, // 2π/3
+    Frac3Pi4, // 3π/4
+    Frac5Pi6, // 5π/6
+    TwoPi,    // 2π
+}
+
+impl NamedConst {
+    /// Get the numerical value of this constant.
+    pub fn value(&self) -> f64 {
+        use std::f64::consts::*;
+        match self {
+            NamedConst::Pi => PI,
+            NamedConst::E => E,
+            NamedConst::FracPi2 => FRAC_PI_2,
+            NamedConst::FracPi3 => FRAC_PI_3,
+            NamedConst::FracPi4 => FRAC_PI_4,
+            NamedConst::FracPi6 => FRAC_PI_6,
+            NamedConst::Frac2Pi3 => 2.0 * FRAC_PI_3,
+            NamedConst::Frac3Pi4 => 3.0 * FRAC_PI_4,
+            NamedConst::Frac5Pi6 => 5.0 * FRAC_PI_6,
+            NamedConst::TwoPi => TAU,
+        }
+    }
+
+    /// Try to match a numerical value to a named constant (within epsilon).
+    pub fn from_value(v: f64) -> Option<NamedConst> {
+        use std::f64::consts::*;
+        const EPS: f64 = 1e-12;
+
+        let candidates = [
+            (PI, NamedConst::Pi),
+            (E, NamedConst::E),
+            (FRAC_PI_2, NamedConst::FracPi2),
+            (FRAC_PI_3, NamedConst::FracPi3),
+            (FRAC_PI_4, NamedConst::FracPi4),
+            (FRAC_PI_6, NamedConst::FracPi6),
+            (2.0 * FRAC_PI_3, NamedConst::Frac2Pi3),
+            (3.0 * FRAC_PI_4, NamedConst::Frac3Pi4),
+            (5.0 * FRAC_PI_6, NamedConst::Frac5Pi6),
+            (TAU, NamedConst::TwoPi),
+        ];
+
+        for (val, nc) in candidates {
+            if (v - val).abs() < EPS {
+                return Some(nc);
+            }
+        }
+        None
+    }
+}
+
 impl Expr {
     pub fn complexity(&self) -> usize {
         match self {
-            Expr::Const(_) | Expr::Var { .. } => 1,
+            Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => 1,
             Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + a.complexity(),
             Expr::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
             Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
@@ -65,7 +126,7 @@ impl Expr {
 
     pub fn precedence(&self) -> u8 {
         match self {
-            Expr::Const(_) | Expr::Var { .. } | Expr::Fn(_, _) | Expr::FnN(_, _) => 100,
+            Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } | Expr::Fn(_, _) | Expr::FnN(_, _) => 100,
             Expr::Pow(_, _) => 80,
             Expr::Neg(_) | Expr::Inv(_) => 70,
             Expr::Mul(_, _) => 60,
@@ -104,6 +165,18 @@ pub fn lower(name: &str) -> Index {
 
 pub fn constant(n: f64) -> Expr {
     Expr::Const(n)
+}
+
+pub fn named(nc: NamedConst) -> Expr {
+    Expr::Named(nc)
+}
+
+pub fn pi() -> Expr {
+    Expr::Named(NamedConst::Pi)
+}
+
+pub fn e_const() -> Expr {
+    Expr::Named(NamedConst::E)
 }
 
 pub fn add(a: Expr, b: Expr) -> Expr {
