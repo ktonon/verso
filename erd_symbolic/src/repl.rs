@@ -4,9 +4,18 @@ use crate::search;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum HistoryMode {
+    Results,
+    Inputs,
+}
+
 pub fn run() -> Result<(), ReadlineError> {
     let mut rl = DefaultEditor::new()?;
     let mut show_steps = false;
+    let mut history_mode = HistoryMode::Inputs;
+    let mut input_history: Vec<String> = Vec::new();
+    let mut result_history: Vec<String> = Vec::new();
 
     loop {
         match rl.readline("> ") {
@@ -23,6 +32,25 @@ pub fn run() -> Result<(), ReadlineError> {
                     println!("steps: {}\n", if show_steps { "on" } else { "off" });
                     continue;
                 }
+                if input == ":history" || input == ":hist" {
+                    history_mode = match history_mode {
+                        HistoryMode::Results => HistoryMode::Inputs,
+                        HistoryMode::Inputs => HistoryMode::Results,
+                    };
+                    match history_mode {
+                        HistoryMode::Results => {
+                            reload_history(&mut rl, &result_history);
+                            println!("history: results\n");
+                        }
+                        HistoryMode::Inputs => {
+                            reload_history(&mut rl, &input_history);
+                            println!("history: inputs\n");
+                        }
+                    }
+                    continue;
+                }
+
+                record_input(&mut input_history, &mut rl, history_mode, input);
 
                 match parse_expr(input) {
                     Ok(expr) => {
@@ -33,11 +61,21 @@ pub fn run() -> Result<(), ReadlineError> {
                                 println!("{}: {}", i, step);
                             }
                             println!("final: {}\n", simplified);
-                            let _ = rl.add_history_entry(format!("{}", simplified));
+                            record_result(
+                                &mut result_history,
+                                &mut rl,
+                                history_mode,
+                                &simplified,
+                            );
                         } else {
                             let simplified = search::simplify(&expr, &RuleSet::full());
                             println!("{}\n", simplified);
-                            let _ = rl.add_history_entry(format!("{}", simplified));
+                            record_result(
+                                &mut result_history,
+                                &mut rl,
+                                history_mode,
+                                &simplified,
+                            );
                         }
                     }
                     Err(err) => {
@@ -55,4 +93,36 @@ pub fn run() -> Result<(), ReadlineError> {
     }
 
     Ok(())
+}
+
+fn record_input(
+    input_history: &mut Vec<String>,
+    rl: &mut DefaultEditor,
+    history_mode: HistoryMode,
+    input: &str,
+) {
+    input_history.push(input.to_string());
+    if history_mode == HistoryMode::Inputs {
+        let _ = rl.add_history_entry(input);
+    }
+}
+
+fn record_result(
+    result_history: &mut Vec<String>,
+    rl: &mut DefaultEditor,
+    history_mode: HistoryMode,
+    simplified: &crate::expr::Expr,
+) {
+    let rendered = format!("{}", simplified);
+    result_history.push(rendered.clone());
+    if history_mode == HistoryMode::Results {
+        let _ = rl.add_history_entry(rendered);
+    }
+}
+
+fn reload_history(rl: &mut DefaultEditor, entries: &[String]) {
+    let _ = rl.clear_history();
+    for entry in entries {
+        let _ = rl.add_history_entry(entry);
+    }
 }

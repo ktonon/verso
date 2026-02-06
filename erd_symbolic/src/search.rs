@@ -1,4 +1,4 @@
-use crate::expr::Expr;
+use crate::expr::{classify_mul, Expr, MulKind};
 use crate::rule::RuleSet;
 use std::collections::{HashMap, HashSet};
 
@@ -300,6 +300,7 @@ pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
     // Re-run rules after constant folding so identities like cos(pi/2) apply.
     let simplified = BeamSearch::default().simplify(&simplified, rules);
     let simplified = fold_constants(&simplified);
+    let simplified = expand_one_plus_one(&simplified);
     let simplified = collect_linear_terms(&simplified);
     fold_constants(&simplified)
 }
@@ -312,6 +313,12 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
     if folded != current {
         trace.push(folded.clone());
         current = folded;
+    }
+
+    let expanded = expand_one_plus_one(&current);
+    if expanded != current {
+        trace.push(expanded.clone());
+        current = expanded;
     }
 
     let collected = collect_linear_terms(&current);
@@ -327,6 +334,56 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
     }
 
     (current, trace)
+}
+
+fn expand_one_plus_one(expr: &Expr) -> Expr {
+    match expr {
+        Expr::Mul(a, b) => {
+            let left = expand_one_plus_one(a);
+            let right = expand_one_plus_one(b);
+            if let (Some(x), Some(y)) = (strip_add_one(&left), strip_add_one(&right)) {
+                return Expr::Add(
+                    Box::new(Expr::Add(
+                        Box::new(Expr::Add(
+                            Box::new(Expr::Mul(Box::new(x.clone()), Box::new(y.clone()))),
+                            Box::new(x),
+                        )),
+                        Box::new(y),
+                    )),
+                    Box::new(Expr::Const(1.0)),
+                );
+            }
+            Expr::Mul(Box::new(left), Box::new(right))
+        }
+        Expr::Add(a, b) => Expr::Add(
+            Box::new(expand_one_plus_one(a)),
+            Box::new(expand_one_plus_one(b)),
+        ),
+        Expr::Neg(a) => Expr::Neg(Box::new(expand_one_plus_one(a))),
+        Expr::Inv(a) => Expr::Inv(Box::new(expand_one_plus_one(a))),
+        Expr::Pow(base, exp) => Expr::Pow(
+            Box::new(expand_one_plus_one(base)),
+            Box::new(expand_one_plus_one(exp)),
+        ),
+        Expr::Fn(kind, arg) => Expr::Fn(kind.clone(), Box::new(expand_one_plus_one(arg))),
+        Expr::FnN(kind, args) => Expr::FnN(
+            kind.clone(),
+            args.iter().map(expand_one_plus_one).collect(),
+        ),
+        Expr::Const(_) | Expr::Var { .. } => expr.clone(),
+    }
+}
+
+fn strip_add_one(expr: &Expr) -> Option<Expr> {
+    match expr {
+        Expr::Add(a, b) if is_one(a) => Some(b.as_ref().clone()),
+        Expr::Add(a, b) if is_one(b) => Some(a.as_ref().clone()),
+        _ => None,
+    }
+}
+
+fn is_one(expr: &Expr) -> bool {
+    matches!(expr, Expr::Const(n) if (*n - 1.0).abs() < f64::EPSILON)
 }
 
 fn fold_constants(expr: &Expr) -> Expr {
@@ -464,7 +521,20 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
         Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
             (Expr::Const(c), other) => Some((other.clone(), *c)),
             (other, Expr::Const(c)) => Some((other.clone(), *c)),
-            _ => Some((expr.clone(), 1.0)),
+            _ => {
+                let mut left = a.clone();
+                let mut right = b.clone();
+                if classify_mul(a, b) == MulKind::Scalar {
+                    if matches!(
+                        left.as_ref(),
+                        Expr::Inv(inner)
+                            if matches!(inner.as_ref(), Expr::Var { indices, .. } if indices.is_empty())
+                    ) {
+                        std::mem::swap(&mut left, &mut right);
+                    }
+                }
+                Some((Expr::Mul(left, right), 1.0))
+            }
         },
         _ => Some((expr.clone(), 1.0)),
     }
@@ -473,7 +543,7 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::{add, constant, cos, inv, mul, neg, pow, scalar, sin, tensor, upper};
+    use crate::expr::{add, constant, cos, div, inv, mul, neg, pow, scalar, sin, tensor, upper};
 
     #[test]
     fn simplify_add_zero() {
@@ -513,6 +583,76 @@ mod tests {
         let expr = inv(inv(scalar("x")));
         let result = simplify(&expr, &rules);
         assert_eq!(result, scalar("x"));
+    }
+
+    #[test]
+    fn simplify_inv_mul_cancel() {
+        // (1/x) * x = 1
+        let rules = RuleSet::standard();
+        let expr = mul(div(constant(1.0), scalar("x")), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_div_self() {
+        // x / x = 1
+        let rules = RuleSet::standard();
+        let expr = div(scalar("x"), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_inv_mul_reorder_to_div() {
+        // (1/x) * y = y / x
+        let rules = RuleSet::standard();
+        let expr = mul(div(constant(1.0), scalar("x")), scalar("y"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, div(scalar("y"), scalar("x")));
+    }
+
+    #[test]
+    fn simplify_inv_mul_collects_with_div() {
+        // 1/x*y + y/x - 1 = 2y/x - 1
+        let rules = RuleSet::full();
+        let expr = add(
+            add(
+                mul(div(constant(1.0), scalar("x")), scalar("y")),
+                div(scalar("y"), scalar("x")),
+            ),
+            neg(constant(1.0)),
+        );
+        let result = simplify(&expr, &rules);
+        let expected = add(
+            mul(constant(2.0), div(scalar("y"), scalar("x"))),
+            constant(-1.0),
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn simplify_expanded_binomial_to_zero() {
+        // (x + 1)(y + 1) - x*y - 1 - x - y = 0
+        let rules = RuleSet::full();
+        let expr = add(
+            add(
+                add(
+                    add(
+                        mul(
+                            add(scalar("x"), constant(1.0)),
+                            add(scalar("y"), constant(1.0)),
+                        ),
+                        neg(mul(scalar("x"), scalar("y"))),
+                    ),
+                    neg(constant(1.0)),
+                ),
+                neg(scalar("x")),
+            ),
+            neg(scalar("y")),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, constant(0.0));
     }
 
     #[test]

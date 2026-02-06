@@ -542,6 +542,7 @@ impl RuleSet {
     /// Standard arithmetic identities.
     pub fn standard() -> RuleSet {
         let x = || wildcard("x");
+        let y = || wildcard("y");
         let lo = || wildcard("lo");
         let hi = || wildcard("hi");
         let v = || p_var_wild("v", vec![]);
@@ -579,6 +580,17 @@ impl RuleSet {
 
         // Inverse of one: 1/1 = 1
         rs.add(rule("inv_one", p_inv(p_const(1.0)), p_const(1.0)));
+
+        // Inverse cancellation: x * (1/x) = 1
+        rs.add(rule("mul_inv_right", p_mul(x(), p_inv(x())), p_const(1.0)));
+        rs.add(rule("mul_inv_left", p_mul(p_inv(x()), x()), p_const(1.0)));
+
+        // Prefer placing inverse on the right for division formatting: (1/v) * x = x / v
+        rs.add(rule(
+            "inv_mul_commute",
+            p_mul(p_inv(v()), x()),
+            p_mul(x(), p_inv(v())),
+        ));
 
         // Power identities
         rs.add(rule("pow_one", p_pow(x(), p_const(1.0)), x())); // x^1 = x
@@ -627,6 +639,16 @@ impl RuleSet {
             "mul_one_plus_left",
             p_mul(p_add(p_const(1.0), wildcard("y")), x()),
             p_add(x(), p_mul(x(), wildcard("y"))),
+        ));
+
+        // (x + 1) * (y + 1) = x*y + x + y + 1
+        rs.add(rule(
+            "mul_one_plus_one",
+            p_mul(p_add(x(), p_const(1.0)), p_add(y(), p_const(1.0))),
+            p_add(
+                p_add(p_add(p_mul(x(), y()), x()), y()),
+                p_const(1.0),
+            ),
         ));
 
         // Targeted cancellation: x*(a+b) - x*b = x*a and x*(a+b) - x*a = x*b

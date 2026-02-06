@@ -71,6 +71,9 @@ impl std::fmt::Display for Expr {
                 Expr::Neg(inner) => {
                     write!(f, "{} - {}", a, inner)
                 }
+                Expr::Const(n) if *n < 0.0 => {
+                    write!(f, "{} - {}", a, fmt_const(-*n))
+                }
                 _ => {
                     write!(f, "{} + {}", a, b)
                 }
@@ -125,6 +128,14 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
         format!("({})", child)
     } else {
         format!("{}", child)
+    }
+}
+
+fn fmt_const(n: f64) -> String {
+    if n.fract() == 0.0 {
+        format!("{}", n as i64)
+    } else {
+        format!("{}", n)
     }
 }
 
@@ -186,6 +197,7 @@ mod tests {
     #[test]
     fn display_add() {
         assert_eq!(format!("{}", add(scalar("x"), constant(2.0))), "x + 2");
+        assert_eq!(format!("{}", add(scalar("x"), constant(-2.0))), "x - 2");
     }
 
     #[test]
