@@ -525,6 +525,84 @@ mod tests {
     }
 
     #[test]
+    fn simplify_power_reduction_to_sin_sq() {
+        // (1 - cos(2x))/2 = sin²(x)
+        // Complexity: 6 → 3 (reduces!)
+        let rules = RuleSet::trigonometric();
+        let expr = mul(
+            inv(constant(2.0)),
+            add(constant(1.0), neg(cos(mul(constant(2.0), scalar("x"))))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, pow(sin(scalar("x")), constant(2.0)));
+    }
+
+    #[test]
+    fn simplify_power_reduction_to_cos_sq() {
+        // (1 + cos(2x))/2 = cos²(x)
+        // Complexity: 5 → 3 (reduces!)
+        let rules = RuleSet::trigonometric();
+        let expr = mul(
+            inv(constant(2.0)),
+            add(constant(1.0), cos(mul(constant(2.0), scalar("x")))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, pow(cos(scalar("x")), constant(2.0)));
+    }
+
+    #[test]
+    fn simplify_sin_sum_contraction() {
+        // sin(a)·cos(b) + cos(a)·sin(b) = sin(a + b)
+        // Complexity: 9 → 3 (reduces significantly!)
+        let rules = RuleSet::trigonometric();
+        let expr = add(
+            mul(sin(scalar("a")), cos(scalar("b"))),
+            mul(cos(scalar("a")), sin(scalar("b"))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, sin(add(scalar("a"), scalar("b"))));
+    }
+
+    #[test]
+    fn simplify_sin_diff_contraction() {
+        // sin(a)·cos(b) - cos(a)·sin(b) = sin(a - b)
+        // Complexity: 10 → 4 (reduces!)
+        let rules = RuleSet::trigonometric();
+        let expr = add(
+            mul(sin(scalar("a")), cos(scalar("b"))),
+            neg(mul(cos(scalar("a")), sin(scalar("b")))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, sin(add(scalar("a"), neg(scalar("b")))));
+    }
+
+    #[test]
+    fn simplify_cos_sum_contraction() {
+        // cos(a)·cos(b) - sin(a)·sin(b) = cos(a + b)
+        // Complexity: 10 → 3 (reduces significantly!)
+        let rules = RuleSet::trigonometric();
+        let expr = add(
+            mul(cos(scalar("a")), cos(scalar("b"))),
+            neg(mul(sin(scalar("a")), sin(scalar("b")))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, cos(add(scalar("a"), scalar("b"))));
+    }
+
+    #[test]
+    fn simplify_cos_diff_contraction() {
+        // cos(a)·cos(b) + sin(a)·sin(b) = cos(a - b)
+        // Complexity: 9 → 4 (reduces!)
+        let rules = RuleSet::trigonometric();
+        let expr = add(
+            mul(cos(scalar("a")), cos(scalar("b"))),
+            mul(sin(scalar("a")), sin(scalar("b"))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, cos(add(scalar("a"), neg(scalar("b")))));
+    }
+
+    #[test]
     fn simplify_pythagorean() {
         // sin²(x) + cos²(x) = 1
         let rules = RuleSet::trigonometric();

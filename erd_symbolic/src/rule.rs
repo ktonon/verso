@@ -667,6 +667,155 @@ impl RuleSet {
             p_cos(p_mul(p_const(2.0), x())),
         ));
 
+        // === Power reduction formulas ===
+        // These convert squared trig functions to double angle form.
+        // Note: Expansion increases complexity; contraction reduces it.
+
+        // sin²(x) = (1 - cos(2x))/2 (expansion - increases complexity)
+        rs.add(rule(
+            "sin_sq_to_double_angle",
+            p_pow(p_sin(x()), p_const(2.0)),
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(p_const(1.0), p_neg(p_cos(p_mul(p_const(2.0), x())))),
+            ),
+        ));
+
+        // (1 - cos(2x))/2 = sin²(x) (contraction - reduces complexity!)
+        // Pattern: (1/2) * (1 + (-cos(2x)))
+        rs.add(rule(
+            "double_angle_to_sin_sq",
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(p_const(1.0), p_neg(p_cos(p_mul(p_const(2.0), x())))),
+            ),
+            p_pow(p_sin(x()), p_const(2.0)),
+        ));
+        // Also match (1 + (-cos(2x))) * (1/2)
+        rs.add(rule(
+            "double_angle_to_sin_sq_rev",
+            p_mul(
+                p_add(p_const(1.0), p_neg(p_cos(p_mul(p_const(2.0), x())))),
+                p_inv(p_const(2.0)),
+            ),
+            p_pow(p_sin(x()), p_const(2.0)),
+        ));
+
+        // cos²(x) = (1 + cos(2x))/2 (expansion - increases complexity)
+        rs.add(rule(
+            "cos_sq_to_double_angle",
+            p_pow(p_cos(x()), p_const(2.0)),
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(p_const(1.0), p_cos(p_mul(p_const(2.0), x()))),
+            ),
+        ));
+
+        // (1 + cos(2x))/2 = cos²(x) (contraction - reduces complexity!)
+        rs.add(rule(
+            "double_angle_to_cos_sq",
+            p_mul(
+                p_inv(p_const(2.0)),
+                p_add(p_const(1.0), p_cos(p_mul(p_const(2.0), x()))),
+            ),
+            p_pow(p_cos(x()), p_const(2.0)),
+        ));
+        // Also match (1 + cos(2x)) * (1/2)
+        rs.add(rule(
+            "double_angle_to_cos_sq_rev",
+            p_mul(
+                p_add(p_const(1.0), p_cos(p_mul(p_const(2.0), x()))),
+                p_inv(p_const(2.0)),
+            ),
+            p_pow(p_cos(x()), p_const(2.0)),
+        ));
+
+        // === Sum/difference formulas ===
+        // These use two independent wildcards (a and b).
+        let a = || wildcard("a");
+        let b = || wildcard("b");
+
+        // sin(a + b) = sin(a)·cos(b) + cos(a)·sin(b)
+        rs.add(rule(
+            "sin_sum",
+            p_sin(p_add(a(), b())),
+            p_add(
+                p_mul(p_sin(a()), p_cos(b())),
+                p_mul(p_cos(a()), p_sin(b())),
+            ),
+        ));
+
+        // sin(a)·cos(b) + cos(a)·sin(b) = sin(a + b) (contraction)
+        rs.add(rule(
+            "sin_sum_contract",
+            p_add(
+                p_mul(p_sin(a()), p_cos(b())),
+                p_mul(p_cos(a()), p_sin(b())),
+            ),
+            p_sin(p_add(a(), b())),
+        ));
+
+        // sin(a - b) = sin(a)·cos(b) - cos(a)·sin(b)
+        // a - b is represented as Add(a, Neg(b))
+        rs.add(rule(
+            "sin_diff",
+            p_sin(p_add(a(), p_neg(b()))),
+            p_add(
+                p_mul(p_sin(a()), p_cos(b())),
+                p_neg(p_mul(p_cos(a()), p_sin(b()))),
+            ),
+        ));
+
+        // sin(a)·cos(b) - cos(a)·sin(b) = sin(a - b) (contraction)
+        rs.add(rule(
+            "sin_diff_contract",
+            p_add(
+                p_mul(p_sin(a()), p_cos(b())),
+                p_neg(p_mul(p_cos(a()), p_sin(b()))),
+            ),
+            p_sin(p_add(a(), p_neg(b()))),
+        ));
+
+        // cos(a + b) = cos(a)·cos(b) - sin(a)·sin(b)
+        rs.add(rule(
+            "cos_sum",
+            p_cos(p_add(a(), b())),
+            p_add(
+                p_mul(p_cos(a()), p_cos(b())),
+                p_neg(p_mul(p_sin(a()), p_sin(b()))),
+            ),
+        ));
+
+        // cos(a)·cos(b) - sin(a)·sin(b) = cos(a + b) (contraction)
+        rs.add(rule(
+            "cos_sum_contract",
+            p_add(
+                p_mul(p_cos(a()), p_cos(b())),
+                p_neg(p_mul(p_sin(a()), p_sin(b()))),
+            ),
+            p_cos(p_add(a(), b())),
+        ));
+
+        // cos(a - b) = cos(a)·cos(b) + sin(a)·sin(b)
+        rs.add(rule(
+            "cos_diff",
+            p_cos(p_add(a(), p_neg(b()))),
+            p_add(
+                p_mul(p_cos(a()), p_cos(b())),
+                p_mul(p_sin(a()), p_sin(b())),
+            ),
+        ));
+
+        // cos(a)·cos(b) + sin(a)·sin(b) = cos(a - b) (contraction)
+        rs.add(rule(
+            "cos_diff_contract",
+            p_add(
+                p_mul(p_cos(a()), p_cos(b())),
+                p_mul(p_sin(a()), p_sin(b())),
+            ),
+            p_cos(p_add(a(), p_neg(b()))),
+        ));
+
         // === Exponential/Log identities ===
         rs.add(rule("exp_zero", p_exp(p_const(0.0)), p_const(1.0))); // e^0 = 1
         rs.add(rule("ln_one", p_ln(p_const(1.0)), p_const(0.0))); // ln(1) = 0
@@ -675,14 +824,6 @@ impl RuleSet {
         rs.add(rule("ln_exp", p_ln(p_exp(x())), x())); // ln(e^x) = x
 
         // === Future extensions (TODO) ===
-        // Power reduction to double angle (increases complexity, rarely useful):
-        //   - sin²(x) = (1 - cos(2x))/2
-        //   - cos²(x) = (1 + cos(2x))/2
-        //
-        // Sum/difference formulas (requires two wildcards a, b):
-        //   - sin(a + b) = sin(a)·cos(b) + cos(a)·sin(b)
-        //   - cos(a + b) = cos(a)·cos(b) - sin(a)·sin(b)
-        //
         // Product-to-sum identities:
         //   - sin(a)·cos(b) = ½[sin(a+b) + sin(a-b)]
         //   - cos(a)·cos(b) = ½[cos(a+b) + cos(a-b)]
