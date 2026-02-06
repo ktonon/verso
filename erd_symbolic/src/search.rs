@@ -952,38 +952,35 @@ mod tests {
     }
 
     #[test]
-    fn simplify_distribute_mul_over_add_blocked_by_complexity() {
+    fn simplify_distribute_mul_over_add_no_simplification() {
         // x * (y + z) has complexity 5, x*y + x*z has complexity 7
-        // TODO: A beam search or cost-based search could allow temporary complexity
-        // increases that lead to overall simplification
+        // Beam search explores the distributed form, but since no follow-up rules
+        // reduce complexity below the original, the original is returned.
         let rules = RuleSet::tensor();
         let expr = mul(scalar("x"), add(scalar("y"), scalar("z")));
         let result = simplify(&expr, &rules);
-        // Distribution increases complexity, so greedy search blocks it
         assert_eq!(result, expr);
     }
 
     #[test]
-    fn simplify_neg_distribute_over_add_blocked_by_complexity() {
+    fn simplify_neg_distribute_over_add_no_simplification() {
         // -(x + y) has complexity 4, -x + -y has complexity 5
-        // TODO: A beam search or cost-based search could allow temporary complexity
-        // increases that lead to overall simplification
+        // Beam search explores the distributed form, but since no follow-up rules
+        // reduce complexity below the original, the original is returned.
         let rules = RuleSet::tensor();
         let expr = neg(add(scalar("x"), scalar("y")));
         let result = simplify(&expr, &rules);
-        // Distribution increases complexity, so greedy search blocks it
         assert_eq!(result, expr);
     }
 
     #[test]
-    fn simplify_inv_distribute_over_mul_blocked_by_complexity() {
+    fn simplify_inv_distribute_over_mul_no_simplification() {
         // 1/(x * y) has complexity 4, (1/x) * (1/y) has complexity 5
-        // TODO: A beam search or cost-based search could allow temporary complexity
-        // increases that lead to overall simplification
+        // Beam search explores the distributed form, but since no follow-up rules
+        // reduce complexity below the original, the original is returned.
         let rules = RuleSet::tensor();
         let expr = inv(mul(scalar("x"), scalar("y")));
         let result = simplify(&expr, &rules);
-        // Distribution increases complexity, so greedy search blocks it
         assert_eq!(result, expr);
     }
 
