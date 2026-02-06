@@ -1,3 +1,5 @@
-fn main() -> std::io::Result<()> {
-    erd_symbolic::repl::run()
+fn main() {
+    if let Err(err) = erd_symbolic::repl::run() {
+        eprintln!("repl error: {:?}", err);
+    }
 }

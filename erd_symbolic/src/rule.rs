@@ -617,6 +617,36 @@ impl RuleSet {
             p_pow(x(), p_const(2.0)),
         ));
 
+        // Targeted distribution: x * (1 + y) = x + x*y
+        rs.add(rule(
+            "mul_one_plus_right",
+            p_mul(x(), p_add(p_const(1.0), wildcard("y"))),
+            p_add(x(), p_mul(x(), wildcard("y"))),
+        ));
+        rs.add(rule(
+            "mul_one_plus_left",
+            p_mul(p_add(p_const(1.0), wildcard("y")), x()),
+            p_add(x(), p_mul(x(), wildcard("y"))),
+        ));
+
+        // Targeted cancellation: x*(a+b) - x*b = x*a and x*(a+b) - x*a = x*b
+        rs.add(rule(
+            "mul_add_cancel_right",
+            p_add(
+                p_mul(x(), p_add(wildcard("a"), wildcard("b"))),
+                p_neg(p_mul(x(), wildcard("b"))),
+            ),
+            p_mul(x(), wildcard("a")),
+        ));
+        rs.add(rule(
+            "mul_add_cancel_left",
+            p_add(
+                p_mul(x(), p_add(wildcard("a"), wildcard("b"))),
+                p_neg(p_mul(x(), wildcard("a"))),
+            ),
+            p_mul(x(), wildcard("b")),
+        ));
+
         // Combine like terms (variables only)
         rs.add(rule(
             "combine_like_terms_left",
@@ -627,6 +657,11 @@ impl RuleSet {
             "combine_like_terms_right",
             p_add(v(), p_mul(const_wild("a"), v())),
             p_mul(p_add(const_wild("a"), p_const(1.0)), v()),
+        ));
+        rs.add(rule(
+            "combine_like_terms_self",
+            p_add(v(), v()),
+            p_mul(p_const(2.0), v()),
         ));
 
         // Min/max/clamp identities (idempotent)

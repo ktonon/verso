@@ -1,36 +1,39 @@
 use crate::parser::parse_expr;
 use crate::rule::RuleSet;
 use crate::search;
-use std::io::{self, Write};
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
 
-pub fn run() -> io::Result<()> {
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
+pub fn run() -> Result<(), ReadlineError> {
+    let mut rl = DefaultEditor::new()?;
 
     loop {
-        write!(stdout, "> ")?;
-        stdout.flush()?;
+        match rl.readline("> ") {
+            Ok(line) => {
+                let input = line.trim();
+                if input.is_empty() {
+                    continue;
+                }
+                if input == ":q" || input == ":quit" || input == ":exit" {
+                    break;
+                }
 
-        let mut line = String::new();
-        if stdin.read_line(&mut line)? == 0 {
-            break;
-        }
-
-        let input = line.trim();
-        if input.is_empty() {
-            continue;
-        }
-        if input == ":q" || input == ":quit" || input == ":exit" {
-            break;
-        }
-
-        match parse_expr(input) {
-            Ok(expr) => {
-                let simplified = search::simplify(&expr, &RuleSet::full());
-                writeln!(stdout, "{}\n", simplified)?;
+                match parse_expr(input) {
+                    Ok(expr) => {
+                        let simplified = search::simplify(&expr, &RuleSet::full());
+                        println!("{}\n", simplified);
+                        let _ = rl.add_history_entry(format!("{}", simplified));
+                    }
+                    Err(err) => {
+                        println!("Error: {:?}\n", err);
+                    }
+                }
             }
-            Err(err) => {
-                writeln!(stdout, "Error: {:?}\n", err)?;
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                break;
+            }
+            Err(_) => {
+                break;
             }
         }
     }

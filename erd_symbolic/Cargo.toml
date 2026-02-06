@@ -2,3 +2,6 @@
 name = "erd_symbolic"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+rustyline = "14"

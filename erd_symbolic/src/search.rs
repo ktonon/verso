@@ -1,6 +1,6 @@
 use crate::expr::Expr;
 use crate::rule::RuleSet;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub trait SearchStrategy {
     fn simplify(&self, expr: &Expr, rules: &RuleSet) -> Expr;
@@ -237,6 +237,8 @@ impl SearchStrategy for BeamSearch {
 /// Convenience function to simplify an expression with default settings.
 pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
     let simplified = BeamSearch::default().simplify(expr, rules);
+    let simplified = fold_constants(&simplified);
+    let simplified = collect_linear_terms(&simplified);
     fold_constants(&simplified)
 }
 
@@ -264,6 +266,14 @@ fn fold_constants(expr: &Expr) -> Expr {
             let right = fold_constants(b);
             match (&left, &right) {
                 (Expr::Const(x), Expr::Const(y)) => Expr::Const(x * y),
+                (Expr::Const(x), _) if (*x + 1.0).abs() < f64::EPSILON => {
+                    Expr::Neg(Box::new(right))
+                }
+                (_, Expr::Const(x)) if (*x + 1.0).abs() < f64::EPSILON => {
+                    Expr::Neg(Box::new(left))
+                }
+                (Expr::Const(x), _) if (*x - 1.0).abs() < f64::EPSILON => right,
+                (_, Expr::Const(x)) if (*x - 1.0).abs() < f64::EPSILON => left,
                 _ => Expr::Mul(Box::new(left), Box::new(right)),
             }
         }
@@ -280,6 +290,96 @@ fn fold_constants(expr: &Expr) -> Expr {
             kind.clone(),
             args.iter().map(fold_constants).collect(),
         ),
+    }
+}
+
+fn collect_linear_terms(expr: &Expr) -> Expr {
+    let mut terms = Vec::new();
+    flatten_add(expr, &mut terms);
+
+    let mut coeffs: HashMap<String, (Expr, f64)> = HashMap::new();
+    let mut const_sum = 0.0;
+    let mut rest: Vec<Expr> = Vec::new();
+
+    for term in terms {
+        if let Some((base, coeff)) = extract_term(&term) {
+            if matches!(base, Expr::Const(_)) {
+                const_sum += coeff;
+                continue;
+            }
+            let key = format!("{:?}", base);
+            let entry = coeffs.entry(key).or_insert((base, 0.0));
+            entry.1 += coeff;
+        } else {
+            rest.push(term);
+        }
+    }
+
+    let mut collected: Vec<(String, Expr)> = Vec::new();
+    let mut coeff_keys: Vec<_> = coeffs.keys().cloned().collect();
+    coeff_keys.sort();
+    for key in coeff_keys {
+        let (var, coeff) = coeffs.remove(&key).unwrap();
+        if coeff.abs() < f64::EPSILON {
+            continue;
+        }
+        if (coeff - 1.0).abs() < f64::EPSILON {
+            collected.push((key, var));
+        } else {
+            collected.push((
+                key,
+                Expr::Mul(Box::new(Expr::Const(coeff)), Box::new(var)),
+            ));
+        }
+    }
+
+    rest.sort_by_key(|e| format!("{:?}", e));
+    let mut ordered: Vec<Expr> = collected.into_iter().map(|(_, e)| e).collect();
+    if const_sum.abs() >= f64::EPSILON {
+        ordered.push(Expr::Const(const_sum));
+    }
+    ordered.extend(rest);
+
+    match ordered.len() {
+        0 => Expr::Const(0.0),
+        1 => ordered.into_iter().next().unwrap(),
+        _ => {
+            let mut iter = ordered.into_iter();
+            let mut acc = iter.next().unwrap();
+            for t in iter {
+                acc = Expr::Add(Box::new(acc), Box::new(t));
+            }
+            acc
+        }
+    }
+}
+
+fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
+    match expr {
+        Expr::Add(a, b) => {
+            flatten_add(a, out);
+            flatten_add(b, out);
+        }
+        _ => out.push(expr.clone()),
+    }
+}
+
+fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
+    match expr {
+        Expr::Const(c) => Some((Expr::Const(1.0), *c)),
+        Expr::Neg(inner) => {
+            if let Some((base, coeff)) = extract_term(inner) {
+                Some((base, -coeff))
+            } else {
+                None
+            }
+        }
+        Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
+            (Expr::Const(c), other) => Some((other.clone(), *c)),
+            (other, Expr::Const(c)) => Some((other.clone(), *c)),
+            _ => Some((expr.clone(), 1.0)),
+        },
+        _ => Some((expr.clone(), 1.0)),
     }
 }
 
@@ -911,7 +1011,7 @@ mod tests {
         );
         let expr = add(pythagorean, scalar("z"));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, add(constant(1.0), scalar("z")));
+        assert_eq!(result, add(scalar("z"), constant(1.0)));
     }
 
     #[test]
@@ -1254,6 +1354,78 @@ mod tests {
         let expr = add(mul(constant(12.0), scalar("x")), scalar("x"));
         let result = simplify(&expr, &rules);
         assert_eq!(result, mul(constant(13.0), scalar("x")));
+    }
+
+    #[test]
+    fn simplify_combine_like_terms_self() {
+        let rules = RuleSet::standard();
+        let expr = add(scalar("x"), scalar("x"));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, mul(constant(2.0), scalar("x")));
+    }
+
+    #[test]
+    fn simplify_collect_multiple_like_terms() {
+        let rules = RuleSet::standard();
+        let expr = add(
+            add(add(add(scalar("x"), scalar("x")), scalar("y")), scalar("x")),
+            mul(constant(3.0), scalar("y")),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(
+            result,
+            add(
+                mul(constant(3.0), scalar("x")),
+                mul(constant(4.0), scalar("y"))
+            )
+        );
+    }
+
+    #[test]
+    fn simplify_collect_tensor_like_terms() {
+        let rules = RuleSet::standard();
+        let expr = add(
+            add(tensor("A", vec![upper("i")]), tensor("A", vec![upper("i")])),
+            mul(constant(2.0), tensor("A", vec![upper("i")])),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(
+            result,
+            mul(constant(4.0), tensor("A", vec![upper("i")]))
+        );
+    }
+
+    #[test]
+    fn simplify_collect_with_subtraction() {
+        let rules = RuleSet::standard();
+        let expr = add(add(mul(constant(3.0), scalar("y")), scalar("x")), neg(scalar("y")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(
+            result,
+            add(scalar("x"), mul(constant(2.0), scalar("y")))
+        );
+    }
+
+    #[test]
+    fn simplify_distribute_one_plus_and_cancel() {
+        let rules = RuleSet::standard();
+        let expr = add(
+            add(mul(scalar("x"), add(constant(1.0), scalar("y"))), neg(mul(scalar("x"), scalar("y")))),
+            scalar("x"),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, mul(constant(2.0), scalar("x")));
+    }
+
+    #[test]
+    fn simplify_distribute_cancel_general() {
+        let rules = RuleSet::standard();
+        let expr = add(
+            mul(scalar("x"), add(scalar("a"), scalar("b"))),
+            neg(mul(scalar("x"), scalar("b"))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, mul(scalar("x"), scalar("a")));
     }
 
     #[test]
