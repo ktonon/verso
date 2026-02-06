@@ -30,7 +30,7 @@ pub fn run() -> io::Result<()> {
                 writeln!(stdout, "{}\n", simplified)?;
             }
             Err(err) => {
-                writeln!(stdout, "Error: {:?}", err)?;
+                writeln!(stdout, "Error: {:?}\n", err)?;
             }
         }
     }

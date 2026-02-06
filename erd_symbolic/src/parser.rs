@@ -74,18 +74,10 @@ fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
             continue;
         }
 
-        if ch.is_ascii_alphabetic() || ch == '_' {
-            if ch == '_' && chars.clone().nth(1) == Some('(') {
-                chars.next();
-                tokens.push(Token::Underscore);
-                continue;
-            }
+        if ch.is_ascii_alphabetic() {
             let mut s = String::new();
             while let Some(&c) = chars.peek() {
-                if c == '_' && chars.clone().nth(1) == Some('(') {
-                    break;
-                }
-                if c.is_ascii_alphanumeric() || c == '_' {
+                if c.is_ascii_alphanumeric() {
                     s.push(c);
                     chars.next();
                 } else {
@@ -129,6 +121,10 @@ fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
             ',' => {
                 chars.next();
                 tokens.push(Token::Comma);
+            }
+            '_' => {
+                chars.next();
+                tokens.push(Token::Underscore);
             }
             '^' => {
                 chars.next();
@@ -375,9 +371,21 @@ impl Parser {
 
     fn parse_log_base_tokens(&mut self) -> Result<crate::expr::Expr, ParseError> {
         self.expect(Token::Underscore)?;
-        self.expect(Token::LParen)?;
-        let base = self.parse_additive()?;
-        self.expect(Token::RParen)?;
+        let base = if self.peek() == Some(&Token::LParen) {
+            self.next();
+            let base_expr = self.parse_additive()?;
+            self.expect(Token::RParen)?;
+            base_expr
+        } else {
+            match self.next() {
+                Some(Token::Number(s)) => constant(
+                    s.parse()
+                        .map_err(|_| ParseError::InvalidNumber(s.clone()))?,
+                ),
+                Some(Token::Ident(name)) => scalar(&name),
+                _ => return Err(ParseError::InvalidLogBase),
+            }
+        };
         self.expect(Token::LParen)?;
         let arg = self.parse_additive()?;
         self.expect(Token::RParen)?;
@@ -417,27 +425,48 @@ impl Parser {
     }
 
     fn parse_index_list(&mut self, position: IndexPosition) -> Result<Vec<Index>, ParseError> {
-        self.expect(Token::LParen)?;
-        let mut indices = Vec::new();
-        loop {
-            let ident = match self.next() {
-                Some(Token::Ident(name)) => name,
-                _ => return Err(ParseError::InvalidIndexList),
-            };
-            indices.push(Index { name: ident, position: position.clone() });
-            match self.peek() {
-                Some(Token::Comma) => {
-                    self.next();
-                    continue;
+        if self.peek() == Some(&Token::LParen) {
+            self.next();
+            let mut indices = Vec::new();
+            loop {
+                let ident = match self.next() {
+                    Some(Token::Ident(name)) => name,
+                    _ => return Err(ParseError::InvalidIndexList),
+                };
+                indices.push(Index { name: ident, position: position.clone() });
+                match self.peek() {
+                    Some(Token::Comma) => {
+                        self.next();
+                        continue;
+                    }
+                    Some(Token::RParen) => {
+                        self.next();
+                        break;
+                    }
+                    _ => return Err(ParseError::InvalidIndexList),
                 }
-                Some(Token::RParen) => {
-                    self.next();
-                    break;
+            }
+            Ok(indices)
+        } else {
+            match self.next() {
+                Some(Token::Ident(name)) => {
+                    let mut parts = name.split('_').filter(|p| !p.is_empty());
+                    let first = parts.next().ok_or(ParseError::InvalidIndexList)?;
+                    let mut indices = vec![Index {
+                        name: first.to_string(),
+                        position: position.clone(),
+                    }];
+                    for part in parts {
+                        indices.push(Index {
+                            name: part.to_string(),
+                            position: IndexPosition::Lower,
+                        });
+                    }
+                    Ok(indices)
                 }
-                _ => return Err(ParseError::InvalidIndexList),
+                _ => Err(ParseError::InvalidIndexList),
             }
         }
-        Ok(indices)
     }
 
     fn next_starts_primary(&self) -> bool {
@@ -509,6 +538,21 @@ mod tests {
             expr,
             tensor("X", vec![lower("i"), lower("j"), upper("k")])
         );
+    }
+
+    #[test]
+    fn parse_compact_indices() {
+        let expr = parse_expr("d^v_p").unwrap();
+        assert_eq!(
+            expr,
+            tensor("d", vec![lower("p"), upper("v")])
+        );
+    }
+
+    #[test]
+    fn parse_compact_lower_only() {
+        let expr = parse_expr("v_p").unwrap();
+        assert_eq!(expr, tensor("v", vec![lower("p")]));
     }
 
     #[test]
