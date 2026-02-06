@@ -59,10 +59,10 @@ impl std::fmt::Display for Expr {
 
                     let mut result = name.clone();
                     if !lower.is_empty() {
-                        result.push_str(&format!("_{}", lower.join("")));
+                        result.push_str(&format!("_({})", lower.join(",")));
                     }
                     if !upper.is_empty() {
-                        result.push_str(&format!("^{}", upper.join("")));
+                        result.push_str(&format!("^({})", upper.join(",")));
                     }
                     write!(f, "{}", result)
                 }
@@ -175,11 +175,11 @@ mod tests {
 
     #[test]
     fn display_tensor() {
-        assert_eq!(format!("{}", tensor("X", vec![lower("i")])), "X_i");
-        assert_eq!(format!("{}", tensor("X", vec![upper("i")])), "X^i");
+        assert_eq!(format!("{}", tensor("X", vec![lower("i")])), "X_(i)");
+        assert_eq!(format!("{}", tensor("X", vec![upper("i")])), "X^(i)");
         assert_eq!(
             format!("{}", tensor("X", vec![lower("i"), lower("j"), upper("k")])),
-            "X_ij^k"
+            "X_(i,j)^(k)"
         );
     }
 
@@ -205,7 +205,7 @@ mod tests {
     fn display_mul_single_contraction() {
         // A^i B_i contracts on i → single contraction → dot
         let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![lower("i")]));
-        assert_eq!(format!("{}", e), "A^i ⋅ B_i");
+        assert_eq!(format!("{}", e), "A^(i) ⋅ B_(i)");
     }
 
     #[test]
@@ -215,14 +215,14 @@ mod tests {
             tensor("A", vec![upper("i"), upper("j")]),
             tensor("B", vec![lower("i"), lower("j")]),
         );
-        assert_eq!(format!("{}", e), "A^ij : B_ij");
+        assert_eq!(format!("{}", e), "A^(i,j) : B_(i,j)");
     }
 
     #[test]
     fn display_mul_outer_product() {
         // A^i B^j has no contractions (both upper) → outer/tensor product
         let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]));
-        assert_eq!(format!("{}", e), "A^i ⊗ B^j");
+        assert_eq!(format!("{}", e), "A^(i) ⊗ B^(j)");
     }
 
     #[test]
