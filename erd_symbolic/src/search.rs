@@ -25,6 +25,14 @@ impl Default for BeamSearch {
     }
 }
 
+/// A rewrite with metadata about its origin.
+#[derive(Clone)]
+struct Rewrite {
+    expr: Expr,
+    /// True if this rewrite came from a rule application (not just commutativity)
+    from_rule: bool,
+}
+
 impl BeamSearch {
     pub fn new(beam_width: usize, max_steps: usize) -> Self {
         BeamSearch {
@@ -34,20 +42,26 @@ impl BeamSearch {
     }
 
     /// Generate all possible single-step rewrites of an expression.
-    /// This includes applying rules at every position in the expression tree.
-    fn all_rewrites(&self, expr: &Expr, rules: &RuleSet) -> Vec<Expr> {
+    /// Returns rewrites tagged with whether they came from a rule or commutativity.
+    fn all_rewrites(&self, expr: &Expr, rules: &RuleSet) -> Vec<Rewrite> {
         let mut results = Vec::new();
 
         // Try applying each rule at the root
         for rule in rules.iter() {
             if let Some(rewritten) = rule.apply_ltr(expr) {
-                results.push(rewritten);
+                results.push(Rewrite {
+                    expr: rewritten,
+                    from_rule: true,
+                });
             }
         }
 
-        // Try applying commutative swaps at the root
+        // Try applying commutative swaps at the root (not from rules)
         if let Some(swapped) = self.try_commute(expr) {
-            results.push(swapped);
+            results.push(Rewrite {
+                expr: swapped,
+                from_rule: false,
+            });
         }
 
         // Recursively try rewrites in children
@@ -55,47 +69,74 @@ impl BeamSearch {
             Expr::Const(_) | Expr::Var { .. } => {}
 
             Expr::Add(a, b) => {
-                for rewritten_a in self.all_rewrites(a, rules) {
-                    results.push(Expr::Add(Box::new(rewritten_a), b.clone()));
+                for rewrite in self.all_rewrites(a, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Add(Box::new(rewrite.expr), b.clone()),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
-                for rewritten_b in self.all_rewrites(b, rules) {
-                    results.push(Expr::Add(a.clone(), Box::new(rewritten_b)));
+                for rewrite in self.all_rewrites(b, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Add(a.clone(), Box::new(rewrite.expr)),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
             }
 
             Expr::Mul(a, b) => {
-                for rewritten_a in self.all_rewrites(a, rules) {
-                    results.push(Expr::Mul(Box::new(rewritten_a), b.clone()));
+                for rewrite in self.all_rewrites(a, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Mul(Box::new(rewrite.expr), b.clone()),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
-                for rewritten_b in self.all_rewrites(b, rules) {
-                    results.push(Expr::Mul(a.clone(), Box::new(rewritten_b)));
+                for rewrite in self.all_rewrites(b, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Mul(a.clone(), Box::new(rewrite.expr)),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
             }
 
             Expr::Pow(base, exp) => {
-                for rewritten_base in self.all_rewrites(base, rules) {
-                    results.push(Expr::Pow(Box::new(rewritten_base), exp.clone()));
+                for rewrite in self.all_rewrites(base, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Pow(Box::new(rewrite.expr), exp.clone()),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
-                for rewritten_exp in self.all_rewrites(exp, rules) {
-                    results.push(Expr::Pow(base.clone(), Box::new(rewritten_exp)));
+                for rewrite in self.all_rewrites(exp, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Pow(base.clone(), Box::new(rewrite.expr)),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
             }
 
             Expr::Neg(a) => {
-                for rewritten_a in self.all_rewrites(a, rules) {
-                    results.push(Expr::Neg(Box::new(rewritten_a)));
+                for rewrite in self.all_rewrites(a, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Neg(Box::new(rewrite.expr)),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
             }
 
             Expr::Inv(a) => {
-                for rewritten_a in self.all_rewrites(a, rules) {
-                    results.push(Expr::Inv(Box::new(rewritten_a)));
+                for rewrite in self.all_rewrites(a, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Inv(Box::new(rewrite.expr)),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
             }
 
             Expr::Fn(kind, a) => {
-                for rewritten_a in self.all_rewrites(a, rules) {
-                    results.push(Expr::Fn(kind.clone(), Box::new(rewritten_a)));
+                for rewrite in self.all_rewrites(a, rules) {
+                    results.push(Rewrite {
+                        expr: Expr::Fn(kind.clone(), Box::new(rewrite.expr)),
+                        from_rule: rewrite.from_rule,
+                    });
                 }
             }
         }
@@ -130,25 +171,37 @@ impl SearchStrategy for BeamSearch {
         // Track the best (lowest complexity) expression seen
         let mut best = expr.clone();
         let mut best_complexity = expr.complexity();
+        // Track if best came from a rule (vs being the original or a commutative swap)
+        let mut best_from_rule = false;
 
         for _step in 0..self.max_steps {
             let mut next_beam: Vec<Expr> = Vec::new();
 
             // Generate all rewrites from all current candidates
             for candidate in &beam {
-                for rewritten in self.all_rewrites(candidate, rules) {
-                    let key = Self::expr_key(&rewritten);
+                for rewrite in self.all_rewrites(candidate, rules) {
+                    let key = Self::expr_key(&rewrite.expr);
                     if !seen.contains(&key) {
                         seen.insert(key);
 
-                        // Update best if this is simpler
-                        let complexity = rewritten.complexity();
-                        if complexity < best_complexity {
-                            best = rewritten.clone();
+                        let complexity = rewrite.expr.complexity();
+
+                        // Update best if:
+                        // 1. This is strictly simpler, OR
+                        // 2. Same complexity but this is from a rule and current best isn't
+                        //    (prefer canonical rule-based forms over original/swapped forms)
+                        let dominated = complexity < best_complexity
+                            || (complexity == best_complexity
+                                && rewrite.from_rule
+                                && !best_from_rule);
+
+                        if dominated {
+                            best = rewrite.expr.clone();
                             best_complexity = complexity;
+                            best_from_rule = rewrite.from_rule;
                         }
 
-                        next_beam.push(rewritten);
+                        next_beam.push(rewrite.expr);
                     }
                 }
             }
@@ -753,14 +806,13 @@ mod tests {
 
     #[test]
     fn simplify_pow_negative_exponent() {
-        // x^(-1) with tensor rules only: pow_neg_exp produces 1/x^1 which has
-        // the same complexity as x^(-1), so beam search doesn't prefer it.
-        // Use standard rules to get the full simplification to 1/x.
+        // x^(-1) with tensor rules: pow_neg_exp produces 1/x^1
+        // Same complexity, but rule-based rewrites are preferred
         let rules = RuleSet::tensor();
         let expr = pow(scalar("x"), neg(constant(1.0)));
         let result = simplify(&expr, &rules);
-        // Without pow_one rule, the transformation doesn't reduce complexity
-        assert_eq!(result, expr);
+        // pow_neg_exp: x^(-a) = 1/x^a
+        assert_eq!(result, inv(pow(scalar("x"), constant(1.0))));
     }
 
     #[test]
@@ -891,12 +943,12 @@ mod tests {
     #[test]
     fn simplify_pow_of_pow() {
         // (x^2)^3 = x^(2*3) with tensor rules
-        // Both forms have the same complexity, so beam search doesn't prefer the rewrite
+        // Same complexity, but rule-based rewrites are preferred
         let rules = RuleSet::tensor();
         let expr = pow(pow(scalar("x"), constant(2.0)), constant(3.0));
         let result = simplify(&expr, &rules);
-        // pow_of_pow doesn't reduce complexity: both forms have complexity 5
-        assert_eq!(result, expr);
+        // pow_of_pow: (x^a)^b = x^(a*b)
+        assert_eq!(result, pow(scalar("x"), mul(constant(2.0), constant(3.0))));
     }
 
     #[test]
@@ -1023,22 +1075,22 @@ mod tests {
 
     #[test]
     fn simplify_x_times_x_square() {
-        // x * x = x^2 - both forms have the same complexity (3)
-        // Beam search doesn't prefer transformations that don't reduce complexity
+        // x * x = x^2 - same complexity, but rule-based rewrites are preferred
         let rules = RuleSet::standard();
         let expr = mul(scalar("x"), scalar("x"));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, expr);
+        // mul_self_square: x * x = x^2
+        assert_eq!(result, pow(scalar("x"), constant(2.0)));
     }
 
     #[test]
     fn simplify_sin_of_neg_x() {
-        // sin(-x) = -sin(x) - both forms have the same complexity (3)
-        // Beam search doesn't prefer transformations that don't reduce complexity
+        // sin(-x) = -sin(x) - same complexity, but rule-based rewrites are preferred
         let rules = RuleSet::trigonometric();
         let expr = sin(neg(scalar("x")));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, expr);
+        // sin_neg: sin(-x) = -sin(x)
+        assert_eq!(result, neg(sin(scalar("x"))));
     }
 
     #[test]
