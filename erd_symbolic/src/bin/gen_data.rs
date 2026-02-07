@@ -10,11 +10,13 @@ use std::io::BufWriter;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct CliArgs {
-    output: String,
+    output: Option<String>,
     count: usize,
     seed: u64,
     max_depth: usize,
     num_vars: usize,
+    min_complexity: usize,
+    max_complexity: usize,
     search_runs: usize,
     beam_width: usize,
     max_steps: usize,
@@ -24,16 +26,38 @@ struct CliArgs {
 impl Default for CliArgs {
     fn default() -> Self {
         CliArgs {
-            output: String::new(),
+            output: None,
             count: 0,
             seed: 42,
             max_depth: 5,
             num_vars: 3,
+            min_complexity: 3,
+            max_complexity: usize::MAX,
             search_runs: 5,
             beam_width: 20,
             max_steps: 200,
             epsilon: 0.3,
         }
+    }
+}
+
+impl CliArgs {
+    fn default_output_path(&self) -> String {
+        let max_c = if self.max_complexity == usize::MAX {
+            "inf".to_string()
+        } else {
+            self.max_complexity.to_string()
+        };
+        format!(
+            "data_training/d{}_v{}_c{}-{}_n{}_s{}.jsonl",
+            self.max_depth, self.num_vars, self.min_complexity, max_c, self.count, self.seed,
+        )
+    }
+
+    fn output_path(&self) -> String {
+        self.output
+            .clone()
+            .unwrap_or_else(|| self.default_output_path())
     }
 }
 
@@ -44,9 +68,10 @@ fn parse_args() -> Result<CliArgs, String> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--output" => {
-                args.output = iter
-                    .next()
-                    .ok_or("--output requires a value".to_string())?;
+                args.output = Some(
+                    iter.next()
+                        .ok_or("--output requires a value".to_string())?,
+                );
             }
             "--count" => {
                 args.count = iter
@@ -97,6 +122,20 @@ fn parse_args() -> Result<CliArgs, String> {
                     .parse()
                     .map_err(|e| format!("--max-steps: {}", e))?;
             }
+            "--min-complexity" => {
+                args.min_complexity = iter
+                    .next()
+                    .ok_or("--min-complexity requires a value".to_string())?
+                    .parse()
+                    .map_err(|e| format!("--min-complexity: {}", e))?;
+            }
+            "--max-complexity" => {
+                args.max_complexity = iter
+                    .next()
+                    .ok_or("--max-complexity requires a value".to_string())?
+                    .parse()
+                    .map_err(|e| format!("--max-complexity: {}", e))?;
+            }
             "--epsilon" => {
                 args.epsilon = iter
                     .next()
@@ -114,9 +153,6 @@ fn parse_args() -> Result<CliArgs, String> {
         }
     }
 
-    if args.output.is_empty() {
-        return Err("--output is required".to_string());
-    }
     if args.count == 0 {
         return Err("--count is required and must be > 0".to_string());
     }
@@ -125,18 +161,20 @@ fn parse_args() -> Result<CliArgs, String> {
 
 fn print_usage() {
     eprintln!(
-        "Usage: gen_data --output PATH --count N [options]
+        "Usage: gen_data --count N [options]
 
 Options:
-  --output PATH       Output JSONL file (required)
-  --count N           Number of expressions to attempt (required)
-  --seed N            Master seed (default 42)
-  --max-depth N       Expression max depth (default 5)
-  --num-vars N        Distinct variables (default 3)
-  --search-runs N     Beam search runs per expression (default 5)
-  --beam-width N      Beam width (default 20)
-  --max-steps N       Max search steps (default 200)
-  --epsilon F         Epsilon-greedy fraction (default 0.3)"
+  --output PATH         Output JSONL file (default: data_training/<params>.jsonl)
+  --count N             Number of expressions to attempt (required)
+  --seed N              Master seed (default 42)
+  --max-depth N         Expression max depth (default 5)
+  --num-vars N          Distinct variables (default 3)
+  --min-complexity N    Skip expressions with complexity < N (default 3)
+  --max-complexity N    Skip expressions with complexity > N (default unlimited)
+  --search-runs N       Beam search runs per expression (default 5)
+  --beam-width N        Beam width (default 20)
+  --max-steps N         Max search steps (default 200)
+  --epsilon F           Epsilon-greedy fraction (default 0.3)"
     );
 }
 
@@ -150,10 +188,18 @@ fn main() {
         }
     };
 
+    let output_path = args.output_path();
+
+    let max_c_display = if args.max_complexity == usize::MAX {
+        "unlimited".to_string()
+    } else {
+        args.max_complexity.to_string()
+    };
     eprintln!(
-        "Generating training data: count={}, seed={}, max_depth={}, num_vars={}, search_runs={}",
-        args.count, args.seed, args.max_depth, args.num_vars, args.search_runs
+        "Generating training data: count={}, seed={}, max_depth={}, num_vars={}, complexity={}..{}, search_runs={}",
+        args.count, args.seed, args.max_depth, args.num_vars, args.min_complexity, max_c_display, args.search_runs
     );
+    eprintln!("Output: {}", output_path);
 
     let rules = IndexedRuleSet::new(RuleSet::full());
     let search = RandomizedBeamSearch {
@@ -178,8 +224,9 @@ fn main() {
             let mut rng = StdRng::seed_from_u64(expr_seed);
             let expr = gen_expr(&mut rng, &gen_config);
 
-            // Skip trivially simple expressions
-            if expr.complexity() <= 2 {
+            // Skip expressions outside the complexity range
+            let c = expr.complexity();
+            if c < args.min_complexity || c > args.max_complexity {
                 skipped.fetch_add(1, Ordering::Relaxed);
                 return None;
             }
@@ -213,9 +260,19 @@ fn main() {
         })
         .collect();
 
+    // Ensure output directory exists
+    if let Some(parent) = std::path::Path::new(&output_path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent).unwrap_or_else(|e| {
+                eprintln!("Failed to create directory {}: {}", parent.display(), e);
+                std::process::exit(1);
+            });
+        }
+    }
+
     // Write JSONL output
-    let file = File::create(&args.output).unwrap_or_else(|e| {
-        eprintln!("Failed to create {}: {}", args.output, e);
+    let file = File::create(&output_path).unwrap_or_else(|e| {
+        eprintln!("Failed to create {}: {}", output_path, e);
         std::process::exit(1);
     });
     let mut writer = BufWriter::new(file);
@@ -227,7 +284,7 @@ fn main() {
     eprintln!(
         "Done: {} examples written to {} ({} skipped)",
         examples.len(),
-        args.output,
+        output_path,
         skipped.load(Ordering::Relaxed)
     );
 }
