@@ -212,11 +212,19 @@ Each example is one complete simplification:
 
 ### Position Annotation
 
-Currently the trace records which rule was applied but not where. Extend the trace recording in `all_rewrites_depth` to track the AST path for each rewrite. Convert path to pre-order node index during data export.
+Each trace step records the AST path where the rule was applied. During export, the path is converted to a pre-order token index via `path_to_position()`.
 
-### Data Volume
+### Data Volume & Curriculum Rounds
 
-Target: 100K-1M unique expressions, each with the shortest trace from N beam search runs. Generation is embarrassingly parallel.
+Training data is generated in three rounds with increasing complexity, using different seeds to avoid overlap:
+
+| Round | Complexity | Seed | Purpose |
+|-------|-----------|------|---------|
+| **Round 1** | 3–12 | 42 | Learn individual rules: short token sequences (3-15 tokens), mostly 1-3 step traces |
+| **Round 2** | 8–20 | 43 | Learn multi-step chains: overlapping range provides continuity, 2-5 step traces |
+| **Round 3** | 3–unlimited | 44 | Full distribution: generalize to longer traces and higher complexity |
+
+Each round generates 10K expressions with 5 beam search runs each (`npm run build:data`). Higher `--min-complexity` reduces the skip rate by filtering out trivially simple expressions before running beam search. Different seeds per round ensure distinct expression populations despite the overlapping complexity ranges.
 
 ## 4. Model Architecture
 
