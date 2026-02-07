@@ -18,7 +18,9 @@
       "Bash(/Users/ktonon/repos/erd/target/release/validate:*)",
       "Bash(find:*)",
       "Bash(npm run rl-train:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "WebFetch(domain:burn.dev)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
