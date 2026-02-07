@@ -495,6 +495,7 @@ impl RuleSet {
     /// Standard arithmetic identities.
     pub fn standard() -> RuleSet {
         let x = || wildcard("x");
+        let y = || wildcard("y");
         let lo = || wildcard("lo");
         let hi = || wildcard("hi");
         let v = || p_var_wild("v", vec![]);
@@ -504,6 +505,11 @@ impl RuleSet {
         // Additive identity: x + 0 = x
         rs.add(rule("add_zero_right", p_add(x(), p_const(0.0)), x()));
         rs.add(rule("add_zero_left", p_add(p_const(0.0), x()), x()));
+
+        // Commutativity: x + y = y + x, x * y = y * x
+        // Depth-limited recursion in all_rewrites prevents exponential blowup
+        rs.add(rule("add_commute", p_add(x(), y()), p_add(y(), x())));
+        rs.add(rule("mul_commute", p_mul(x(), y()), p_mul(y(), x())));
 
         // Multiplicative identity: x * 1 = x
         rs.add(rule("mul_one_right", p_mul(x(), p_const(1.0)), x()));
@@ -738,6 +744,15 @@ impl RuleSet {
             p_add(
                 p_pow(p_sin(x()), p_const(2.0)),
                 p_pow(p_cos(x()), p_const(2.0)),
+            ),
+            p_const(1.0),
+        ));
+        // cos²x + sin²x = 1 (reversed order)
+        rs.add(rule(
+            "pythagorean_rev",
+            p_add(
+                p_pow(p_cos(x()), p_const(2.0)),
+                p_pow(p_sin(x()), p_const(2.0)),
             ),
             p_const(1.0),
         ));
