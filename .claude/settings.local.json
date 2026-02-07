@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(head:*)",
       "Bash(cargo test:*)",
       "Bash(cargo run:*)",
       "Bash(cargo build:*)",
@@ -16,7 +17,8 @@
       "Bash(PYTHONPATH=erd_training python3:*)",
       "Bash(/Users/ktonon/repos/erd/target/release/validate:*)",
       "Bash(find:*)",
-      "Bash(npm run rl-train:*)"
+      "Bash(npm run rl-train:*)",
+      "Bash(gh api:*)"
     ]
   }
 }
