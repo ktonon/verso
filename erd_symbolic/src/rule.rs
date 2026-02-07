@@ -777,8 +777,12 @@ impl RuleSet {
         let pi4 = || p_named(NamedConst::FracPi4);
         let pi6 = || p_named(NamedConst::FracPi6);
         let two_pi = || p_named(NamedConst::TwoPi);
+        let frac2pi3 = || p_named(NamedConst::Frac2Pi3);
+        let frac3pi4 = || p_named(NamedConst::Frac3Pi4);
+        let frac5pi6 = || p_named(NamedConst::Frac5Pi6);
         let sqrt2_2 = || p_named(NamedConst::Frac1Sqrt2);
         let sqrt3_2 = || p_named(NamedConst::FracSqrt3By2);
+        let sqrt3 = || p_named(NamedConst::Sqrt3);
         let e = || p_named(NamedConst::E);
 
         let mut rs = Self::new();
@@ -798,13 +802,22 @@ impl RuleSet {
         rs.add(rule("cos_pi_6", p_cos(pi6()), sqrt3_2()));            // cos(π/6) = √3/2
         rs.add(rule("sin_2pi", p_sin(two_pi()), p_const(0.0)));      // sin(2π) = 0
         rs.add(rule("cos_2pi", p_cos(two_pi()), p_const(1.0)));      // cos(2π) = 1
-        // No NamedConst for 3π/2 yet — keep as computed constant
-        let three_pi_over_2 = 3.0 * std::f64::consts::FRAC_PI_2;
-        rs.add(rule("sin_3pi_2", p_sin(p_const(three_pi_over_2)), p_const(-1.0))); // sin(3π/2) = -1
-        rs.add(rule("cos_3pi_2", p_cos(p_const(three_pi_over_2)), p_const(0.0))); // cos(3π/2) = 0
+        // Second quadrant (sin_3pi_2 / cos_3pi_2 handled by try_fold_trig in eval_constants)
+        rs.add(rule("sin_2pi_3", p_sin(frac2pi3()), sqrt3_2()));           // sin(2π/3) = √3/2
+        rs.add(rule("cos_2pi_3", p_cos(frac2pi3()), p_const(-0.5)));      // cos(2π/3) = -1/2
+        rs.add(rule("sin_3pi_4", p_sin(frac3pi4()), sqrt2_2()));           // sin(3π/4) = √2/2
+        rs.add(rule("cos_3pi_4", p_cos(frac3pi4()), p_neg(sqrt2_2())));   // cos(3π/4) = -√2/2
+        rs.add(rule("sin_5pi_6", p_sin(frac5pi6()), p_const(0.5)));       // sin(5π/6) = 1/2
+        rs.add(rule("cos_5pi_6", p_cos(frac5pi6()), p_neg(sqrt3_2())));   // cos(5π/6) = -√3/2
+        // tan at special angles
         rs.add(rule("tan_zero", p_tan(p_const(0.0)), p_const(0.0))); // tan(0) = 0
         rs.add(rule("tan_pi", p_tan(pi()), p_const(0.0)));           // tan(π) = 0
+        rs.add(rule("tan_pi_6", p_tan(pi6()), p_mul(sqrt3(), p_inv(p_const(3.0))))); // tan(π/6) = √3/3
         rs.add(rule("tan_pi_4", p_tan(pi4()), p_const(1.0)));        // tan(π/4) = 1
+        rs.add(rule("tan_pi_3", p_tan(pi3()), sqrt3()));             // tan(π/3) = √3
+        rs.add(rule("tan_2pi_3", p_tan(frac2pi3()), p_neg(sqrt3())));                      // tan(2π/3) = -√3
+        rs.add(rule("tan_3pi_4", p_tan(frac3pi4()), p_const(-1.0)));                       // tan(3π/4) = -1
+        rs.add(rule("tan_5pi_6", p_tan(frac5pi6()), p_neg(p_mul(sqrt3(), p_inv(p_const(3.0)))))); // tan(5π/6) = -√3/3
         rs.add(rule("asin_zero", p_asin(p_const(0.0)), p_const(0.0))); // asin(0) = 0
         rs.add(rule("acos_one", p_acos(p_const(1.0)), p_const(0.0))); // acos(1) = 0
         rs.add(rule("acos_zero", p_acos(p_const(0.0)), pi2()));       // acos(0) = π/2
