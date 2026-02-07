@@ -573,6 +573,17 @@ impl RuleSet {
             p_mul(p_neg(p_const(1.0)), x()),
             p_neg(x()),
         ));
+        // Also handle Const(-1.0) form (different from Neg(Const(1.0)))
+        rs.add(rule(
+            "mul_const_neg_one_right",
+            p_mul(x(), p_const(-1.0)),
+            p_neg(x()),
+        ));
+        rs.add(rule(
+            "mul_const_neg_one_left",
+            p_mul(p_const(-1.0), x()),
+            p_neg(x()),
+        ));
 
         // Squaring: x * x = x^2
         rs.add(rule(

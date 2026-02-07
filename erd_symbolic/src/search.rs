@@ -59,6 +59,7 @@ impl BeamSearch {
         }
 
         // Try applying commutative swaps at the root (not from rules)
+        // Commutativity can't be a rule because it creates infinite cycles (x+y → y+x → x+y)
         if let Some(swapped) = self.try_commute(expr) {
             results.push(Rewrite {
                 expr: swapped,
@@ -159,6 +160,8 @@ impl BeamSearch {
     }
 
     /// Try to commute operands of commutative operations (Add, Mul).
+    /// This is handled specially (not as a rule) because commutativity creates
+    /// infinite cycles when expressed as a bidirectional rule (x+y ↔ y+x).
     fn try_commute(&self, expr: &Expr) -> Option<Expr> {
         match expr {
             Expr::Add(a, b) => Some(Expr::Add(b.clone(), a.clone())),
