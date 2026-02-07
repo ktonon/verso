@@ -8,7 +8,8 @@
       "Bash(wc:*)",
       "Bash(grep:*)",
       "Bash(cargo check:*)",
-      "Bash(printf:*)"
+      "Bash(printf:*)",
+      "Bash(python3:*)"
     ]
   }
 }

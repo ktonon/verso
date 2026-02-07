@@ -1,5 +1,6 @@
 mod expr;
 pub mod fmt;
+pub mod gen_expr;
 mod parser;
 pub mod rational;
 pub mod repl;
@@ -8,6 +9,7 @@ mod search;
 mod to_tex;
 pub mod random_search;
 pub mod token;
+pub mod training_data;
 
 pub use expr::*;
 pub use fmt::{fmt_colored, Colored};
