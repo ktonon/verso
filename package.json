@@ -15,7 +15,7 @@
 		"lint": "eslint .",
 		"repl": "cargo run -p erd_symbolic --release --bin repl",
 		"ml:reset": "rm -rf data_training checkpoints",
-		"train": "PYTHONUNBUFFERED=1 PYTHONPATH=erd_training python3 -m erd_training.train",
+		"train": "cargo run --release -p erd_training --bin train -- --device wgpu",
 		"evaluate": "cargo build --release --bin validate && PYTHONUNBUFFERED=1 PYTHONPATH=erd_training python3 -m erd_training.evaluate",
 		"rl-train": "cargo build --release --bin validate && PYTHONUNBUFFERED=1 PYTHONPATH=erd_training python3 -m erd_training.rl_train",
 		"start": "./scripts/build-app.js --server"
