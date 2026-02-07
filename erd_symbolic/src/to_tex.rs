@@ -1,4 +1,20 @@
 use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind, NamedConst};
+use crate::rational::Rational;
+
+fn frac_pi_to_tex(r: &Rational) -> String {
+    let n = r.num();
+    let d = r.den();
+    match (n, d) {
+        (0, _) => "0".to_string(),
+        (1, 1) => "\\pi".to_string(),
+        (-1, 1) => "-\\pi".to_string(),
+        (_, 1) => format!("{}\\pi", n),
+        (1, _) => format!("\\frac{{\\pi}}{{{}}}", d),
+        (-1, _) => format!("-\\frac{{\\pi}}{{{}}}", d),
+        _ if n < 0 => format!("-\\frac{{{}\\pi}}{{{}}}", -n, d),
+        _ => format!("\\frac{{{}\\pi}}{{{}}}", n, d),
+    }
+}
 
 pub trait ToTex {
     fn to_tex(&self) -> String;
@@ -70,7 +86,17 @@ impl ToTex for Expr {
                 }
             }
             Expr::Integer(hi, lo) => format!("{}", hi * 10 + lo.value()),
+            Expr::Rational(r) => {
+                if r.is_integer() {
+                    format!("{}", r.num())
+                } else if r.is_negative() {
+                    format!("-\\frac{{{}}}{{{}}}", -r.num(), r.den())
+                } else {
+                    format!("\\frac{{{}}}{{{}}}", r.num(), r.den())
+                }
+            }
             Expr::Named(nc) => nc.to_tex(),
+            Expr::FracPi(r) => frac_pi_to_tex(r),
             Expr::Var { name, indices } => {
                 if indices.is_empty() {
                     name.clone()
@@ -173,7 +199,7 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
 fn is_sqrt_exp(exp: &Expr) -> bool {
     match exp {
         Expr::Const(n) => *n == 0.5,
-        Expr::Integer(_, _) => false,
+        Expr::Integer(_, _) | Expr::Rational(_) | Expr::FracPi(_) => false,
         Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
         _ => false,
     }

@@ -6,7 +6,8 @@
       "Bash(cargo build:*)",
       "Bash(1 <<'EOF'\nx*\\(a+b\\) - x*b\n:q\nEOF)",
       "Bash(wc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(cargo check:*)"
     ]
   }
 }

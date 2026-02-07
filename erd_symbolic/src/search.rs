@@ -1,4 +1,5 @@
 use crate::expr::{add, classify_mul, integer, mul, neg, Expr, FnKind, MulKind, NamedConst};
+use crate::rational::Rational;
 use crate::rule::RuleSet;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -80,7 +81,12 @@ impl BeamSearch {
 
         // Recursively try rewrites in children (with reduced depth)
         match expr {
-            Expr::Const(_) | Expr::Integer(_, _) | Expr::Named(_) | Expr::Var { .. } => {}
+            Expr::Const(_)
+            | Expr::Integer(_, _)
+            | Expr::Rational(_)
+            | Expr::Named(_)
+            | Expr::FracPi(_)
+            | Expr::Var { .. } => {}
 
             Expr::Add(a, b) => {
                 for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
@@ -366,6 +372,7 @@ fn is_numeric_const(expr: &Expr) -> Option<f64> {
     match expr {
         Expr::Const(n) => Some(*n),
         Expr::Integer(hi, lo) => Some((hi * 10 + lo.value()) as f64),
+        Expr::Rational(r) => Some(r.value()),
         _ => None,
     }
 }
@@ -381,48 +388,28 @@ fn float_to_expr(val: f64) -> Expr {
     }
 }
 
-/// Snap a float to the nearest fraction with a small denominator (2, 3, 4, 6)
-/// to counteract accumulated floating-point drift from intermediate arithmetic.
-fn snap_to_fraction(x: f64) -> f64 {
-    for denom in [2.0, 3.0, 4.0, 6.0] {
-        let numer = (x * denom).round();
-        if ((x * denom) - numer).abs() < 1e-10 {
-            return numer / denom;
+
+/// For trig arguments that are float-based pi-multiples (e.g. Const(3.14...)),
+/// try to convert to FracPi(Rational). This handles legacy Const-based representations.
+fn normalize_pi_coeff(expr: Expr) -> Expr {
+    // Try to detect Const values that are pi-multiples
+    if let Expr::Const(c) = &expr {
+        let coeff = c / std::f64::consts::PI;
+        // Try to snap to a rational with small denominator
+        for &d in &[1i64, 2, 3, 4, 6] {
+            let n = (coeff * d as f64).round() as i64;
+            if ((coeff * d as f64) - n as f64).abs() < 1e-9 {
+                let r = Rational::new(n, d);
+                let normalized = r.rem_euclid(Rational::TWO);
+                return if normalized.is_zero() {
+                    Expr::FracPi(Rational::ZERO)
+                } else {
+                    Expr::FracPi(normalized)
+                };
+            }
         }
     }
-    x
-}
-
-/// For trig arguments of the form `c * π` where c is a Const with c >= 1,
-/// decompose into a form that enables integer periodicity and shift rules.
-/// - If c is a whole number: return `Integer(c) * π`
-/// - If c has a fractional part: return `frac(c) * π + floor(c) * π`
-fn normalize_pi_coeff(expr: Expr) -> Expr {
-    let coeff = match &expr {
-        Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
-            (Expr::Const(c), Expr::Named(NamedConst::Pi)) => Some(*c),
-            (Expr::Named(NamedConst::Pi), Expr::Const(c)) => Some(*c),
-            _ => None,
-        },
-        _ => None,
-    };
-    let c = match coeff {
-        Some(c) if c >= 1.0 => c,
-        _ => return expr,
-    };
-    let n = c.trunc() as i64;
-    let r = c.fract();
-    let pi = Expr::Named(NamedConst::Pi);
-    if r.abs() < 1e-12 {
-        // Pure integer: c * π → Integer(n) * π
-        mul(integer(n), pi)
-    } else {
-        // Snap remainder to a clean fraction to avoid float drift.
-        // e.g. 7*(1/3) - 2 drifts from exact 1/3, but 0.333...*3 ≈ 1.
-        let r = snap_to_fraction(r);
-        // Mixed: c * π → frac * π + int * π
-        add(mul(Expr::Const(r), pi.clone()), mul(integer(n), pi))
-    }
+    expr
 }
 
 /// Pure constant evaluation: arithmetic on Const/Integer values and trig at constant arguments.
@@ -430,11 +417,34 @@ fn normalize_pi_coeff(expr: Expr) -> Expr {
 /// not a search strategy choice.
 fn eval_constants(expr: &Expr) -> Expr {
     match expr {
-        Expr::Const(_) | Expr::Integer(_, _) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
+        Expr::Const(_)
+        | Expr::Rational(_)
+        | Expr::FracPi(_)
+        | Expr::Var { .. } => expr.clone(),
+        // Convert Integer to Rational
+        Expr::Integer(hi, lo) => Expr::Rational(Rational::from_i64(hi * 10 + lo.value())),
+        // Convert Pi-related NamedConst to FracPi
+        Expr::Named(nc) => match nc {
+            NamedConst::Pi => Expr::FracPi(Rational::ONE),
+            NamedConst::FracPi2 => Expr::FracPi(Rational::new(1, 2)),
+            NamedConst::FracPi3 => Expr::FracPi(Rational::new(1, 3)),
+            NamedConst::FracPi4 => Expr::FracPi(Rational::new(1, 4)),
+            NamedConst::FracPi6 => Expr::FracPi(Rational::new(1, 6)),
+            NamedConst::Frac2Pi3 => Expr::FracPi(Rational::new(2, 3)),
+            NamedConst::Frac3Pi4 => Expr::FracPi(Rational::new(3, 4)),
+            NamedConst::Frac5Pi6 => Expr::FracPi(Rational::new(5, 6)),
+            NamedConst::Frac5Pi4 => Expr::FracPi(Rational::new(5, 4)),
+            NamedConst::Frac7Pi6 => Expr::FracPi(Rational::new(7, 6)),
+            NamedConst::Frac3Pi2 => Expr::FracPi(Rational::new(3, 2)),
+            NamedConst::TwoPi => Expr::FracPi(Rational::TWO),
+            _ => expr.clone(),
+        },
         Expr::Neg(a) => {
             let inner = eval_constants(a);
             match &inner {
                 Expr::Const(n) => Expr::Const(-n),
+                Expr::Rational(r) => Expr::Rational(-*r),
+                Expr::FracPi(r) => Expr::FracPi(-*r),
                 // Keep Neg(Integer) as-is; negatives use Neg wrapping
                 Expr::Integer(_, _) => Expr::Neg(Box::new(inner)),
                 _ => Expr::Neg(Box::new(inner)),
@@ -442,14 +452,32 @@ fn eval_constants(expr: &Expr) -> Expr {
         }
         Expr::Inv(a) => {
             let inner = eval_constants(a);
-            match is_numeric_const(&inner) {
-                Some(n) => Expr::Const(1.0 / n),
-                None => Expr::Inv(Box::new(inner)),
+            match &inner {
+                Expr::Rational(r) if !r.is_zero() => {
+                    Expr::Rational(Rational::ONE / *r)
+                }
+                _ => match is_numeric_const(&inner) {
+                    Some(n) => Expr::Const(1.0 / n),
+                    None => Expr::Inv(Box::new(inner)),
+                },
             }
         }
         Expr::Add(a, b) => {
             let left = eval_constants(a);
             let right = eval_constants(b);
+            // Rational + Rational → Rational
+            if let (Expr::Rational(a), Expr::Rational(b)) = (&left, &right) {
+                return Expr::Rational(*a + *b);
+            }
+            // FracPi + FracPi → FracPi
+            if let (Expr::FracPi(a), Expr::FracPi(b)) = (&left, &right) {
+                let sum = *a + *b;
+                return if sum.is_zero() {
+                    Expr::Rational(Rational::ZERO)
+                } else {
+                    Expr::FracPi(sum)
+                };
+            }
             match (is_numeric_const(&left), is_numeric_const(&right)) {
                 (Some(x), Some(y)) => float_to_expr(x + y),
                 _ => Expr::Add(Box::new(left), Box::new(right)),
@@ -458,6 +486,21 @@ fn eval_constants(expr: &Expr) -> Expr {
         Expr::Mul(a, b) => {
             let left = eval_constants(a);
             let right = eval_constants(b);
+            // Rational * Rational → Rational
+            if let (Expr::Rational(a), Expr::Rational(b)) = (&left, &right) {
+                return Expr::Rational(*a * *b);
+            }
+            // Rational * FracPi → FracPi
+            if let (Expr::Rational(a), Expr::FracPi(b))
+            | (Expr::FracPi(b), Expr::Rational(a)) = (&left, &right)
+            {
+                let prod = *a * *b;
+                return if prod.is_zero() {
+                    Expr::Rational(Rational::ZERO)
+                } else {
+                    Expr::FracPi(prod)
+                };
+            }
             match (is_numeric_const(&left), is_numeric_const(&right)) {
                 (Some(x), Some(y)) => float_to_expr(x * y),
                 _ => Expr::Mul(Box::new(left), Box::new(right)),
@@ -473,10 +516,23 @@ fn eval_constants(expr: &Expr) -> Expr {
         }
         Expr::Fn(kind, a) => {
             let arg = eval_constants(a);
-            let arg = if matches!(kind, FnKind::Sin | FnKind::Cos | FnKind::Tan) {
-                normalize_pi_coeff(arg)
-            } else {
-                arg
+            let arg = match (&arg, kind) {
+                // Normalize FracPi mod 2 for trig functions
+                (Expr::FracPi(r), FnKind::Sin | FnKind::Cos | FnKind::Tan) => {
+                    let normalized = r.rem_euclid(Rational::TWO);
+                    if &normalized != r {
+                        if normalized.is_zero() {
+                            Expr::FracPi(Rational::ZERO)
+                        } else {
+                            Expr::FracPi(normalized)
+                        }
+                    } else {
+                        arg
+                    }
+                }
+                // Keep legacy normalize_pi_coeff for Const-based pi coefficients
+                (_, FnKind::Sin | FnKind::Cos | FnKind::Tan) => normalize_pi_coeff(arg),
+                _ => arg,
             };
             Expr::Fn(kind.clone(), Box::new(arg))
         }
@@ -572,7 +628,9 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
             // Same key format as equivalent Const for dedup
             format!("Const({})", (hi * 10 + lo.value()) as f64)
         }
+        Expr::Rational(r) => format!("Rat({}/{})", r.num(), r.den()),
         Expr::Named(nc) => format!("Named({:?})", nc),
+        Expr::FracPi(r) => format!("FracPi({}/{})", r.num(), r.den()),
         Expr::Var { name, indices } => {
             if indices.is_empty() {
                 format!("Var({})", name)
@@ -649,7 +707,7 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
 
     for term in terms {
         if let Some((base, coeff)) = extract_term(&term) {
-            if matches!(base, Expr::Const(_) | Expr::Integer(_, _)) {
+            if matches!(base, Expr::Const(_) | Expr::Integer(_, _) | Expr::Rational(_)) {
                 const_sum += coeff;
                 continue;
             }
@@ -727,6 +785,7 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
     match expr {
         Expr::Const(c) => Some((Expr::Const(1.0), *c)),
         Expr::Integer(hi, lo) => Some((Expr::Const(1.0), (hi * 10 + lo.value()) as f64)),
+        Expr::Rational(r) => Some((Expr::Const(1.0), r.value())),
         Expr::Neg(inner) => {
             if let Some((base, coeff)) = extract_term(inner) {
                 Some((base, -coeff))
@@ -738,6 +797,9 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
             (Expr::Const(c), other) | (other, Expr::Const(c)) => Some((other.clone(), *c)),
             (Expr::Integer(hi, lo), other) | (other, Expr::Integer(hi, lo)) => {
                 Some((other.clone(), (hi * 10 + lo.value()) as f64))
+            }
+            (Expr::Rational(r), other) | (other, Expr::Rational(r)) => {
+                Some((other.clone(), r.value()))
             }
             // Handle nested Mul with leading constant: Mul(Mul(c, x), y) => c * Mul(x, y)
             (Expr::Mul(inner_a, inner_b), _) => {

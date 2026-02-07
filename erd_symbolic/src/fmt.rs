@@ -1,5 +1,21 @@
 use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind, NamedConst};
+use crate::rational::Rational;
 use std::fmt::Display;
+
+/// Format a rational multiple of π for display.
+fn fmt_frac_pi(r: &Rational) -> String {
+    let n = r.num();
+    let d = r.den();
+    match (n, d) {
+        (0, _) => "0".to_string(),
+        (1, 1) => "π".to_string(),
+        (-1, 1) => "-π".to_string(),
+        (_, 1) => format!("{}π", n),
+        (1, _) => format!("π/{}", d),
+        (-1, _) => format!("-π/{}", d),
+        _ => format!("{}π/{}", n, d),
+    }
+}
 
 // ANSI color codes for terminal output
 mod color {
@@ -35,8 +51,15 @@ pub fn fmt_colored(expr: &Expr) -> String {
         Expr::Integer(hi, lo) => {
             format!("{}{}{}", color::CYAN, hi * 10 + lo.value(), color::RESET)
         }
+        Expr::Rational(r) => {
+            format!("{}{}{}", color::CYAN, r, color::RESET)
+        }
         Expr::Named(nc) => {
             format!("{}{}{}", color::MAGENTA, nc, color::RESET)
+        }
+        Expr::FracPi(r) => {
+            let s = fmt_frac_pi(r);
+            format!("{}{}{}", color::MAGENTA, s, color::RESET)
         }
         Expr::Var { name, indices } => {
             let order = indices.len();
@@ -155,6 +178,15 @@ pub fn fmt_colored(expr: &Expr) -> String {
                                 maybe_paren_colored(b, expr)
                             );
                         }
+                        if let Expr::Rational(r) = a.as_ref() {
+                            return format!(
+                                "{}{}{}{}",
+                                color::CYAN,
+                                r,
+                                color::RESET,
+                                maybe_paren_colored(b, expr)
+                            );
+                        }
                     }
                     let op_char = match mul_kind {
                         MulKind::Scalar => "⋅",
@@ -238,7 +270,9 @@ fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
 
 fn fmt_log_base_colored(base: &Expr) -> String {
     match base {
-        Expr::Const(_) | Expr::Integer(_, _) | Expr::Var { .. } => fmt_colored(base),
+        Expr::Const(_) | Expr::Integer(_, _) | Expr::Rational(_) | Expr::Var { .. } => {
+            fmt_colored(base)
+        }
         _ => format!(
             "{}({}{}){}",
             color::DIM,
@@ -315,7 +349,9 @@ impl std::fmt::Display for Expr {
                 }
             }
             Expr::Integer(hi, lo) => write!(f, "{}", hi * 10 + lo.value()),
+            Expr::Rational(r) => write!(f, "{}", r),
             Expr::Named(nc) => write!(f, "{}", nc),
+            Expr::FracPi(r) => write!(f, "{}", fmt_frac_pi(r)),
             Expr::Var { name, indices } => {
                 if indices.is_empty() {
                     write!(f, "{}", name)
@@ -376,6 +412,9 @@ impl std::fmt::Display for Expr {
                                     maybe_paren(b, self)
                                 );
                             }
+                            if let Expr::Rational(r) = a.as_ref() {
+                                return write!(f, "{}{}", r, maybe_paren(b, self));
+                            }
                         }
                         // Choose operator based on multiplication kind (Einstein notation)
                         // No spaces around operators for tighter visual binding
@@ -425,7 +464,7 @@ fn fmt_const(n: f64) -> String {
 fn is_sqrt_exp(exp: &Expr) -> bool {
     match exp {
         Expr::Const(n) => *n == 0.5,
-        Expr::Integer(_, _) => false,
+        Expr::Integer(_, _) | Expr::Rational(_) | Expr::FracPi(_) => false,
         Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
         _ => false,
     }
@@ -447,7 +486,9 @@ fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a 
 
 fn fmt_log_base(base: &Expr) -> String {
     match base {
-        Expr::Const(_) | Expr::Integer(_, _) | Expr::Var { .. } => format!("{}", base),
+        Expr::Const(_) | Expr::Integer(_, _) | Expr::Rational(_) | Expr::Var { .. } => {
+            format!("{}", base)
+        }
         _ => format!("({})", base),
     }
 }

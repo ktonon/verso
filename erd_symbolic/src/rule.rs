@@ -1,5 +1,6 @@
 #[allow(unused_imports)] // NamedConst is used in pattern matching via nc.value()
 use crate::expr::{Expr, FnKind, Index, IndexPosition, NamedConst};
+use crate::rational::Rational;
 use std::collections::HashMap;
 
 /// Pattern for matching index names in tensor expressions.
@@ -29,7 +30,9 @@ pub enum Pattern {
     IntEvenWild(String), // Matches Integer with even last digit
     IntOddWild(String),  // Matches Integer with odd last digit
     Const(f64),
+    Rational(Rational),  // Matches exact Rational value
     Named(NamedConst),
+    FracPi(Rational),    // Matches exact FracPi value
     Add(Box<Pattern>, Box<Pattern>),
     Mul(Box<Pattern>, Box<Pattern>),
     Neg(Box<Pattern>),
@@ -69,8 +72,16 @@ pub fn p_const(n: f64) -> Pattern {
     Pattern::Const(n)
 }
 
+pub fn p_rational(n: i64, d: i64) -> Pattern {
+    Pattern::Rational(Rational::new(n, d))
+}
+
 pub fn p_named(nc: NamedConst) -> Pattern {
     Pattern::Named(nc)
+}
+
+pub fn p_frac_pi(n: i64, d: i64) -> Pattern {
+    Pattern::FracPi(Rational::new(n, d))
 }
 
 pub fn p_add(a: Pattern, b: Pattern) -> Pattern {
@@ -250,40 +261,64 @@ impl Pattern {
             // Wildcard matches any expression
             (Pattern::Wildcard(name), _) => bind_expr(name, expr.clone(), bindings),
 
-            // ConstWild matches constants, named constants, and integers
-            (Pattern::ConstWild(name), Expr::Const(_)) => bind_expr(name, expr.clone(), bindings),
-            (Pattern::ConstWild(name), Expr::Integer(_, _)) => {
+            // ConstWild matches constants, named constants, integers, and rationals
+            (Pattern::ConstWild(name), Expr::Const(_))
+            | (Pattern::ConstWild(name), Expr::Integer(_, _))
+            | (Pattern::ConstWild(name), Expr::Rational(_))
+            | (Pattern::ConstWild(name), Expr::Named(_)) => {
                 bind_expr(name, expr.clone(), bindings)
             }
-            (Pattern::ConstWild(name), Expr::Named(_)) => bind_expr(name, expr.clone(), bindings),
             (Pattern::ConstWild(_), _) => false,
 
-            // IntWild matches any Integer
+            // IntWild matches Integer or Rational integer
             (Pattern::IntWild(name), Expr::Integer(_, _)) => {
+                bind_expr(name, expr.clone(), bindings)
+            }
+            (Pattern::IntWild(name), Expr::Rational(r)) if r.is_integer() => {
                 bind_expr(name, expr.clone(), bindings)
             }
             (Pattern::IntWild(_), _) => false,
 
-            // IntEvenWild matches Integer with even last digit
+            // IntEvenWild matches Integer/Rational with even value
             (Pattern::IntEvenWild(name), Expr::Integer(_, lo)) if lo.is_even() => {
+                bind_expr(name, expr.clone(), bindings)
+            }
+            (Pattern::IntEvenWild(name), Expr::Rational(r))
+                if r.is_integer() && r.is_even() =>
+            {
                 bind_expr(name, expr.clone(), bindings)
             }
             (Pattern::IntEvenWild(_), _) => false,
 
-            // IntOddWild matches Integer with odd last digit
+            // IntOddWild matches Integer/Rational with odd value
             (Pattern::IntOddWild(name), Expr::Integer(_, lo)) if lo.is_odd() => {
+                bind_expr(name, expr.clone(), bindings)
+            }
+            (Pattern::IntOddWild(name), Expr::Rational(r))
+                if r.is_integer() && r.is_odd() =>
+            {
                 bind_expr(name, expr.clone(), bindings)
             }
             (Pattern::IntOddWild(_), _) => false,
 
-            // Const matches equal constants (including named constants and integers by value)
+            // Const matches by value against Const, Integer, Rational, Named
             (Pattern::Const(n), Expr::Const(m)) => (n - m).abs() < f64::EPSILON,
             (Pattern::Const(n), Expr::Integer(hi, lo)) => {
                 let int_val = (hi * 10 + lo.value()) as f64;
                 (n - int_val).abs() < f64::EPSILON
             }
+            (Pattern::Const(n), Expr::Rational(r)) => (n - r.value()).abs() < 1e-12,
             (Pattern::Const(n), Expr::Named(nc)) => (n - nc.value()).abs() < f64::EPSILON,
             (Pattern::Const(_), _) => false,
+
+            // Rational matches exact Rational, or by value against Const/Integer
+            (Pattern::Rational(pr), Expr::Rational(er)) => pr == er,
+            (Pattern::Rational(pr), Expr::Const(n)) => (pr.value() - n).abs() < 1e-12,
+            (Pattern::Rational(pr), Expr::Integer(hi, lo)) => {
+                let int_val = (hi * 10 + lo.value()) as f64;
+                (pr.value() - int_val).abs() < 1e-12
+            }
+            (Pattern::Rational(_), _) => false,
 
             // Named matches named constants exactly, or by value against Const/Integer
             (Pattern::Named(pnc), Expr::Named(enc)) => pnc == enc,
@@ -293,6 +328,14 @@ impl Pattern {
                 (pnc.value() - int_val).abs() < 1e-12
             }
             (Pattern::Named(_), _) => false,
+
+            // FracPi matches exact FracPi, or by value against Named Pi-variants
+            (Pattern::FracPi(pr), Expr::FracPi(er)) => pr == er,
+            (Pattern::FracPi(pr), Expr::Named(nc)) => {
+                use std::f64::consts::PI;
+                (pr.value() * PI - nc.value()).abs() < 1e-12
+            }
+            (Pattern::FracPi(_), _) => false,
 
             // Structural matching for binary operators
             (Pattern::Add(pa, pb), Expr::Add(a, b)) => {
@@ -397,7 +440,11 @@ impl Pattern {
 
             Pattern::Const(n) => Expr::Const(*n),
 
+            Pattern::Rational(r) => Expr::Rational(*r),
+
             Pattern::Named(nc) => Expr::Named(*nc),
+
+            Pattern::FracPi(r) => Expr::FracPi(*r),
 
             Pattern::Add(pa, pb) => Expr::Add(
                 Box::new(pa.substitute(bindings)),
@@ -686,22 +733,6 @@ impl RuleSet {
             p_clamp(x(), lo(), hi()),
         ));
 
-        // === Pi-fraction recognition ===
-        // After fold_constants, Inv(Const(n)) → Const(1/n), and normalize_mul sorts
-        // Const before Named(Pi), so all patterns are Mul(Const(coeff), Named(Pi)).
-        let pi = || p_named(NamedConst::Pi);
-        rs.add(rule("pi_half", p_mul(p_const(0.5), pi()), p_named(NamedConst::FracPi2)));
-        rs.add(rule("pi_third", p_mul(p_const(1.0 / 3.0), pi()), p_named(NamedConst::FracPi3)));
-        rs.add(rule("pi_quarter", p_mul(p_const(0.25), pi()), p_named(NamedConst::FracPi4)));
-        rs.add(rule("pi_sixth", p_mul(p_const(1.0 / 6.0), pi()), p_named(NamedConst::FracPi6)));
-        rs.add(rule("two_thirds_pi", p_mul(p_const(2.0 / 3.0), pi()), p_named(NamedConst::Frac2Pi3)));
-        rs.add(rule("three_quarters_pi", p_mul(p_const(0.75), pi()), p_named(NamedConst::Frac3Pi4)));
-        rs.add(rule("five_sixths_pi", p_mul(p_const(5.0 / 6.0), pi()), p_named(NamedConst::Frac5Pi6)));
-        rs.add(rule("seven_sixths_pi", p_mul(p_const(7.0 / 6.0), pi()), p_named(NamedConst::Frac7Pi6)));
-        rs.add(rule("five_quarters_pi", p_mul(p_const(1.25), pi()), p_named(NamedConst::Frac5Pi4)));
-        rs.add(rule("three_halves_pi", p_mul(p_const(1.5), pi()), p_named(NamedConst::Frac3Pi2)));
-        rs.add(rule("two_pi", p_mul(p_const(2.0), pi()), p_named(NamedConst::TwoPi)));
-
         rs
     }
 
@@ -773,19 +804,6 @@ impl RuleSet {
     pub fn trigonometric() -> RuleSet {
         let x = || wildcard("x");
 
-        // Named constant shortcuts
-        let pi = || p_named(NamedConst::Pi);
-        let pi2 = || p_named(NamedConst::FracPi2);
-        let pi3 = || p_named(NamedConst::FracPi3);
-        let pi4 = || p_named(NamedConst::FracPi4);
-        let pi6 = || p_named(NamedConst::FracPi6);
-        let two_pi = || p_named(NamedConst::TwoPi);
-        let frac2pi3 = || p_named(NamedConst::Frac2Pi3);
-        let frac3pi4 = || p_named(NamedConst::Frac3Pi4);
-        let frac5pi4 = || p_named(NamedConst::Frac5Pi4);
-        let frac5pi6 = || p_named(NamedConst::Frac5Pi6);
-        let frac7pi6 = || p_named(NamedConst::Frac7Pi6);
-        let frac3pi2 = || p_named(NamedConst::Frac3Pi2);
         let sqrt2_2 = || p_named(NamedConst::Frac1Sqrt2);
         let sqrt3_2 = || p_named(NamedConst::FracSqrt3By2);
         let sqrt3 = || p_named(NamedConst::Sqrt3);
@@ -793,50 +811,63 @@ impl RuleSet {
 
         let mut rs = Self::new();
 
-        // === Evaluation at special values ===
-        rs.add(rule("sin_zero", p_sin(p_const(0.0)), p_const(0.0))); // sin(0) = 0
-        rs.add(rule("cos_zero", p_cos(p_const(0.0)), p_const(1.0))); // cos(0) = 1
-        rs.add(rule("sin_pi", p_sin(pi()), p_const(0.0)));           // sin(π) = 0
-        rs.add(rule("cos_pi", p_cos(pi()), p_const(-1.0)));          // cos(π) = -1
-        rs.add(rule("sin_pi_2", p_sin(pi2()), p_const(1.0)));        // sin(π/2) = 1
-        rs.add(rule("cos_pi_2", p_cos(pi2()), p_const(0.0)));        // cos(π/2) = 0
-        rs.add(rule("sin_pi_4", p_sin(pi4()), sqrt2_2()));            // sin(π/4) = √2/2
-        rs.add(rule("cos_pi_4", p_cos(pi4()), sqrt2_2()));            // cos(π/4) = √2/2
-        rs.add(rule("sin_pi_3", p_sin(pi3()), sqrt3_2()));            // sin(π/3) = √3/2
-        rs.add(rule("cos_pi_3", p_cos(pi3()), p_const(0.5)));        // cos(π/3) = 1/2
-        rs.add(rule("sin_pi_6", p_sin(pi6()), p_const(0.5)));        // sin(π/6) = 1/2
-        rs.add(rule("cos_pi_6", p_cos(pi6()), sqrt3_2()));            // cos(π/6) = √3/2
-        rs.add(rule("sin_2pi", p_sin(two_pi()), p_const(0.0)));      // sin(2π) = 0
-        rs.add(rule("cos_2pi", p_cos(two_pi()), p_const(1.0)));      // cos(2π) = 1
-        // Second quadrant
-        rs.add(rule("sin_2pi_3", p_sin(frac2pi3()), sqrt3_2()));           // sin(2π/3) = √3/2
-        rs.add(rule("cos_2pi_3", p_cos(frac2pi3()), p_const(-0.5)));      // cos(2π/3) = -1/2
-        rs.add(rule("sin_3pi_4", p_sin(frac3pi4()), sqrt2_2()));           // sin(3π/4) = √2/2
-        rs.add(rule("cos_3pi_4", p_cos(frac3pi4()), p_neg(sqrt2_2())));   // cos(3π/4) = -√2/2
-        rs.add(rule("sin_5pi_6", p_sin(frac5pi6()), p_const(0.5)));       // sin(5π/6) = 1/2
-        rs.add(rule("cos_5pi_6", p_cos(frac5pi6()), p_neg(sqrt3_2())));   // cos(5π/6) = -√3/2
-        // Third quadrant
-        rs.add(rule("sin_7pi_6", p_sin(frac7pi6()), p_const(-0.5)));      // sin(7π/6) = -1/2
-        rs.add(rule("cos_7pi_6", p_cos(frac7pi6()), p_neg(sqrt3_2())));   // cos(7π/6) = -√3/2
-        rs.add(rule("sin_5pi_4", p_sin(frac5pi4()), p_neg(sqrt2_2())));   // sin(5π/4) = -√2/2
-        rs.add(rule("cos_5pi_4", p_cos(frac5pi4()), p_neg(sqrt2_2())));   // cos(5π/4) = -√2/2
-        // 3π/2
-        rs.add(rule("sin_3pi_2", p_sin(frac3pi2()), p_const(-1.0)));      // sin(3π/2) = -1
-        rs.add(rule("cos_3pi_2", p_cos(frac3pi2()), p_const(0.0)));       // cos(3π/2) = 0
-        // tan at special angles
-        rs.add(rule("tan_zero", p_tan(p_const(0.0)), p_const(0.0))); // tan(0) = 0
-        rs.add(rule("tan_pi", p_tan(pi()), p_const(0.0)));           // tan(π) = 0
-        rs.add(rule("tan_pi_6", p_tan(pi6()), p_mul(sqrt3(), p_inv(p_const(3.0))))); // tan(π/6) = √3/3
-        rs.add(rule("tan_pi_4", p_tan(pi4()), p_const(1.0)));        // tan(π/4) = 1
-        rs.add(rule("tan_pi_3", p_tan(pi3()), sqrt3()));             // tan(π/3) = √3
-        rs.add(rule("tan_2pi_3", p_tan(frac2pi3()), p_neg(sqrt3())));                      // tan(2π/3) = -√3
-        rs.add(rule("tan_3pi_4", p_tan(frac3pi4()), p_const(-1.0)));                       // tan(3π/4) = -1
-        rs.add(rule("tan_5pi_6", p_tan(frac5pi6()), p_neg(p_mul(sqrt3(), p_inv(p_const(3.0)))))); // tan(5π/6) = -√3/3
-        rs.add(rule("asin_zero", p_asin(p_const(0.0)), p_const(0.0))); // asin(0) = 0
-        rs.add(rule("acos_one", p_acos(p_const(1.0)), p_const(0.0))); // acos(1) = 0
-        rs.add(rule("acos_zero", p_acos(p_const(0.0)), pi2()));       // acos(0) = π/2
-        rs.add(rule("atan_zero", p_atan(p_const(0.0)), p_const(0.0))); // atan(0) = 0
-        rs.add(rule("atan_one", p_atan(p_const(1.0)), pi4()));        // atan(1) = π/4
+        // === Trig at zero (matches Const(0.0) and Rational(0)) ===
+        rs.add(rule("sin_zero", p_sin(p_const(0.0)), p_const(0.0)));
+        rs.add(rule("cos_zero", p_cos(p_const(0.0)), p_const(1.0)));
+        rs.add(rule("tan_zero", p_tan(p_const(0.0)), p_const(0.0)));
+
+        // === sin evaluation at special angles (FracPi patterns) ===
+        rs.add(rule("sin_0",     p_sin(p_frac_pi(0, 1)),  p_rational(0, 1)));
+        rs.add(rule("sin_pi_6",  p_sin(p_frac_pi(1, 6)),  p_rational(1, 2)));
+        rs.add(rule("sin_pi_4",  p_sin(p_frac_pi(1, 4)),  sqrt2_2()));
+        rs.add(rule("sin_pi_3",  p_sin(p_frac_pi(1, 3)),  sqrt3_2()));
+        rs.add(rule("sin_pi_2",  p_sin(p_frac_pi(1, 2)),  p_rational(1, 1)));
+        rs.add(rule("sin_2pi_3", p_sin(p_frac_pi(2, 3)),  sqrt3_2()));
+        rs.add(rule("sin_3pi_4", p_sin(p_frac_pi(3, 4)),  sqrt2_2()));
+        rs.add(rule("sin_5pi_6", p_sin(p_frac_pi(5, 6)),  p_rational(1, 2)));
+        rs.add(rule("sin_pi",    p_sin(p_frac_pi(1, 1)),  p_rational(0, 1)));
+        rs.add(rule("sin_7pi_6", p_sin(p_frac_pi(7, 6)),  p_rational(-1, 2)));
+        rs.add(rule("sin_5pi_4", p_sin(p_frac_pi(5, 4)),  p_neg(sqrt2_2())));
+        rs.add(rule("sin_4pi_3", p_sin(p_frac_pi(4, 3)),  p_neg(sqrt3_2())));
+        rs.add(rule("sin_3pi_2", p_sin(p_frac_pi(3, 2)),  p_rational(-1, 1)));
+        rs.add(rule("sin_5pi_3", p_sin(p_frac_pi(5, 3)),  p_neg(sqrt3_2())));
+        rs.add(rule("sin_7pi_4", p_sin(p_frac_pi(7, 4)),  p_neg(sqrt2_2())));
+        rs.add(rule("sin_11pi_6",p_sin(p_frac_pi(11, 6)), p_rational(-1, 2)));
+
+        // === cos evaluation at special angles (FracPi patterns) ===
+        rs.add(rule("cos_0",     p_cos(p_frac_pi(0, 1)),  p_rational(1, 1)));
+        rs.add(rule("cos_pi_6",  p_cos(p_frac_pi(1, 6)),  sqrt3_2()));
+        rs.add(rule("cos_pi_4",  p_cos(p_frac_pi(1, 4)),  sqrt2_2()));
+        rs.add(rule("cos_pi_3",  p_cos(p_frac_pi(1, 3)),  p_rational(1, 2)));
+        rs.add(rule("cos_pi_2",  p_cos(p_frac_pi(1, 2)),  p_rational(0, 1)));
+        rs.add(rule("cos_2pi_3", p_cos(p_frac_pi(2, 3)),  p_rational(-1, 2)));
+        rs.add(rule("cos_3pi_4", p_cos(p_frac_pi(3, 4)),  p_neg(sqrt2_2())));
+        rs.add(rule("cos_5pi_6", p_cos(p_frac_pi(5, 6)),  p_neg(sqrt3_2())));
+        rs.add(rule("cos_pi",    p_cos(p_frac_pi(1, 1)),  p_rational(-1, 1)));
+        rs.add(rule("cos_7pi_6", p_cos(p_frac_pi(7, 6)),  p_neg(sqrt3_2())));
+        rs.add(rule("cos_5pi_4", p_cos(p_frac_pi(5, 4)),  p_neg(sqrt2_2())));
+        rs.add(rule("cos_4pi_3", p_cos(p_frac_pi(4, 3)),  p_rational(-1, 2)));
+        rs.add(rule("cos_3pi_2", p_cos(p_frac_pi(3, 2)),  p_rational(0, 1)));
+        rs.add(rule("cos_5pi_3", p_cos(p_frac_pi(5, 3)),  p_rational(1, 2)));
+        rs.add(rule("cos_7pi_4", p_cos(p_frac_pi(7, 4)),  sqrt2_2()));
+        rs.add(rule("cos_11pi_6",p_cos(p_frac_pi(11, 6)), sqrt3_2()));
+
+        // === tan evaluation at special angles ===
+        rs.add(rule("tan_0",     p_tan(p_frac_pi(0, 1)),  p_rational(0, 1)));
+        rs.add(rule("tan_pi_6",  p_tan(p_frac_pi(1, 6)),  p_mul(sqrt3(), p_inv(p_rational(3, 1)))));
+        rs.add(rule("tan_pi_4",  p_tan(p_frac_pi(1, 4)),  p_rational(1, 1)));
+        rs.add(rule("tan_pi_3",  p_tan(p_frac_pi(1, 3)),  sqrt3()));
+        rs.add(rule("tan_2pi_3", p_tan(p_frac_pi(2, 3)),  p_neg(sqrt3())));
+        rs.add(rule("tan_3pi_4", p_tan(p_frac_pi(3, 4)),  p_rational(-1, 1)));
+        rs.add(rule("tan_5pi_6", p_tan(p_frac_pi(5, 6)),  p_neg(p_mul(sqrt3(), p_inv(p_rational(3, 1))))));
+        rs.add(rule("tan_pi",    p_tan(p_frac_pi(1, 1)),  p_rational(0, 1)));
+
+        // === Inverse trig at special values ===
+        rs.add(rule("asin_zero", p_asin(p_const(0.0)),  p_frac_pi(0, 1)));
+        rs.add(rule("acos_one",  p_acos(p_const(1.0)),  p_frac_pi(0, 1)));
+        rs.add(rule("acos_zero", p_acos(p_const(0.0)),  p_frac_pi(1, 2)));
+        rs.add(rule("atan_zero", p_atan(p_const(0.0)),  p_frac_pi(0, 1)));
+        rs.add(rule("atan_one",  p_atan(p_const(1.0)),  p_frac_pi(1, 4)));
 
         // === Parity (odd/even functions) ===
         // sin(-x) = -sin(x)
@@ -927,16 +958,15 @@ impl RuleSet {
         // === Angle shift identities ===
 
         // Complementary angles: sin(π/2 - x) = cos(x), cos(π/2 - x) = sin(x)
-        // π/2 - x is represented as Add(Const(π/2), Neg(x))
         // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_complementary",
-            p_sin(p_add(pi2(), p_neg(x()))),
+            p_sin(p_add(p_frac_pi(1, 2), p_neg(x()))),
             p_cos(x()),
         ));
         rs.add(rule(
             "cos_complementary",
-            p_cos(p_add(pi2(), p_neg(x()))),
+            p_cos(p_add(p_frac_pi(1, 2), p_neg(x()))),
             p_sin(x()),
         ));
 
@@ -944,12 +974,12 @@ impl RuleSet {
         // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_supplementary",
-            p_sin(p_add(pi(), p_neg(x()))),
+            p_sin(p_add(p_frac_pi(1, 1), p_neg(x()))),
             p_sin(x()),
         ));
         rs.add(rule(
             "cos_supplementary",
-            p_cos(p_add(pi(), p_neg(x()))),
+            p_cos(p_add(p_frac_pi(1, 1), p_neg(x()))),
             p_neg(p_cos(x())),
         ));
 
@@ -957,12 +987,12 @@ impl RuleSet {
         // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_period",
-            p_sin(p_add(x(), two_pi())),
+            p_sin(p_add(x(), p_frac_pi(2, 1))),
             p_sin(x()),
         ));
         rs.add(rule(
             "cos_period",
-            p_cos(p_add(x(), two_pi())),
+            p_cos(p_add(x(), p_frac_pi(2, 1))),
             p_cos(x()),
         ));
 
@@ -970,7 +1000,7 @@ impl RuleSet {
         // (add_commute handles reversed argument order)
         rs.add(rule(
             "tan_period",
-            p_tan(p_add(x(), pi())),
+            p_tan(p_add(x(), p_frac_pi(1, 1))),
             p_tan(x()),
         ));
 
@@ -979,50 +1009,6 @@ impl RuleSet {
             "tan_def",
             p_tan(x()),
             p_mul(p_sin(x()), p_inv(p_cos(x()))),
-        ));
-
-        // === Integer periodicity rules ===
-        // sin(n * π) = 0 for any integer n
-        rs.add(rule(
-            "sin_int_mul_pi",
-            p_sin(p_mul(int_wild("n"), pi())),
-            p_const(0.0),
-        ));
-        // cos(2k * π) = 1 for even integer 2k
-        rs.add(rule(
-            "cos_even_mul_pi",
-            p_cos(p_mul(int_even_wild("n"), pi())),
-            p_const(1.0),
-        ));
-        // cos((2k+1) * π) = -1 for odd integer
-        rs.add(rule(
-            "cos_odd_mul_pi",
-            p_cos(p_mul(int_odd_wild("n"), pi())),
-            p_neg(p_const(1.0)),
-        ));
-        // sin(x + 2k * π) = sin(x) — strip even multiples of π
-        rs.add(rule(
-            "sin_shift_even_pi",
-            p_sin(p_add(x(), p_mul(int_even_wild("n"), pi()))),
-            p_sin(x()),
-        ));
-        // cos(x + 2k * π) = cos(x) — strip even multiples of π
-        rs.add(rule(
-            "cos_shift_even_pi",
-            p_cos(p_add(x(), p_mul(int_even_wild("n"), pi()))),
-            p_cos(x()),
-        ));
-        // sin(x + (2k+1) * π) = -sin(x) — shift by odd multiples of π
-        rs.add(rule(
-            "sin_shift_odd_pi",
-            p_sin(p_add(x(), p_mul(int_odd_wild("n"), pi()))),
-            p_neg(p_sin(x())),
-        ));
-        // cos(x + (2k+1) * π) = -cos(x) — shift by odd multiples of π
-        rs.add(rule(
-            "cos_shift_odd_pi",
-            p_cos(p_add(x(), p_mul(int_odd_wild("n"), pi()))),
-            p_neg(p_cos(x())),
         ));
 
         // === Double angle formulas ===
@@ -1808,8 +1794,8 @@ impl RuleSet {
 mod tests {
     use super::*;
     use crate::expr::{
-        acos, add, asin, atan, clamp, constant, cos, cosh, exp, floor, inv, ln, max, min, mul,
-        named, neg, round, scalar, sign, sin, sinh, tan, tanh,
+        acos, add, asin, atan, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
+        min, mul, named, neg, round, scalar, sign, sin, sinh, tan, tanh,
     };
     use crate::pow;
 
@@ -2519,7 +2505,7 @@ mod tests {
     #[test]
     fn trig_tan_period() {
         let rs = RuleSet::trigonometric();
-        let expr = tan(add(scalar("a"), constant(std::f64::consts::PI)));
+        let expr = tan(add(scalar("a"), frac_pi(1, 1)));
 
         let result = rs
             .iter()
@@ -2759,7 +2745,7 @@ mod tests {
             .find(|r| r.name == "acos_zero")
             .and_then(|r| r.apply_ltr(&expr));
 
-        assert_eq!(result, Some(named(NamedConst::FracPi2)));
+        assert_eq!(result, Some(frac_pi(1, 2)));
     }
 
     #[test]
@@ -2772,7 +2758,7 @@ mod tests {
             .find(|r| r.name == "atan_one")
             .and_then(|r| r.apply_ltr(&expr));
 
-        assert_eq!(result, Some(named(NamedConst::FracPi4)));
+        assert_eq!(result, Some(frac_pi(1, 4)));
     }
 
     #[test]

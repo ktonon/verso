@@ -1,8 +1,9 @@
 use crate::expr::{
-    acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, integer, inv, ln, max,
-    min, mul, named, neg, pow, round, scalar, sign, sin, sinh, sqrt, tan, tanh, tensor, Index,
-    IndexPosition, NamedConst,
+    acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
+    min, mul, named, neg, pow, round, scalar, sign, sin, sinh, sqrt, tan, tanh, tensor, Expr,
+    Index, IndexPosition, NamedConst,
 };
+use crate::rational::Rational;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseError {
@@ -273,7 +274,7 @@ impl Parser {
             Some(Token::Number(s)) => {
                 if !s.contains('.') {
                     if let Ok(n) = s.parse::<i64>() {
-                        return Ok(integer(n));
+                        return Ok(Expr::Rational(Rational::from_i64(n)));
                     }
                 }
                 let n: f64 = s
@@ -281,10 +282,10 @@ impl Parser {
                     .map_err(|_| ParseError::InvalidNumber(s.clone()))?;
                 Ok(constant(n))
             }
-            Some(Token::Pi) => Ok(named(NamedConst::Pi)),
+            Some(Token::Pi) => Ok(frac_pi(1, 1)),
             Some(Token::Ident(name)) => {
                 if name == "pi" {
-                    return Ok(named(NamedConst::Pi));
+                    return Ok(frac_pi(1, 1));
                 }
                 if name == "e" {
                     return Ok(named(NamedConst::E));
@@ -805,13 +806,13 @@ mod tests {
     #[test]
     fn parse_pi_symbol() {
         let expr = parse_expr("π").unwrap();
-        assert_eq!(expr, named(NamedConst::Pi));
+        assert_eq!(expr, frac_pi(1, 1));
 
         let expr = parse_expr("pi").unwrap();
-        assert_eq!(expr, named(NamedConst::Pi));
+        assert_eq!(expr, frac_pi(1, 1));
 
         let expr = parse_expr("2π").unwrap();
-        assert_eq!(expr, mul(constant(2.0), named(NamedConst::Pi)));
+        assert_eq!(expr, mul(Expr::Rational(Rational::from_i64(2)), frac_pi(1, 1)));
 
         let expr = parse_expr("e").unwrap();
         assert_eq!(expr, named(NamedConst::E));
@@ -822,20 +823,20 @@ mod tests {
         use crate::search::simplify;
         use crate::rule::RuleSet;
 
-        // pi / 2 should fold to Named(FracPi2)
+        // pi / 2 should fold to FracPi(1/2)
         let expr = parse_expr("pi / 2").unwrap();
         let simplified = simplify(&expr, &RuleSet::full());
-        assert_eq!(simplified, named(NamedConst::FracPi2));
+        assert_eq!(simplified, frac_pi(1, 2));
 
-        // pi / 3 should fold to Named(FracPi3)
+        // pi / 3 should fold to FracPi(1/3)
         let expr = parse_expr("pi / 3").unwrap();
         let simplified = simplify(&expr, &RuleSet::full());
-        assert_eq!(simplified, named(NamedConst::FracPi3));
+        assert_eq!(simplified, frac_pi(1, 3));
 
-        // 2 * pi should fold to Named(TwoPi)
+        // 2 * pi should fold to FracPi(2)
         let expr = parse_expr("2 * pi").unwrap();
         let simplified = simplify(&expr, &RuleSet::full());
-        assert_eq!(simplified, named(NamedConst::TwoPi));
+        assert_eq!(simplified, frac_pi(2, 1));
     }
 
     #[test]
@@ -846,12 +847,12 @@ mod tests {
         // sin(pi/2) = 1
         let expr = parse_expr("sin(pi / 2)").unwrap();
         let simplified = simplify(&expr, &RuleSet::full());
-        assert_eq!(simplified, constant(1.0));
+        assert_eq!(simplified, Expr::Rational(Rational::ONE));
 
         // cos(pi) = -1
         let expr = parse_expr("cos(pi)").unwrap();
         let simplified = simplify(&expr, &RuleSet::full());
-        assert_eq!(simplified, constant(-1.0));
+        assert_eq!(simplified, Expr::Rational(Rational::NEG_ONE));
     }
 
     #[test]

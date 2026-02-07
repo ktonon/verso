@@ -1,6 +1,7 @@
 mod expr;
 pub mod fmt;
 mod parser;
+pub mod rational;
 pub mod repl;
 mod rule;
 mod search;

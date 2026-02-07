@@ -61,12 +61,16 @@ impl LeastSigDigit {
     }
 }
 
+use crate::rational::Rational;
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     // Atoms
     Const(f64),
     Integer(i64, LeastSigDigit), // value = hi * 10 + digit.value(), non-negative
-    Named(NamedConst),           // Named mathematical constant (π, e, π/2, etc.)
+    Rational(Rational),          // Exact rational number
+    Named(NamedConst),           // Named mathematical constant (e, √2, etc.)
+    FracPi(Rational),            // Rational multiple of π (value = r * π)
     Var { name: String, indices: Vec<Index> },
 
     // Arithmetic
@@ -103,10 +107,21 @@ impl PartialEq for Expr {
             (Expr::Neg(a), Expr::Neg(b)) | (Expr::Inv(a), Expr::Inv(b)) => a == b,
             (Expr::Fn(k1, a), Expr::Fn(k2, b)) => k1 == k2 && a == b,
             (Expr::FnN(k1, a), Expr::FnN(k2, b)) => k1 == k2 && a == b,
+            (Expr::Rational(a), Expr::Rational(b)) => a == b,
+            (Expr::FracPi(a), Expr::FracPi(b)) => a == b,
             // Cross-type: Const <-> Integer by value
             (Expr::Const(f), Expr::Integer(hi, lo)) | (Expr::Integer(hi, lo), Expr::Const(f)) => {
                 let int_val = hi * 10 + lo.value();
                 (*f - int_val as f64).abs() < f64::EPSILON
+            }
+            // Cross-type: Const <-> Rational by value
+            (Expr::Const(f), Expr::Rational(r)) | (Expr::Rational(r), Expr::Const(f)) => {
+                (*f - r.value()).abs() < 1e-12
+            }
+            // Cross-type: Integer <-> Rational by value
+            (Expr::Integer(hi, lo), Expr::Rational(r))
+            | (Expr::Rational(r), Expr::Integer(hi, lo)) => {
+                r.is_integer() && r.num() == hi * 10 + lo.value()
             }
             _ => false,
         }
@@ -235,7 +250,12 @@ impl NamedConst {
 impl Expr {
     pub fn complexity(&self) -> usize {
         match self {
-            Expr::Const(_) | Expr::Integer(_, _) | Expr::Named(_) | Expr::Var { .. } => 1,
+            Expr::Const(_)
+            | Expr::Integer(_, _)
+            | Expr::Rational(_)
+            | Expr::Named(_)
+            | Expr::FracPi(_)
+            | Expr::Var { .. } => 1,
             Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + a.complexity(),
             Expr::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
             Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
@@ -248,7 +268,9 @@ impl Expr {
         match self {
             Expr::Const(_)
             | Expr::Integer(_, _)
+            | Expr::Rational(_)
             | Expr::Named(_)
+            | Expr::FracPi(_)
             | Expr::Var { .. }
             | Expr::Fn(_, _)
             | Expr::FnN(_, _) => 100,
@@ -300,6 +322,14 @@ pub fn integer(n: i64) -> Expr {
         "Integer must be non-negative; use neg(integer(..)) for negatives"
     );
     Expr::Integer(n / 10, LeastSigDigit::from_i64(n))
+}
+
+pub fn rational(n: i64, d: i64) -> Expr {
+    Expr::Rational(Rational::new(n, d))
+}
+
+pub fn frac_pi(n: i64, d: i64) -> Expr {
+    Expr::FracPi(Rational::new(n, d))
 }
 
 pub fn named(nc: NamedConst) -> Expr {
