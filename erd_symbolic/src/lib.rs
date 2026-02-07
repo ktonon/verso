@@ -6,6 +6,7 @@ pub mod repl;
 mod rule;
 mod search;
 mod to_tex;
+pub mod token;
 
 pub use expr::*;
 pub use fmt::{fmt_colored, Colored};

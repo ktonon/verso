@@ -66,13 +66,6 @@ impl ToTex for FnKind {
 impl ToTex for Expr {
     fn to_tex(&self) -> String {
         match self {
-            Expr::Const(n) => {
-                if n.fract() == 0.0 {
-                    format!("{}", *n as i64)
-                } else {
-                    format!("{}", n)
-                }
-            }
             Expr::Rational(r) => {
                 if r.is_integer() {
                     format!("{}", r.num())
@@ -185,9 +178,8 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
 
 fn is_sqrt_exp(exp: &Expr) -> bool {
     match exp {
-        Expr::Const(n) => *n == 0.5,
-        Expr::Rational(_) | Expr::FracPi(_) => false,
-        Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
+        Expr::Rational(r) => *r == Rational::new(1, 2),
+        Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Rational(r) if *r == Rational::TWO),
         _ => false,
     }
 }
@@ -218,7 +210,7 @@ mod tests {
 
     #[test]
     fn to_tex_const_float() {
-        assert_eq!(constant(3.14).to_tex(), "3.14");
+        assert_eq!(constant(3.14).to_tex(), "\\frac{157}{50}");
     }
 
     #[test]

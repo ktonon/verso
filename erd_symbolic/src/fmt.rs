@@ -40,14 +40,6 @@ impl<'a> Display for Colored<'a> {
 /// Format an expression with ANSI colors
 pub fn fmt_colored(expr: &Expr) -> String {
     match expr {
-        Expr::Const(n) => {
-            let s = if n.fract() == 0.0 {
-                format!("{}", *n as i64)
-            } else {
-                format!("{}", n)
-            };
-            format!("{}{}{}", color::CYAN, s, color::RESET)
-        }
         Expr::Rational(r) => {
             format!("{}{}{}", color::CYAN, r, color::RESET)
         }
@@ -108,14 +100,14 @@ pub fn fmt_colored(expr: &Expr) -> String {
                     let op = format!("{} - {}", color::DIM, color::RESET);
                     format!("{}{}{}", fmt_colored(a), op, fmt_colored(inner))
                 }
-                Expr::Const(n) if *n < 0.0 => {
+                Expr::Rational(r) if r.is_negative() => {
                     let op = format!("{} - {}", color::DIM, color::RESET);
                     format!(
                         "{}{}{}{}{}",
                         fmt_colored(a),
                         op,
                         color::CYAN,
-                        fmt_const(-*n),
+                        -(*r),
                         color::RESET
                     )
                 }
@@ -152,20 +144,6 @@ pub fn fmt_colored(expr: &Expr) -> String {
                     let mul_kind = classify_mul(a, b);
                     // Coefficient notation: 2x instead of 2 * x
                     if mul_kind == MulKind::Scalar {
-                        if let Expr::Const(n) = a.as_ref() {
-                            let coeff = if n.fract() == 0.0 {
-                                format!("{}", *n as i64)
-                            } else {
-                                format!("{}", n)
-                            };
-                            return format!(
-                                "{}{}{}{}",
-                                color::CYAN,
-                                coeff,
-                                color::RESET,
-                                maybe_paren_colored(b, expr)
-                            );
-                        }
                         if let Expr::Rational(r) = a.as_ref() {
                             return format!(
                                 "{}{}{}{}",
@@ -258,7 +236,7 @@ fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
 
 fn fmt_log_base_colored(base: &Expr) -> String {
     match base {
-        Expr::Const(_) | Expr::Rational(_) | Expr::Var { .. } => {
+        Expr::Rational(_) | Expr::Var { .. } => {
             fmt_colored(base)
         }
         _ => format!(
@@ -317,13 +295,6 @@ impl Display for FnKind {
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expr::Const(n) => {
-                if n.fract() == 0.0 {
-                    write!(f, "{}", *n as i64)
-                } else {
-                    write!(f, "{}", n)
-                }
-            }
             Expr::Rational(r) => write!(f, "{}", r),
             Expr::Named(nc) => write!(f, "{}", nc),
             Expr::FracPi(r) => write!(f, "{}", fmt_frac_pi(r)),
@@ -356,8 +327,8 @@ impl std::fmt::Display for Expr {
                 Expr::Neg(inner) => {
                     write!(f, "{} - {}", a, inner)
                 }
-                Expr::Const(n) if *n < 0.0 => {
-                    write!(f, "{} - {}", a, fmt_const(-*n))
+                Expr::Rational(r) if r.is_negative() => {
+                    write!(f, "{} - {}", a, -(*r))
                 }
                 _ => {
                     write!(f, "{} + {}", a, b)
@@ -376,9 +347,6 @@ impl std::fmt::Display for Expr {
                         let mul_kind = classify_mul(a, b);
                         // Coefficient notation: 2x instead of 2 * x
                         if mul_kind == MulKind::Scalar {
-                            if let Expr::Const(n) = a.as_ref() {
-                                return write!(f, "{}{}", n, maybe_paren(b, self));
-                            }
                             if let Expr::Rational(r) = a.as_ref() {
                                 return write!(f, "{}{}", r, maybe_paren(b, self));
                             }
@@ -420,19 +388,10 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
     }
 }
 
-fn fmt_const(n: f64) -> String {
-    if n.fract() == 0.0 {
-        format!("{}", n as i64)
-    } else {
-        format!("{}", n)
-    }
-}
-
 fn is_sqrt_exp(exp: &Expr) -> bool {
     match exp {
-        Expr::Const(n) => *n == 0.5,
-        Expr::Rational(_) | Expr::FracPi(_) => false,
-        Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
+        Expr::Rational(r) => *r == Rational::new(1, 2),
+        Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Rational(r) if *r == Rational::TWO),
         _ => false,
     }
 }
@@ -453,7 +412,7 @@ fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a 
 
 fn fmt_log_base(base: &Expr) -> String {
     match base {
-        Expr::Const(_) | Expr::Rational(_) | Expr::Var { .. } => {
+        Expr::Rational(_) | Expr::Var { .. } => {
             format!("{}", base)
         }
         _ => format!("({})", base),
@@ -467,8 +426,8 @@ mod tests {
     #[test]
     fn display_const() {
         assert_eq!(format!("{}", constant(3.0)), "3");
-        assert_eq!(format!("{}", constant(3.5)), "3.5");
-        assert_eq!(format!("{}", constant(-3.5)), "-3.5");
+        assert_eq!(format!("{}", constant(3.5)), "7/2");
+        assert_eq!(format!("{}", constant(-3.5)), "-7/2");
     }
 
     #[test]
@@ -538,7 +497,7 @@ mod tests {
     fn display_neg() {
         assert_eq!(
             format!("{}", neg(add(constant(2.5), scalar("x")))),
-            "-(2.5 + x)"
+            "-(5/2 + x)"
         );
         assert_eq!(format!("{}", neg(scalar("x"))), "-x");
     }
@@ -548,7 +507,7 @@ mod tests {
         assert_eq!(format!("{}", inv(scalar("x"))), "1/x");
         assert_eq!(
             format!("{}", inv(add(constant(2.5), scalar("x")))),
-            "1/(2.5 + x)"
+            "1/(5/2 + x)"
         );
     }
 

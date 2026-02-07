@@ -94,8 +94,7 @@ impl BeamSearch {
 
         // Recursively try rewrites in children (with reduced depth)
         match expr {
-            Expr::Const(_)
-            | Expr::Rational(_)
+            Expr::Rational(_)
             | Expr::Named(_)
             | Expr::FracPi(_)
             | Expr::Var { .. } => {}
@@ -465,66 +464,16 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<TraceStep
 
 
 
-/// Extract the numeric value of a constant expression.
-fn is_numeric_const(expr: &Expr) -> Option<f64> {
-    match expr {
-        Expr::Const(n) => Some(*n),
-        Expr::Rational(r) => Some(r.value()),
-        _ => None,
-    }
-}
 
-/// Convert a f64 result to Rational (if integer-valued) or Const.
-fn float_to_expr(val: f64) -> Expr {
-    if val.fract() == 0.0 && val.abs() < (i64::MAX / 2) as f64 {
-        Expr::Rational(Rational::from_i64(val as i64))
-    } else {
-        Expr::Const(val)
-    }
-}
-
-
-/// For trig arguments that are float-based pi-multiples (e.g. Const(3.14...)),
-/// try to convert to FracPi(Rational). This handles legacy Const-based representations.
-fn normalize_pi_coeff(expr: Expr) -> Expr {
-    // Try to detect Const values that are pi-multiples
-    if let Expr::Const(c) = &expr {
-        let coeff = c / std::f64::consts::PI;
-        // Try to snap to a rational with small denominator
-        for &d in &[1i64, 2, 3, 4, 6] {
-            let n = (coeff * d as f64).round() as i64;
-            if ((coeff * d as f64) - n as f64).abs() < 1e-9 {
-                let r = Rational::new(n, d);
-                let normalized = r.rem_euclid(Rational::TWO);
-                return if normalized.is_zero() {
-                    Expr::FracPi(Rational::ZERO)
-                } else {
-                    Expr::FracPi(normalized)
-                };
-            }
-        }
-    }
-    expr
-}
-
-/// Pure constant evaluation: arithmetic on Const/Integer values and trig at constant arguments.
+/// Pure constant evaluation: arithmetic on Rational/FracPi values and trig at constant arguments.
 /// No normalization (no factor sorting, no mul shortcuts). This is mathematical evaluation,
 /// not a search strategy choice.
 fn eval_constants(expr: &Expr) -> Expr {
     match expr {
-        Expr::Const(n) => {
-            // Convert integer-valued Const to Rational for exact arithmetic
-            if n.fract() == 0.0 && n.abs() < (i64::MAX / 2) as f64 {
-                Expr::Rational(Rational::from_i64(*n as i64))
-            } else {
-                expr.clone()
-            }
-        }
         Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
         Expr::Neg(a) => {
             let inner = eval_constants(a);
             match &inner {
-                Expr::Const(n) => Expr::Const(-n),
                 Expr::Rational(r) => Expr::Rational(-*r),
                 Expr::FracPi(r) => Expr::FracPi(-*r),
                 _ => Expr::Neg(Box::new(inner)),
@@ -536,10 +485,7 @@ fn eval_constants(expr: &Expr) -> Expr {
                 Expr::Rational(r) if !r.is_zero() => {
                     Expr::Rational(Rational::ONE / *r)
                 }
-                _ => match is_numeric_const(&inner) {
-                    Some(n) => Expr::Const(1.0 / n),
-                    None => Expr::Inv(Box::new(inner)),
-                },
+                _ => Expr::Inv(Box::new(inner)),
             }
         }
         Expr::Add(a, b) => {
@@ -558,10 +504,7 @@ fn eval_constants(expr: &Expr) -> Expr {
                     Expr::FracPi(sum)
                 };
             }
-            match (is_numeric_const(&left), is_numeric_const(&right)) {
-                (Some(x), Some(y)) => float_to_expr(x + y),
-                _ => Expr::Add(Box::new(left), Box::new(right)),
-            }
+            Expr::Add(Box::new(left), Box::new(right))
         }
         Expr::Mul(a, b) => {
             let left = eval_constants(a);
@@ -581,18 +524,33 @@ fn eval_constants(expr: &Expr) -> Expr {
                     Expr::FracPi(prod)
                 };
             }
-            match (is_numeric_const(&left), is_numeric_const(&right)) {
-                (Some(x), Some(y)) => float_to_expr(x * y),
-                _ => Expr::Mul(Box::new(left), Box::new(right)),
-            }
+            Expr::Mul(Box::new(left), Box::new(right))
         }
         Expr::Pow(base, exp) => {
             let b = eval_constants(base);
             let e = eval_constants(exp);
-            match (is_numeric_const(&b), is_numeric_const(&e)) {
-                (Some(x), Some(y)) => float_to_expr(x.powf(y)),
-                _ => Expr::Pow(Box::new(b), Box::new(e)),
+            // Rational ^ Rational (integer exponent) → Rational
+            if let (Expr::Rational(base_r), Expr::Rational(exp_r)) = (&b, &e) {
+                if exp_r.is_integer() && exp_r.num().abs() <= 20 {
+                    let n = exp_r.num();
+                    if n >= 0 {
+                        let mut result = Rational::ONE;
+                        for _ in 0..n {
+                            result = result * *base_r;
+                        }
+                        return Expr::Rational(result);
+                    }
+                    // Negative exponent: compute positive power then invert
+                    if !base_r.is_zero() {
+                        let mut result = Rational::ONE;
+                        for _ in 0..(-n) {
+                            result = result * *base_r;
+                        }
+                        return Expr::Rational(Rational::ONE / result);
+                    }
+                }
             }
+            Expr::Pow(Box::new(b), Box::new(e))
         }
         Expr::Fn(kind, a) => {
             let arg = eval_constants(a);
@@ -610,8 +568,6 @@ fn eval_constants(expr: &Expr) -> Expr {
                         arg
                     }
                 }
-                // Keep legacy normalize_pi_coeff for Const-based pi coefficients
-                (_, FnKind::Sin | FnKind::Cos | FnKind::Tan) => normalize_pi_coeff(arg),
                 _ => arg,
             };
             Expr::Fn(kind.clone(), Box::new(arg))
@@ -703,7 +659,6 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
     use crate::expr::{classify_mul, IndexPosition, MulKind};
 
     match expr {
-        Expr::Const(n) => format!("Const({})", n),
         Expr::Rational(r) => format!("Rat({}/{})", r.num(), r.den()),
         Expr::Named(nc) => format!("Named({:?})", nc),
         Expr::FracPi(r) => format!("FracPi({}/{})", r.num(), r.den()),
@@ -750,7 +705,7 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
         Expr::Inv(a) => format!("Inv({})", canonical_key_with_map(a, dummy_map)),
         Expr::Pow(base, exp) => {
             // Normalize Pow(x, 2) for consistency with Mul(x, x)
-            if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON) {
+            if matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO) {
                 format!("Pow({}, 2)", canonical_key_with_map(base, dummy_map))
             } else {
                 format!(
@@ -773,74 +728,37 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
     }
 }
 
-/// A coefficient that preserves exact Rational arithmetic when possible.
+/// A coefficient for exact Rational arithmetic.
 #[derive(Clone, Copy)]
-enum Coeff {
-    Exact(Rational),
-    Float(f64),
-}
+struct Coeff(Rational);
 
 impl Coeff {
-    fn value(&self) -> f64 {
-        match self {
-            Coeff::Exact(r) => r.value(),
-            Coeff::Float(f) => *f,
-        }
-    }
-
     fn is_zero(&self) -> bool {
-        match self {
-            Coeff::Exact(r) => r.is_zero(),
-            Coeff::Float(f) => f.abs() < f64::EPSILON,
-        }
+        self.0.is_zero()
     }
 
     fn is_one(&self) -> bool {
-        match self {
-            Coeff::Exact(r) => *r == Rational::ONE,
-            Coeff::Float(f) => (f - 1.0).abs() < f64::EPSILON,
-        }
+        self.0 == Rational::ONE
     }
 
     fn is_neg_one(&self) -> bool {
-        match self {
-            Coeff::Exact(r) => *r == Rational::NEG_ONE,
-            Coeff::Float(f) => (f + 1.0).abs() < f64::EPSILON,
-        }
+        self.0 == Rational::NEG_ONE
     }
 
     fn is_positive(&self) -> bool {
-        match self {
-            Coeff::Exact(r) => r.is_positive(),
-            Coeff::Float(f) => *f > 0.0,
-        }
+        self.0.is_positive()
     }
 
     fn neg(self) -> Coeff {
-        match self {
-            Coeff::Exact(r) => Coeff::Exact(-r),
-            Coeff::Float(f) => Coeff::Float(-f),
-        }
+        Coeff(-self.0)
     }
 
     fn add(self, other: Coeff) -> Coeff {
-        match (self, other) {
-            (Coeff::Exact(a), Coeff::Exact(b)) => Coeff::Exact(a + b),
-            (a, b) => Coeff::Float(a.value() + b.value()),
-        }
+        Coeff(self.0 + other.0)
     }
 
     fn to_expr(self) -> Expr {
-        match self {
-            Coeff::Exact(r) => Expr::Rational(r),
-            Coeff::Float(f) => {
-                if f.fract() == 0.0 && f.abs() < (i64::MAX / 2) as f64 {
-                    Expr::Rational(Rational::from_i64(f as i64))
-                } else {
-                    Expr::Const(f)
-                }
-            }
-        }
+        Expr::Rational(self.0)
     }
 }
 
@@ -849,19 +767,19 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
     flatten_add(expr, &mut terms);
 
     let mut coeffs: HashMap<String, (Expr, Coeff)> = HashMap::new();
-    let mut const_sum = Coeff::Exact(Rational::ZERO);
+    let mut const_sum = Coeff(Rational::ZERO);
     let mut rest: Vec<Expr> = Vec::new();
 
     for term in terms {
         if let Some((base, coeff)) = extract_term(&term) {
-            if matches!(base, Expr::Const(_) | Expr::Rational(_)) {
+            if matches!(base, Expr::Rational(_)) {
                 const_sum = const_sum.add(coeff);
                 continue;
             }
             let key = canonical_key(&base);
             let entry = coeffs
                 .entry(key)
-                .or_insert((base, Coeff::Exact(Rational::ZERO)));
+                .or_insert((base, Coeff(Rational::ZERO)));
             entry.1 = entry.1.add(coeff);
         } else {
             rest.push(term);
@@ -931,10 +849,9 @@ fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
 }
 
 fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
-    let one = Coeff::Exact(Rational::ONE);
+    let one = Coeff(Rational::ONE);
     match expr {
-        Expr::Const(c) => Some((Expr::Rational(Rational::ONE), Coeff::Float(*c))),
-        Expr::Rational(r) => Some((Expr::Rational(Rational::ONE), Coeff::Exact(*r))),
+        Expr::Rational(r) => Some((Expr::Rational(Rational::ONE), Coeff(*r))),
         Expr::Neg(inner) => {
             if let Some((base, coeff)) = extract_term(inner) {
                 Some((base, coeff.neg()))
@@ -943,20 +860,14 @@ fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
             }
         }
         Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
-            (Expr::Const(c), other) | (other, Expr::Const(c)) => {
-                Some((other.clone(), Coeff::Float(*c)))
-            }
             (Expr::Rational(r), other) | (other, Expr::Rational(r)) => {
-                Some((other.clone(), Coeff::Exact(*r)))
+                Some((other.clone(), Coeff(*r)))
             }
-            // Handle nested Mul with leading constant/rational
+            // Handle nested Mul with leading rational
             (Expr::Mul(inner_a, inner_b), _) => {
-                if let Expr::Const(c) = inner_a.as_ref() {
+                if let Expr::Rational(r) = inner_a.as_ref() {
                     let rest = Expr::Mul(inner_b.clone(), b.clone());
-                    Some((rest, Coeff::Float(*c)))
-                } else if let Expr::Rational(r) = inner_a.as_ref() {
-                    let rest = Expr::Mul(inner_b.clone(), b.clone());
-                    Some((rest, Coeff::Exact(*r)))
+                    Some((rest, Coeff(*r)))
                 } else if let Some((inner_base, inner_coeff)) = extract_term(a) {
                     if !inner_coeff.is_one() {
                         let rest = Expr::Mul(Box::new(inner_base), b.clone());
@@ -974,7 +885,7 @@ fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
                 if let Some((base, coeff)) = extract_term(&new_mul) {
                     Some((base, coeff.neg()))
                 } else {
-                    Some((new_mul, Coeff::Exact(Rational::NEG_ONE)))
+                    Some((new_mul, Coeff(Rational::NEG_ONE)))
                 }
             }
             (_, Expr::Neg(inner_b)) => {
@@ -982,7 +893,7 @@ fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
                 if let Some((base, coeff)) = extract_term(&new_mul) {
                     Some((base, coeff.neg()))
                 } else {
-                    Some((new_mul, Coeff::Exact(Rational::NEG_ONE)))
+                    Some((new_mul, Coeff(Rational::NEG_ONE)))
                 }
             }
             _ => {
@@ -1008,8 +919,8 @@ fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
 mod tests {
     use super::*;
     use crate::expr::{
-        add, constant, cos, div, frac_pi, inv, mul, named, neg, pow, scalar, sin, tensor, upper,
-        NamedConst,
+        add, constant, cos, div, frac_pi, inv, mul, named, neg, pow, rational, scalar, sin, tensor,
+        upper, NamedConst,
     };
     use crate::rational::Rational;
 
@@ -1278,20 +1189,16 @@ mod tests {
 
     #[test]
     fn simplify_trig_sin_3pi_2() {
-        use std::f64::consts::FRAC_PI_2;
         let rules = RuleSet::trigonometric();
-        let three_pi_over_2 = 3.0 * FRAC_PI_2;
-        let expr = sin(constant(three_pi_over_2));
+        let expr = sin(frac_pi(3, 2));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(-1.0));
     }
 
     #[test]
     fn simplify_trig_cos_3pi_2() {
-        use std::f64::consts::FRAC_PI_2;
         let rules = RuleSet::trigonometric();
-        let three_pi_over_2 = 3.0 * FRAC_PI_2;
-        let expr = cos(constant(three_pi_over_2));
+        let expr = cos(frac_pi(3, 2));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
     }
@@ -3065,9 +2972,8 @@ mod tests {
     #[test]
     fn simplify_trig_sin_5pi_4() {
         // sin(5π/4) = -√2/2
-        use std::f64::consts::PI;
         let rules = RuleSet::trigonometric();
-        let expr = sin(constant(5.0 * PI / 4.0));
+        let expr = sin(frac_pi(5, 4));
         let result = simplify(&expr, &rules);
         assert_eq!(result, neg(named(NamedConst::Frac1Sqrt2)));
     }
@@ -3075,9 +2981,8 @@ mod tests {
     #[test]
     fn simplify_trig_cos_5pi_4() {
         // cos(5π/4) = -√2/2
-        use std::f64::consts::PI;
         let rules = RuleSet::trigonometric();
-        let expr = cos(constant(5.0 * PI / 4.0));
+        let expr = cos(frac_pi(5, 4));
         let result = simplify(&expr, &rules);
         assert_eq!(result, neg(named(NamedConst::Frac1Sqrt2)));
     }
@@ -3085,19 +2990,17 @@ mod tests {
     #[test]
     fn simplify_trig_sin_7pi_6() {
         // sin(7π/6) = -1/2
-        use std::f64::consts::PI;
         let rules = RuleSet::trigonometric();
-        let expr = sin(constant(7.0 * PI / 6.0));
+        let expr = sin(frac_pi(7, 6));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, constant(-0.5));
+        assert_eq!(result, rational(-1, 2));
     }
 
     #[test]
     fn simplify_trig_cos_7pi_6() {
         // cos(7π/6) = -√3/2
-        use std::f64::consts::PI;
         let rules = RuleSet::trigonometric();
-        let expr = cos(constant(7.0 * PI / 6.0));
+        let expr = cos(frac_pi(7, 6));
         let result = simplify(&expr, &rules);
         assert_eq!(result, neg(named(NamedConst::FracSqrt3By2)));
     }
@@ -3223,8 +3126,7 @@ mod tests {
         // Should be (x + 1)^2
         assert!(
             matches!(&result, Expr::Pow(base, exp)
-                if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON)
-                    || matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO)
+                if matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO)
                 && matches!(base.as_ref(), Expr::Add(_, _))
             ),
             "Expected (x + 1)², got: {:?}",
@@ -3248,8 +3150,7 @@ mod tests {
         // Should be (x - 1)^2
         assert!(
             matches!(&result, Expr::Pow(_, exp)
-                if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON)
-                    || matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO)
+                if matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO)
             ),
             "Expected (x - 1)², got: {:?}",
             result

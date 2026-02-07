@@ -383,9 +383,8 @@ impl Pattern {
             // Wildcard matches any expression
             (Pattern::Wildcard(name), _) => bind_expr(name, expr.clone(), bindings),
 
-            // ConstWild matches constants, named constants, and rationals
-            (Pattern::ConstWild(name), Expr::Const(_))
-            | (Pattern::ConstWild(name), Expr::Rational(_))
+            // ConstWild matches rationals and named constants
+            (Pattern::ConstWild(name), Expr::Rational(_))
             | (Pattern::ConstWild(name), Expr::Named(_)) => {
                 bind_expr(name, expr.clone(), bindings)
             }
@@ -413,20 +412,17 @@ impl Pattern {
             }
             (Pattern::IntOddWild(_), _) => false,
 
-            // Const matches by value against Const, Rational, Named
-            (Pattern::Const(n), Expr::Const(m)) => (n - m).abs() < f64::EPSILON,
+            // Const matches by value against Rational, Named
             (Pattern::Const(n), Expr::Rational(r)) => (n - r.value()).abs() < 1e-12,
             (Pattern::Const(n), Expr::Named(nc)) => (n - nc.value()).abs() < f64::EPSILON,
             (Pattern::Const(_), _) => false,
 
-            // Rational matches exact Rational, or by value against Const
+            // Rational matches exact Rational
             (Pattern::Rational(pr), Expr::Rational(er)) => pr == er,
-            (Pattern::Rational(pr), Expr::Const(n)) => (pr.value() - n).abs() < 1e-12,
             (Pattern::Rational(_), _) => false,
 
-            // Named matches named constants exactly, or by value against Const
+            // Named matches named constants exactly
             (Pattern::Named(pnc), Expr::Named(enc)) => pnc == enc,
-            (Pattern::Named(pnc), Expr::Const(n)) => (pnc.value() - n).abs() < 1e-12,
             (Pattern::Named(_), _) => false,
 
             // FracPi matches exact FracPi
@@ -534,7 +530,24 @@ impl Pattern {
                 .unwrap_or_else(|| panic!("Unbound wildcard: {}", name))
                 .clone(),
 
-            Pattern::Const(n) => Expr::Const(*n),
+            Pattern::Const(n) => {
+                // Produce Rational for integer values, otherwise keep as constant
+                if n.fract() == 0.0 && n.abs() < (i64::MAX / 2) as f64 {
+                    Expr::Rational(Rational::from_i64(*n as i64))
+                } else {
+                    // Try small denominators for non-integer constants
+                    let mut result = None;
+                    for d in 2..=1000i64 {
+                        let numerator = n * d as f64;
+                        let rounded = numerator.round();
+                        if (numerator - rounded).abs() < 1e-10 {
+                            result = Some(Expr::Rational(Rational::new(rounded as i64, d)));
+                            break;
+                        }
+                    }
+                    result.unwrap_or_else(|| panic!("Cannot convert Pattern::Const({}) to Rational", n))
+                }
+            }
 
             Pattern::Rational(r) => Expr::Rational(*r),
 

@@ -3,10 +3,9 @@ use crate::rational::Rational;
 #[derive(Debug, Clone)]
 pub enum Expr {
     // Atoms
-    Const(f64),
-    Rational(Rational),          // Exact rational number
-    Named(NamedConst),           // Named mathematical constant (e, √2, etc.)
-    FracPi(Rational),            // Rational multiple of π (value = r * π)
+    Rational(Rational), // Exact rational number
+    FracPi(Rational),   // Rational multiple of π (value = r * π)
+    Named(NamedConst),  // Named mathematical constant (e, √2, etc.)
     Var { name: String, indices: Vec<Index> },
 
     // Arithmetic
@@ -24,7 +23,6 @@ pub enum Expr {
 impl PartialEq for Expr {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Expr::Const(a), Expr::Const(b)) => a == b,
             (Expr::Named(a), Expr::Named(b)) => a == b,
             (
                 Expr::Var {
@@ -44,10 +42,6 @@ impl PartialEq for Expr {
             (Expr::FnN(k1, a), Expr::FnN(k2, b)) => k1 == k2 && a == b,
             (Expr::Rational(a), Expr::Rational(b)) => a == b,
             (Expr::FracPi(a), Expr::FracPi(b)) => a == b,
-            // Cross-type: Const <-> Rational by value
-            (Expr::Const(f), Expr::Rational(r)) | (Expr::Rational(r), Expr::Const(f)) => {
-                (*f - r.value()).abs() < 1e-12
-            }
             _ => false,
         }
     }
@@ -59,13 +53,13 @@ pub struct Index {
     pub position: IndexPosition,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IndexPosition {
     Upper, // contravariant
     Lower, // covariant
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FnKind {
     Sin,
     Cos,
@@ -137,11 +131,7 @@ impl NamedConst {
 impl Expr {
     pub fn complexity(&self) -> usize {
         match self {
-            Expr::Const(_)
-            | Expr::Rational(_)
-            | Expr::Named(_)
-            | Expr::FracPi(_)
-            | Expr::Var { .. } => 1,
+            Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. } => 1,
             Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + a.complexity(),
             Expr::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
             Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
@@ -152,8 +142,7 @@ impl Expr {
 
     pub fn precedence(&self) -> u8 {
         match self {
-            Expr::Const(_)
-            | Expr::Rational(_)
+            Expr::Rational(_)
             | Expr::Named(_)
             | Expr::FracPi(_)
             | Expr::Var { .. }
@@ -195,8 +184,20 @@ pub fn lower(name: &str) -> Index {
     }
 }
 
+/// Convert a float to a Rational expression. Handles integers and simple fractions.
+/// Panics if the float cannot be represented as a rational with denominator ≤ 1000.
 pub fn constant(n: f64) -> Expr {
-    Expr::Const(n)
+    if n.fract() == 0.0 && n.abs() < (i64::MAX / 2) as f64 {
+        return Expr::Rational(Rational::from_i64(n as i64));
+    }
+    for d in 2..=1000i64 {
+        let numerator = n * d as f64;
+        let rounded = numerator.round();
+        if (numerator - rounded).abs() < 1e-10 {
+            return Expr::Rational(Rational::new(rounded as i64, d));
+        }
+    }
+    panic!("Cannot convert {} to Rational", n);
 }
 
 pub fn rational(n: i64, d: i64) -> Expr {
@@ -248,7 +249,7 @@ pub fn pow(a: Expr, b: Expr) -> Expr {
 }
 
 pub fn sqrt(a: Expr) -> Expr {
-    pow(a, constant(0.5))
+    pow(a, Expr::Rational(Rational::new(1, 2)))
 }
 
 pub fn sin(a: Expr) -> Expr {
