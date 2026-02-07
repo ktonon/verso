@@ -85,6 +85,15 @@ impl DeBruijn {
     pub fn idx_name(&self, id: u16) -> Option<&str> {
         self.idx_names.get(id as usize).map(|s| s.as_str())
     }
+
+    /// Create a DeBruijn mapping with synthetic names (v0, v1, ... and i0, i1, ...).
+    /// Used for validation where original variable names are not available.
+    pub fn from_synthetic(num_vars: u16, num_indices: u16) -> Self {
+        DeBruijn {
+            var_names: (0..num_vars).map(|i| format!("v{}", i)).collect(),
+            idx_names: (0..num_indices).map(|i| format!("i{}", i)).collect(),
+        }
+    }
 }
 
 /// Tokenize an expression using pre-order traversal with De Bruijn variable naming.

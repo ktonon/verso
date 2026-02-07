@@ -37,6 +37,8 @@ pub struct IndexedRuleSet {
     rules: Vec<Rule>,
     ltr_ids: Vec<RuleDirectionId>,
     rtl_map: HashMap<usize, RuleDirectionId>,
+    /// Reverse lookup: direction_id → (rule_index, direction).
+    direction_lookup: Vec<(usize, Direction)>,
     pub total_directions: u16,
 }
 
@@ -59,10 +61,22 @@ impl IndexedRuleSet {
         }
         let next_id = next_rtl_id;
 
+        // Build reverse lookup
+        let mut direction_lookup = Vec::with_capacity(next_id as usize);
+        for i in 0..num_rules as usize {
+            direction_lookup.push((i, Direction::Ltr));
+        }
+        for (i, rule) in rules.iter().enumerate() {
+            if rule.reversible {
+                direction_lookup.push((i, Direction::Rtl));
+            }
+        }
+
         IndexedRuleSet {
             rules,
             ltr_ids,
             rtl_map,
+            direction_lookup,
             total_directions: next_id,
         }
     }
@@ -81,6 +95,11 @@ impl IndexedRuleSet {
 
     pub fn rule(&self, index: usize) -> &Rule {
         &self.rules[index]
+    }
+
+    /// Look up the (rule_index, direction) for a given direction ID.
+    pub fn lookup_direction(&self, id: RuleDirectionId) -> Option<(usize, Direction)> {
+        self.direction_lookup.get(id.0 as usize).copied()
     }
 }
 
@@ -526,6 +545,28 @@ mod tests {
         for (i, &id) in rtl_ids.iter().enumerate() {
             assert_eq!(id, (rs.len() + i) as u16);
         }
+    }
+
+    #[test]
+    fn lookup_direction_roundtrip() {
+        let rs = IndexedRuleSet::new(RuleSet::full());
+        // Every LTR direction should roundtrip
+        for i in 0..rs.len() {
+            let id = rs.ltr_id(i);
+            let (rule_idx, dir) = rs.lookup_direction(id).unwrap();
+            assert_eq!(rule_idx, i);
+            assert_eq!(dir, Direction::Ltr);
+        }
+        // Every RTL direction should roundtrip
+        for i in 0..rs.len() {
+            if let Some(id) = rs.rtl_id(i) {
+                let (rule_idx, dir) = rs.lookup_direction(id).unwrap();
+                assert_eq!(rule_idx, i);
+                assert_eq!(dir, Direction::Rtl);
+            }
+        }
+        // Out of range returns None
+        assert!(rs.lookup_direction(RuleDirectionId(9999)).is_none());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use crate::expr::{FnKind, NamedConst};
 use crate::random_search::{ChildIndex, IndexedRuleSet, SearchRun};
-use crate::token::{path_to_position, tokenize, Token};
+use crate::token::{path_to_position, tokenize, DeBruijn, Token};
 use serde::Serialize;
 use std::io::Write;
 
@@ -277,6 +277,109 @@ pub fn write_vocab_json<W: Write>(metadata: &VocabMetadata, writer: &mut W) -> s
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
+/// Error type for token string parsing failures.
+#[derive(Debug)]
+pub enum TokenParseError {
+    UnknownToken(String),
+}
+
+impl std::fmt::Display for TokenParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenParseError::UnknownToken(s) => write!(f, "unknown token: {}", s),
+        }
+    }
+}
+
+/// Parse a token string back to a Token.
+/// This is the inverse of `token_to_string`.
+pub fn parse_token_string(s: &str) -> Result<Token, TokenParseError> {
+    match s {
+        "ADD" => Ok(Token::Add),
+        "MUL" => Ok(Token::Mul),
+        "POW" => Ok(Token::Pow),
+        "NEG" => Ok(Token::Neg),
+        "INV" => Ok(Token::Inv),
+        "FRAC" => Ok(Token::Frac),
+        "FRAC_PI" => Ok(Token::FracPi),
+        "IDX_LO" => Ok(Token::IdxLo),
+        "IDX_HI" => Ok(Token::IdxHi),
+        // Named constants
+        "E" => Ok(Token::Named(NamedConst::E)),
+        "SQRT2" => Ok(Token::Named(NamedConst::Sqrt2)),
+        "SQRT3" => Ok(Token::Named(NamedConst::Sqrt3)),
+        "INV_SQRT2" => Ok(Token::Named(NamedConst::Frac1Sqrt2)),
+        "SQRT3_2" => Ok(Token::Named(NamedConst::FracSqrt3By2)),
+        // Multi-arg functions → FnN
+        "MIN" => Ok(Token::FnN(FnKind::Min)),
+        "MAX" => Ok(Token::FnN(FnKind::Max)),
+        "CLAMP" => Ok(Token::FnN(FnKind::Clamp)),
+        // Single-arg functions → Fn
+        "SIN" => Ok(Token::Fn(FnKind::Sin)),
+        "COS" => Ok(Token::Fn(FnKind::Cos)),
+        "TAN" => Ok(Token::Fn(FnKind::Tan)),
+        "ASIN" => Ok(Token::Fn(FnKind::Asin)),
+        "ACOS" => Ok(Token::Fn(FnKind::Acos)),
+        "ATAN" => Ok(Token::Fn(FnKind::Atan)),
+        "SIGN" => Ok(Token::Fn(FnKind::Sign)),
+        "SINH" => Ok(Token::Fn(FnKind::Sinh)),
+        "COSH" => Ok(Token::Fn(FnKind::Cosh)),
+        "TANH" => Ok(Token::Fn(FnKind::Tanh)),
+        "FLOOR" => Ok(Token::Fn(FnKind::Floor)),
+        "CEIL" => Ok(Token::Fn(FnKind::Ceil)),
+        "ROUND" => Ok(Token::Fn(FnKind::Round)),
+        "EXP" => Ok(Token::Fn(FnKind::Exp)),
+        "LN" => Ok(Token::Fn(FnKind::Ln)),
+        _ => {
+            // Variable: V0, V1, ...
+            if let Some(rest) = s.strip_prefix('V') {
+                if let Ok(id) = rest.parse::<u16>() {
+                    return Ok(Token::Var(id));
+                }
+            }
+            // Integer: I_-3, I_0, I_5, ...
+            if let Some(rest) = s.strip_prefix("I_") {
+                if let Ok(n) = rest.parse::<i64>() {
+                    return Ok(Token::Int(n));
+                }
+            }
+            // Tensor index: IX0, IX1, ...
+            if let Some(rest) = s.strip_prefix("IX") {
+                if let Ok(id) = rest.parse::<u16>() {
+                    return Ok(Token::Idx(id));
+                }
+            }
+            Err(TokenParseError::UnknownToken(s.to_string()))
+        }
+    }
+}
+
+/// Build a synthetic DeBruijn mapping from token values.
+/// Scans for max Var and Idx IDs, then creates names v0, v1, ... and i0, i1, ...
+pub fn synthetic_debruijn(tokens: &[Token]) -> DeBruijn {
+    let max_var = tokens
+        .iter()
+        .filter_map(|t| match t {
+            Token::Var(id) => Some(*id),
+            _ => None,
+        })
+        .max()
+        .map(|m| m + 1)
+        .unwrap_or(0);
+
+    let max_idx = tokens
+        .iter()
+        .filter_map(|t| match t {
+            Token::Idx(id) => Some(*id),
+            _ => None,
+        })
+        .max()
+        .map(|m| m + 1)
+        .unwrap_or(0);
+
+    DeBruijn::from_synthetic(max_var, max_idx)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -472,6 +575,42 @@ mod tests {
         assert!(json["encoder_tokens"].is_array());
         assert!(json["rule_directions"].is_array());
         assert!(json["total_directions"].is_number());
+    }
+
+    #[test]
+    fn parse_token_string_roundtrip() {
+        // All encoder tokens should roundtrip through token_to_string → parse_token_string
+        let rules = IndexedRuleSet::new(RuleSet::full());
+        let vocab = build_vocab_metadata(&rules);
+        for tok_str in &vocab.encoder_tokens {
+            let token = parse_token_string(tok_str)
+                .unwrap_or_else(|_| panic!("failed to parse: {}", tok_str));
+            assert_eq!(
+                &token_to_string(&token),
+                tok_str,
+                "roundtrip failed for {}",
+                tok_str
+            );
+        }
+    }
+
+    #[test]
+    fn parse_token_string_unknown() {
+        assert!(parse_token_string("UNKNOWN").is_err());
+        assert!(parse_token_string("").is_err());
+    }
+
+    #[test]
+    fn synthetic_debruijn_builds_correctly() {
+        let tokens = vec![Token::Var(0), Token::Var(2), Token::Idx(1)];
+        let db = synthetic_debruijn(&tokens);
+        assert_eq!(db.var_name(0), Some("v0"));
+        assert_eq!(db.var_name(1), Some("v1"));
+        assert_eq!(db.var_name(2), Some("v2"));
+        assert_eq!(db.var_name(3), None);
+        assert_eq!(db.idx_name(0), Some("i0"));
+        assert_eq!(db.idx_name(1), Some("i1"));
+        assert_eq!(db.idx_name(2), None);
     }
 
     #[test]

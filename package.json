@@ -16,6 +16,7 @@
 		"repl": "cargo run -p erd_symbolic --release --bin repl",
 		"ml:reset": "rm -rf data_training checkpoints",
 		"train": "PYTHONPATH=erd_training python3 -m erd_training.train",
+		"evaluate": "cargo build --release --bin validate && PYTHONPATH=erd_training python3 -m erd_training.evaluate",
 		"start": "./scripts/build-app.js --server"
 	},
 	"devDependencies": {

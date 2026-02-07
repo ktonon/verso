@@ -10,6 +10,7 @@ mod to_tex;
 pub mod random_search;
 pub mod token;
 pub mod training_data;
+pub mod validate;
 
 pub use expr::*;
 pub use fmt::{fmt_colored, Colored};
