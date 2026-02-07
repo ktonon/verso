@@ -707,41 +707,48 @@ impl RuleSet {
 
     /// Trigonometric identities.
     pub fn trigonometric() -> RuleSet {
-        use std::f64::consts::{E, FRAC_PI_2, FRAC_PI_3, FRAC_PI_4, FRAC_PI_6, PI, TAU};
-
         let x = || wildcard("x");
+
+        // Named constant shortcuts
+        let pi = || p_named(NamedConst::Pi);
+        let pi2 = || p_named(NamedConst::FracPi2);
+        let pi3 = || p_named(NamedConst::FracPi3);
+        let pi4 = || p_named(NamedConst::FracPi4);
+        let pi6 = || p_named(NamedConst::FracPi6);
+        let two_pi = || p_named(NamedConst::TwoPi);
+        let sqrt2_2 = || p_named(NamedConst::Frac1Sqrt2);
+        let sqrt3_2 = || p_named(NamedConst::FracSqrt3By2);
+        let e = || p_named(NamedConst::E);
 
         let mut rs = Self::new();
 
         // === Evaluation at special values ===
         rs.add(rule("sin_zero", p_sin(p_const(0.0)), p_const(0.0))); // sin(0) = 0
         rs.add(rule("cos_zero", p_cos(p_const(0.0)), p_const(1.0))); // cos(0) = 1
-        rs.add(rule("sin_pi", p_sin(p_const(PI)), p_const(0.0))); // sin(π) = 0
-        rs.add(rule("cos_pi", p_cos(p_const(PI)), p_const(-1.0))); // cos(π) = -1
-        rs.add(rule("sin_pi_2", p_sin(p_const(FRAC_PI_2)), p_const(1.0))); // sin(π/2) = 1
-        rs.add(rule("cos_pi_2", p_cos(p_const(FRAC_PI_2)), p_const(0.0))); // cos(π/2) = 0
-
-        // Additional special values
-        let three_pi_over_2 = 3.0 * FRAC_PI_2; // 3π/2
-
-        rs.add(rule("sin_pi_4", p_sin(p_const(FRAC_PI_4)), p_named(NamedConst::Frac1Sqrt2))); // sin(π/4) = √2/2
-        rs.add(rule("cos_pi_4", p_cos(p_const(FRAC_PI_4)), p_named(NamedConst::Frac1Sqrt2))); // cos(π/4) = √2/2
-        rs.add(rule("sin_pi_3", p_sin(p_const(FRAC_PI_3)), p_named(NamedConst::FracSqrt3By2))); // sin(π/3) = √3/2
-        rs.add(rule("cos_pi_3", p_cos(p_const(FRAC_PI_3)), p_const(0.5))); // cos(π/3) = 1/2
-        rs.add(rule("sin_pi_6", p_sin(p_const(FRAC_PI_6)), p_const(0.5))); // sin(π/6) = 1/2
-        rs.add(rule("cos_pi_6", p_cos(p_const(FRAC_PI_6)), p_named(NamedConst::FracSqrt3By2))); // cos(π/6) = √3/2
-        rs.add(rule("sin_2pi", p_sin(p_const(TAU)), p_const(0.0))); // sin(2π) = 0
-        rs.add(rule("cos_2pi", p_cos(p_const(TAU)), p_const(1.0))); // cos(2π) = 1
+        rs.add(rule("sin_pi", p_sin(pi()), p_const(0.0)));           // sin(π) = 0
+        rs.add(rule("cos_pi", p_cos(pi()), p_const(-1.0)));          // cos(π) = -1
+        rs.add(rule("sin_pi_2", p_sin(pi2()), p_const(1.0)));        // sin(π/2) = 1
+        rs.add(rule("cos_pi_2", p_cos(pi2()), p_const(0.0)));        // cos(π/2) = 0
+        rs.add(rule("sin_pi_4", p_sin(pi4()), sqrt2_2()));            // sin(π/4) = √2/2
+        rs.add(rule("cos_pi_4", p_cos(pi4()), sqrt2_2()));            // cos(π/4) = √2/2
+        rs.add(rule("sin_pi_3", p_sin(pi3()), sqrt3_2()));            // sin(π/3) = √3/2
+        rs.add(rule("cos_pi_3", p_cos(pi3()), p_const(0.5)));        // cos(π/3) = 1/2
+        rs.add(rule("sin_pi_6", p_sin(pi6()), p_const(0.5)));        // sin(π/6) = 1/2
+        rs.add(rule("cos_pi_6", p_cos(pi6()), sqrt3_2()));            // cos(π/6) = √3/2
+        rs.add(rule("sin_2pi", p_sin(two_pi()), p_const(0.0)));      // sin(2π) = 0
+        rs.add(rule("cos_2pi", p_cos(two_pi()), p_const(1.0)));      // cos(2π) = 1
+        // No NamedConst for 3π/2 yet — keep as computed constant
+        let three_pi_over_2 = 3.0 * std::f64::consts::FRAC_PI_2;
         rs.add(rule("sin_3pi_2", p_sin(p_const(three_pi_over_2)), p_const(-1.0))); // sin(3π/2) = -1
         rs.add(rule("cos_3pi_2", p_cos(p_const(three_pi_over_2)), p_const(0.0))); // cos(3π/2) = 0
         rs.add(rule("tan_zero", p_tan(p_const(0.0)), p_const(0.0))); // tan(0) = 0
-        rs.add(rule("tan_pi", p_tan(p_const(PI)), p_const(0.0))); // tan(π) = 0
-        rs.add(rule("tan_pi_4", p_tan(p_const(FRAC_PI_4)), p_const(1.0))); // tan(π/4) = 1
+        rs.add(rule("tan_pi", p_tan(pi()), p_const(0.0)));           // tan(π) = 0
+        rs.add(rule("tan_pi_4", p_tan(pi4()), p_const(1.0)));        // tan(π/4) = 1
         rs.add(rule("asin_zero", p_asin(p_const(0.0)), p_const(0.0))); // asin(0) = 0
         rs.add(rule("acos_one", p_acos(p_const(1.0)), p_const(0.0))); // acos(1) = 0
-        rs.add(rule("acos_zero", p_acos(p_const(0.0)), p_const(FRAC_PI_2))); // acos(0) = π/2
+        rs.add(rule("acos_zero", p_acos(p_const(0.0)), pi2()));       // acos(0) = π/2
         rs.add(rule("atan_zero", p_atan(p_const(0.0)), p_const(0.0))); // atan(0) = 0
-        rs.add(rule("atan_one", p_atan(p_const(1.0)), p_const(FRAC_PI_4))); // atan(1) = π/4
+        rs.add(rule("atan_one", p_atan(p_const(1.0)), pi4()));        // atan(1) = π/4
 
         // === Parity (odd/even functions) ===
         // sin(-x) = -sin(x)
@@ -836,12 +843,12 @@ impl RuleSet {
         // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_complementary",
-            p_sin(p_add(p_const(FRAC_PI_2), p_neg(x()))),
+            p_sin(p_add(pi2(), p_neg(x()))),
             p_cos(x()),
         ));
         rs.add(rule(
             "cos_complementary",
-            p_cos(p_add(p_const(FRAC_PI_2), p_neg(x()))),
+            p_cos(p_add(pi2(), p_neg(x()))),
             p_sin(x()),
         ));
 
@@ -849,12 +856,12 @@ impl RuleSet {
         // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_supplementary",
-            p_sin(p_add(p_const(PI), p_neg(x()))),
+            p_sin(p_add(pi(), p_neg(x()))),
             p_sin(x()),
         ));
         rs.add(rule(
             "cos_supplementary",
-            p_cos(p_add(p_const(PI), p_neg(x()))),
+            p_cos(p_add(pi(), p_neg(x()))),
             p_neg(p_cos(x())),
         ));
 
@@ -862,12 +869,12 @@ impl RuleSet {
         // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_period",
-            p_sin(p_add(x(), p_const(TAU))),
+            p_sin(p_add(x(), two_pi())),
             p_sin(x()),
         ));
         rs.add(rule(
             "cos_period",
-            p_cos(p_add(x(), p_const(TAU))),
+            p_cos(p_add(x(), two_pi())),
             p_cos(x()),
         ));
 
@@ -875,7 +882,7 @@ impl RuleSet {
         // (add_commute handles reversed argument order)
         rs.add(rule(
             "tan_period",
-            p_tan(p_add(x(), p_const(PI))),
+            p_tan(p_add(x(), pi())),
             p_tan(x()),
         ));
 
@@ -1024,7 +1031,7 @@ impl RuleSet {
         // === Exponential/Log identities ===
         rs.add(rule("exp_zero", p_exp(p_const(0.0)), p_const(1.0))); // e^0 = 1
         rs.add(rule("ln_one", p_ln(p_const(1.0)), p_const(0.0))); // ln(1) = 0
-        rs.add(rule("ln_e", p_ln(p_const(E)), p_const(1.0))); // ln(e) = 1
+        rs.add(rule("ln_e", p_ln(e()), p_const(1.0))); // ln(e) = 1
         rs.add(rule("exp_ln", p_exp(p_ln(x())), x())); // e^(ln(x)) = x
         rs.add(rule("ln_exp", p_ln(p_exp(x())), x())); // ln(e^x) = x
 
@@ -1670,7 +1677,7 @@ mod tests {
     use super::*;
     use crate::expr::{
         acos, add, asin, atan, clamp, constant, cos, cosh, exp, floor, inv, ln, max, min, mul,
-        neg, round, scalar, sign, sin, sinh, tan, tanh,
+        named, neg, round, scalar, sign, sin, sinh, tan, tanh,
     };
     use crate::pow;
 
@@ -2620,7 +2627,7 @@ mod tests {
             .find(|r| r.name == "acos_zero")
             .and_then(|r| r.apply_ltr(&expr));
 
-        assert_eq!(result, Some(constant(std::f64::consts::FRAC_PI_2)));
+        assert_eq!(result, Some(named(NamedConst::FracPi2)));
     }
 
     #[test]
@@ -2633,7 +2640,7 @@ mod tests {
             .find(|r| r.name == "atan_one")
             .and_then(|r| r.apply_ltr(&expr));
 
-        assert_eq!(result, Some(constant(std::f64::consts::FRAC_PI_4)));
+        assert_eq!(result, Some(named(NamedConst::FracPi4)));
     }
 
     #[test]
