@@ -931,8 +931,13 @@ mod tests {
             mul(inv(scalar("x")), add(scalar("y"), scalar("y"))),
             constant(-1.0),
         );
+        // 2 * (y * (1/x)) + (-1)
+        let form4 = add(
+            mul(constant(2.0), mul(scalar("y"), inv(scalar("x")))),
+            constant(-1.0),
+        );
         assert!(
-            result == form1 || result == form2 || result == form3,
+            result == form1 || result == form2 || result == form3 || result == form4,
             "Expected 2y/x - 1 in some form, got: {:?}",
             result
         );
@@ -3067,5 +3072,26 @@ mod tests {
             "Expected (x - 1)², got: {:?}",
             result
         );
+    }
+
+    #[test]
+    fn simplify_combine_like_terms_both_coefficients() {
+        // 3*x + 2*x = 5*x — both sides have explicit coefficients
+        let rules = RuleSet::standard();
+        let expr = add(mul(constant(3.0), scalar("x")), mul(constant(2.0), scalar("x")));
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, mul(constant(5.0), scalar("x")));
+    }
+
+    #[test]
+    fn simplify_combine_like_terms_general_expression() {
+        // 3*sin(x) + 2*sin(x) = 5*sin(x)
+        let rules = RuleSet::standard();
+        let expr = add(
+            mul(constant(3.0), sin(scalar("x"))),
+            mul(constant(2.0), sin(scalar("x"))),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, mul(constant(5.0), sin(scalar("x"))));
     }
 }

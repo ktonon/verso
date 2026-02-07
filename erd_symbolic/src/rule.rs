@@ -698,6 +698,55 @@ impl RuleSet {
             p_mul(p_const(2.0), v()),
         ));
 
+        // Combine like terms (general — matches any expression, not just variables)
+        // a*X + b*X → (a+b)*X
+        rs.add(rule(
+            "combine_like_terms_general_both",
+            p_add(p_mul(const_wild("a"), x()), p_mul(const_wild("b"), x())),
+            p_mul(p_add(const_wild("a"), const_wild("b")), x()),
+        ));
+        // a*X + X → (a+1)*X
+        rs.add(rule(
+            "combine_like_terms_general_left",
+            p_add(p_mul(const_wild("a"), x()), x()),
+            p_mul(p_add(const_wild("a"), p_const(1.0)), x()),
+        ));
+        // X + a*X → (a+1)*X
+        rs.add(rule(
+            "combine_like_terms_general_right",
+            p_add(x(), p_mul(const_wild("a"), x())),
+            p_mul(p_add(const_wild("a"), p_const(1.0)), x()),
+        ));
+        // X + X → 2*X
+        rs.add(rule(
+            "combine_like_terms_general_self",
+            p_add(x(), x()),
+            p_mul(p_const(2.0), x()),
+        ));
+
+        // Combine like terms with negation (partial cancellation)
+        // a*X + (-X) → (a-1)*X
+        rs.add(rule(
+            "combine_like_neg_left",
+            p_add(p_mul(const_wild("a"), x()), p_neg(x())),
+            p_mul(p_add(const_wild("a"), p_neg(p_const(1.0))), x()),
+        ));
+        // (-X) + a*X → (a-1)*X
+        rs.add(rule(
+            "combine_like_neg_right",
+            p_add(p_neg(x()), p_mul(const_wild("a"), x())),
+            p_mul(p_add(const_wild("a"), p_neg(p_const(1.0))), x()),
+        ));
+        // a*X + (-(b*X)) → (a-b)*X
+        rs.add(rule(
+            "combine_like_neg_both",
+            p_add(
+                p_mul(const_wild("a"), x()),
+                p_neg(p_mul(const_wild("b"), x())),
+            ),
+            p_mul(p_add(const_wild("a"), p_neg(const_wild("b"))), x()),
+        ));
+
         // Min/max/clamp identities (idempotent)
         rs.add(rule("min_idempotent", p_min(x(), x()), x()));
         rs.add(rule("max_idempotent", p_max(x(), x()), x()));
