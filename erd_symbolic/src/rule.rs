@@ -487,72 +487,9 @@ impl RuleSet {
             .merge(Self::standard())
             .merge(Self::extended())
             .merge(Self::trigonometric())
-            .merge(Self::tensor());
+            .merge(Self::tensor())
+            .merge(Self::factoring());
         rules
-    }
-
-    /// Extended identities that assume a numeric domain with ordering/rounding semantics.
-    /// These are not always safe for symbolic manipulation without domain constraints.
-    pub fn extended() -> RuleSet {
-        let x = || wildcard("x");
-        let y = || wildcard("y");
-        let lo = || wildcard("lo");
-        let hi = || wildcard("hi");
-
-        let mut rs = Self::new();
-
-        // Min/max commutativity
-        rs.add(rule("min_commute", p_min(x(), y()), p_min(y(), x())));
-        rs.add(rule("max_commute", p_max(x(), y()), p_max(y(), x())));
-
-        // Absorption
-        rs.add(rule(
-            "min_absorb",
-            p_min(x(), p_max(x(), y())),
-            x(),
-        ));
-        rs.add(rule(
-            "max_absorb",
-            p_max(x(), p_min(x(), y())),
-            x(),
-        ));
-
-        // min(x, y) + max(x, y) = x + y
-        rs.add(rule(
-            "min_max_sum",
-            p_add(p_min(x(), y()), p_max(x(), y())),
-            p_add(x(), y()),
-        ));
-
-        // clamp(x, lo, hi) = min(max(x, lo), hi)
-        rs.add(rule(
-            "clamp_def",
-            p_clamp(x(), lo(), hi()),
-            p_min(p_max(x(), lo()), hi()),
-        ));
-
-        // sign(-x) = -sign(x)
-        rs.add(rule(
-            "sign_neg",
-            p_sign(p_neg(x())),
-            p_neg(p_sign(x())),
-        ));
-
-        // sign(x)^2 = 1 (for x != 0)
-        rs.add(rule(
-            "sign_square",
-            p_pow(p_sign(x()), p_const(2.0)),
-            p_const(1.0),
-        ));
-
-        // round(x) = floor(x + 1/2) (assumes round-half-up)
-        rs.add(rule(
-            "round_def",
-            p_round(x()),
-            p_floor(p_add(x(), p_inv(p_const(2.0)))),
-        ));
-
-        rs
     }
 
     /// Standard arithmetic identities.
@@ -668,6 +605,70 @@ impl RuleSet {
             "clamp_idempotent",
             p_clamp(p_clamp(x(), lo(), hi()), lo(), hi()),
             p_clamp(x(), lo(), hi()),
+        ));
+
+        rs
+    }
+
+    /// Extended identities that assume a numeric domain with ordering/rounding semantics.
+    /// These are not always safe for symbolic manipulation without domain constraints.
+    pub fn extended() -> RuleSet {
+        let x = || wildcard("x");
+        let y = || wildcard("y");
+        let lo = || wildcard("lo");
+        let hi = || wildcard("hi");
+
+        let mut rs = Self::new();
+
+        // Min/max commutativity
+        rs.add(rule("min_commute", p_min(x(), y()), p_min(y(), x())));
+        rs.add(rule("max_commute", p_max(x(), y()), p_max(y(), x())));
+
+        // Absorption
+        rs.add(rule(
+            "min_absorb",
+            p_min(x(), p_max(x(), y())),
+            x(),
+        ));
+        rs.add(rule(
+            "max_absorb",
+            p_max(x(), p_min(x(), y())),
+            x(),
+        ));
+
+        // min(x, y) + max(x, y) = x + y
+        rs.add(rule(
+            "min_max_sum",
+            p_add(p_min(x(), y()), p_max(x(), y())),
+            p_add(x(), y()),
+        ));
+
+        // clamp(x, lo, hi) = min(max(x, lo), hi)
+        rs.add(rule(
+            "clamp_def",
+            p_clamp(x(), lo(), hi()),
+            p_min(p_max(x(), lo()), hi()),
+        ));
+
+        // sign(-x) = -sign(x)
+        rs.add(rule(
+            "sign_neg",
+            p_sign(p_neg(x())),
+            p_neg(p_sign(x())),
+        ));
+
+        // sign(x)^2 = 1 (for x != 0)
+        rs.add(rule(
+            "sign_square",
+            p_pow(p_sign(x()), p_const(2.0)),
+            p_const(1.0),
+        ));
+
+        // round(x) = floor(x + 1/2) (assumes round-half-up)
+        rs.add(rule(
+            "round_def",
+            p_round(x()),
+            p_floor(p_add(x(), p_inv(p_const(2.0)))),
         ));
 
         rs
@@ -1590,6 +1591,175 @@ impl RuleSet {
             "em_field_antisymmetric_lower",
             p_var("F", vec![idx_lower("i"), idx_lower("j")]),
             p_neg(p_var("F", vec![idx_lower("j"), idx_lower("i")])),
+        ));
+
+        rs
+    }
+
+    /// Factoring rules - the reverse of distribution.
+    /// These allow beam search to explore factored forms.
+    pub fn factoring() -> RuleSet {
+        let x = || wildcard("x");
+        let a = || wildcard("a");
+        let b = || wildcard("b");
+
+        let mut rs = Self::new();
+
+        // === Common factor extraction ===
+        // x*a + x*b = x*(a + b) - factor left
+        rs.add(rule(
+            "factor_left",
+            p_add(p_mul(x(), a()), p_mul(x(), b())),
+            p_mul(x(), p_add(a(), b())),
+        ));
+
+        // a*x + b*x = (a + b)*x - factor right
+        rs.add(rule(
+            "factor_right",
+            p_add(p_mul(a(), x()), p_mul(b(), x())),
+            p_mul(p_add(a(), b()), x()),
+        ));
+
+        // x*a - x*b = x*(a - b) - factor left with subtraction
+        rs.add(rule(
+            "factor_left_sub",
+            p_add(p_mul(x(), a()), p_neg(p_mul(x(), b()))),
+            p_mul(x(), p_add(a(), p_neg(b()))),
+        ));
+
+        // a*x - b*x = (a - b)*x - factor right with subtraction
+        rs.add(rule(
+            "factor_right_sub",
+            p_add(p_mul(a(), x()), p_neg(p_mul(b(), x()))),
+            p_mul(p_add(a(), p_neg(b())), x()),
+        ));
+
+        // === Difference of squares ===
+        // a² - b² = (a + b)(a - b)
+        rs.add(rule(
+            "diff_of_squares",
+            p_add(p_pow(a(), p_const(2.0)), p_neg(p_pow(b(), p_const(2.0)))),
+            p_mul(p_add(a(), b()), p_add(a(), p_neg(b()))),
+        ));
+
+        // === Perfect square trinomials ===
+        // a² + 2ab + b² = (a + b)²
+        // Note: This pattern is hard to match exactly due to term ordering.
+        // We provide several orderings that beam search might encounter.
+
+        // a² + 2*a*b + b² = (a + b)²
+        rs.add(rule(
+            "perfect_square_plus_1",
+            p_add(
+                p_add(p_pow(a(), p_const(2.0)), p_mul(p_mul(p_const(2.0), a()), b())),
+                p_pow(b(), p_const(2.0)),
+            ),
+            p_pow(p_add(a(), b()), p_const(2.0)),
+        ));
+
+        // 2*a*b + a² + b² = (a + b)²
+        rs.add(rule(
+            "perfect_square_plus_2",
+            p_add(
+                p_add(p_mul(p_mul(p_const(2.0), a()), b()), p_pow(a(), p_const(2.0))),
+                p_pow(b(), p_const(2.0)),
+            ),
+            p_pow(p_add(a(), b()), p_const(2.0)),
+        ));
+
+        // a² - 2*a*b + b² = (a - b)²
+        rs.add(rule(
+            "perfect_square_minus_1",
+            p_add(
+                p_add(
+                    p_pow(a(), p_const(2.0)),
+                    p_neg(p_mul(p_mul(p_const(2.0), a()), b())),
+                ),
+                p_pow(b(), p_const(2.0)),
+            ),
+            p_pow(p_add(a(), p_neg(b())), p_const(2.0)),
+        ));
+
+        // === Special cases with 1 ===
+        // x + 1 patterns for when b = 1
+        // x² + 2x + 1 = (x + 1)²
+        rs.add(rule(
+            "perfect_square_plus_one",
+            p_add(p_add(p_pow(x(), p_const(2.0)), p_mul(p_const(2.0), x())), p_const(1.0)),
+            p_pow(p_add(x(), p_const(1.0)), p_const(2.0)),
+        ));
+
+        // x² - 2x + 1 = (x - 1)²
+        rs.add(rule(
+            "perfect_square_minus_one",
+            p_add(
+                p_add(p_pow(x(), p_const(2.0)), p_neg(p_mul(p_const(2.0), x()))),
+                p_const(1.0),
+            ),
+            p_pow(p_add(x(), p_neg(p_const(1.0))), p_const(2.0)),
+        ));
+
+        // x² - 1 = (x + 1)(x - 1)
+        rs.add(rule(
+            "diff_of_squares_one",
+            p_add(p_pow(x(), p_const(2.0)), p_neg(p_const(1.0))),
+            p_mul(
+                p_add(x(), p_const(1.0)),
+                p_add(x(), p_neg(p_const(1.0))),
+            ),
+        ));
+
+        // x² - 1 with Const(-1) instead of Neg(Const(1))
+        rs.add(rule(
+            "diff_of_squares_one_const",
+            p_add(p_pow(x(), p_const(2.0)), p_const(-1.0)),
+            p_mul(
+                p_add(x(), p_const(1.0)),
+                p_add(x(), p_const(-1.0)),
+            ),
+        ));
+
+        // === Factor out when one term is the factor itself ===
+        // x*a + x = x*(a + 1) - factor left with bare x
+        rs.add(rule(
+            "factor_left_bare",
+            p_add(p_mul(x(), a()), x()),
+            p_mul(x(), p_add(a(), p_const(1.0))),
+        ));
+
+        // a*x + x = (a + 1)*x - factor right with bare x
+        rs.add(rule(
+            "factor_right_bare",
+            p_add(p_mul(a(), x()), x()),
+            p_mul(p_add(a(), p_const(1.0)), x()),
+        ));
+
+        // x + x*a = x*(a + 1) - factor left with bare x (reversed order)
+        rs.add(rule(
+            "factor_left_bare_rev",
+            p_add(x(), p_mul(x(), a())),
+            p_mul(x(), p_add(a(), p_const(1.0))),
+        ));
+
+        // x + a*x = (a + 1)*x - factor right with bare x (reversed order)
+        rs.add(rule(
+            "factor_right_bare_rev",
+            p_add(x(), p_mul(a(), x())),
+            p_mul(p_add(a(), p_const(1.0)), x()),
+        ));
+
+        // x*a - x = x*(a - 1) - factor left with bare x subtraction
+        rs.add(rule(
+            "factor_left_bare_sub",
+            p_add(p_mul(x(), a()), p_neg(x())),
+            p_mul(x(), p_add(a(), p_neg(p_const(1.0)))),
+        ));
+
+        // a*x - x = (a - 1)*x - factor right with bare x subtraction
+        rs.add(rule(
+            "factor_right_bare_sub",
+            p_add(p_mul(a(), x()), p_neg(x())),
+            p_mul(p_add(a(), p_neg(p_const(1.0))), x()),
         ));
 
         rs
