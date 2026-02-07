@@ -58,10 +58,39 @@ pub fn run() -> Result<(), ReadlineError> {
                         if show_trace {
                             let (simplified, trace) =
                                 search::simplify_with_trace(&expr, &RuleSet::full());
+
+                            // Compute alignment widths using plain (non-colored) text
+                            let plain_widths: Vec<usize> = trace
+                                .iter()
+                                .map(|s| format!("{}", s.expr).chars().count())
+                                .collect();
+                            let max_expr_width = plain_widths.iter().copied().max().unwrap_or(0);
+                            let max_name_width = trace
+                                .iter()
+                                .filter_map(|s| s.rule_name.as_ref().map(|n| n.len()))
+                                .max()
+                                .unwrap_or(0);
+
                             for (i, step) in trace.iter().enumerate() {
-                                println!("{}: {}", i, fmt_colored(step));
+                                let expr_str = fmt_colored(&step.expr);
+                                let padding = max_expr_width - plain_widths[i];
+                                match (&step.rule_name, &step.rule_display) {
+                                    (Some(name), Some(display)) => {
+                                        println!(
+                                            "{}: {}{:padding$}  \x1b[90m{:width$}\x1b[0m  \x1b[2m{}\x1b[0m",
+                                            i,
+                                            expr_str,
+                                            "",
+                                            name,
+                                            display,
+                                            padding = padding,
+                                            width = max_name_width,
+                                        );
+                                    }
+                                    _ => println!("{}: {}", i, expr_str),
+                                }
                             }
-                            println!("final: {}\n", fmt_colored(&simplified));
+                            println!();
                             record_result(&mut result_history, &mut rl, history_mode, &simplified);
                         } else {
                             let simplified = search::simplify(&expr, &RuleSet::full());

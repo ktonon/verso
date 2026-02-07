@@ -1,5 +1,6 @@
 #[allow(unused_imports)] // NamedConst is used in pattern matching via nc.value()
 use crate::expr::{Expr, FnKind, Index, IndexPosition, NamedConst};
+use crate::fmt::fmt_frac_pi;
 use crate::rational::Rational;
 use std::collections::HashMap;
 
@@ -219,6 +220,127 @@ pub struct Rule {
     /// If true, beam search applies this rule in both directions (LTR and RTL).
     /// Default is false (LTR only), suitable for one-way simplifications like sin(π/4) = √2/2.
     pub reversible: bool,
+}
+
+impl Pattern {
+    fn precedence(&self) -> u8 {
+        match self {
+            Pattern::Wildcard(_)
+            | Pattern::ConstWild(_)
+            | Pattern::IntWild(_)
+            | Pattern::IntEvenWild(_)
+            | Pattern::IntOddWild(_)
+            | Pattern::Const(_)
+            | Pattern::Rational(_)
+            | Pattern::Named(_)
+            | Pattern::FracPi(_)
+            | Pattern::Var { .. }
+            | Pattern::Fn(_, _)
+            | Pattern::FnN(_, _) => 100,
+            Pattern::Pow(_, _) => 80,
+            Pattern::Neg(_) | Pattern::Inv(_) => 70,
+            Pattern::Mul(_, _) => 60,
+            Pattern::Add(_, _) => 50,
+        }
+    }
+}
+
+fn maybe_paren_pattern(child: &Pattern, parent: &Pattern) -> String {
+    if child.precedence() < parent.precedence() {
+        format!("({})", child)
+    } else {
+        format!("{}", child)
+    }
+}
+
+impl std::fmt::Display for Pattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Pattern::Wildcard(name)
+            | Pattern::ConstWild(name)
+            | Pattern::IntWild(name)
+            | Pattern::IntEvenWild(name)
+            | Pattern::IntOddWild(name) => write!(f, "{}", name),
+            Pattern::Const(n) => {
+                if n.fract() == 0.0 {
+                    write!(f, "{}", *n as i64)
+                } else {
+                    write!(f, "{}", n)
+                }
+            }
+            Pattern::Rational(r) => write!(f, "{}", r),
+            Pattern::Named(nc) => write!(f, "{}", nc),
+            Pattern::FracPi(r) => write!(f, "{}", fmt_frac_pi(r)),
+            Pattern::Var { name, indices } => {
+                match name {
+                    VarPattern::Exact(s) => write!(f, "{}", s),
+                    VarPattern::Wild(s) => write!(f, "{}", s),
+                }?;
+                for idx in indices {
+                    match idx {
+                        IndexPattern::Upper(s) => write!(f, "^{}", s)?,
+                        IndexPattern::Lower(s) => write!(f, "_{}", s)?,
+                        IndexPattern::Exact(i) => {
+                            let arrow = if i.position == IndexPosition::Upper {
+                                "^"
+                            } else {
+                                "_"
+                            };
+                            write!(f, "{}{}", arrow, i)?;
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Pattern::Add(a, b) => match b.as_ref() {
+                Pattern::Neg(inner) => {
+                    write!(f, "{} - {}", a, inner)
+                }
+                _ => {
+                    write!(f, "{} + {}", a, b)
+                }
+            },
+            Pattern::Mul(a, b) => match b.as_ref() {
+                Pattern::Inv(inner) => {
+                    write!(
+                        f,
+                        "{}/{}",
+                        maybe_paren_pattern(a, self),
+                        maybe_paren_pattern(inner, self)
+                    )
+                }
+                _ => {
+                    write!(
+                        f,
+                        "{}{}",
+                        maybe_paren_pattern(a, self),
+                        maybe_paren_pattern(b, self)
+                    )
+                }
+            },
+            Pattern::Neg(a) => write!(f, "-{}", maybe_paren_pattern(a, self)),
+            Pattern::Inv(a) => write!(f, "1/{}", maybe_paren_pattern(a, self)),
+            Pattern::Pow(base, exp) => {
+                write!(
+                    f,
+                    "{}**{}",
+                    maybe_paren_pattern(base, self),
+                    maybe_paren_pattern(exp, self)
+                )
+            }
+            Pattern::Fn(kind, arg) => write!(f, "{}({})", kind, arg),
+            Pattern::FnN(kind, args) => {
+                let rendered: Vec<String> = args.iter().map(|a| format!("{}", a)).collect();
+                write!(f, "{}({})", kind, rendered.join(", "))
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} = {}", self.lhs, self.rhs)
+    }
 }
 
 /// Expression bindings: wildcard name -> matched expression

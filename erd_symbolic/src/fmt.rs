@@ -3,7 +3,7 @@ use crate::rational::Rational;
 use std::fmt::Display;
 
 /// Format a rational multiple of π for display.
-fn fmt_frac_pi(r: &Rational) -> String {
+pub fn fmt_frac_pi(r: &Rational) -> String {
     let n = r.num();
     let d = r.den();
     match (n, d) {

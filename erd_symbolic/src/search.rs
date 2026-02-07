@@ -27,12 +27,21 @@ impl Default for BeamSearch {
     }
 }
 
+/// A single step in the simplification trace.
+pub struct TraceStep {
+    pub expr: Expr,
+    pub rule_name: Option<String>,
+    pub rule_display: Option<String>,
+}
+
 /// A rewrite with metadata about its origin.
 #[derive(Clone)]
 struct Rewrite {
     expr: Expr,
     /// True if this rewrite came from a rule application (not just commutativity)
     from_rule: bool,
+    rule_name: Option<String>,
+    rule_display: Option<String>,
 }
 
 impl BeamSearch {
@@ -60,6 +69,8 @@ impl BeamSearch {
                 results.push(Rewrite {
                     expr: folded,
                     from_rule: true,
+                    rule_name: Some(rule.name.clone()),
+                    rule_display: Some(format!("{}", rule)),
                 });
             }
             // Also try RTL for reversible rules
@@ -69,6 +80,8 @@ impl BeamSearch {
                     results.push(Rewrite {
                         expr: folded,
                         from_rule: true,
+                        rule_name: Some(rule.name.clone()),
+                        rule_display: Some(format!("{} = {}", rule.rhs, rule.lhs)),
                     });
                 }
             }
@@ -92,12 +105,16 @@ impl BeamSearch {
                     results.push(Rewrite {
                         expr: Expr::Add(Box::new(rewrite.expr), b.clone()),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
                 for rewrite in self.all_rewrites_depth(b, rules, depth - 1) {
                     results.push(Rewrite {
                         expr: Expr::Add(a.clone(), Box::new(rewrite.expr)),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
             }
@@ -107,12 +124,16 @@ impl BeamSearch {
                     results.push(Rewrite {
                         expr: Expr::Mul(Box::new(rewrite.expr), b.clone()),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
                 for rewrite in self.all_rewrites_depth(b, rules, depth - 1) {
                     results.push(Rewrite {
                         expr: Expr::Mul(a.clone(), Box::new(rewrite.expr)),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
             }
@@ -122,12 +143,16 @@ impl BeamSearch {
                     results.push(Rewrite {
                         expr: Expr::Pow(Box::new(rewrite.expr), exp.clone()),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
                 for rewrite in self.all_rewrites_depth(exp, rules, depth - 1) {
                     results.push(Rewrite {
                         expr: Expr::Pow(base.clone(), Box::new(rewrite.expr)),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
             }
@@ -137,6 +162,8 @@ impl BeamSearch {
                     results.push(Rewrite {
                         expr: Expr::Neg(Box::new(rewrite.expr)),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
             }
@@ -146,6 +173,8 @@ impl BeamSearch {
                     results.push(Rewrite {
                         expr: Expr::Inv(Box::new(rewrite.expr)),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
             }
@@ -155,6 +184,8 @@ impl BeamSearch {
                     results.push(Rewrite {
                         expr: Expr::Fn(kind.clone(), Box::new(rewrite.expr)),
                         from_rule: rewrite.from_rule,
+                        rule_name: rewrite.rule_name,
+                        rule_display: rewrite.rule_display,
                     });
                 }
             }
@@ -166,6 +197,8 @@ impl BeamSearch {
                         results.push(Rewrite {
                             expr: Expr::FnN(kind.clone(), new_args),
                             from_rule: rewrite.from_rule,
+                            rule_name: rewrite.rule_name,
+                            rule_display: rewrite.rule_display,
                         });
                     }
                 }
@@ -246,7 +279,7 @@ impl SearchStrategy for BeamSearch {
 }
 
 impl BeamSearch {
-    fn simplify_with_trace(&self, expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
+    fn simplify_with_trace(&self, expr: &Expr, rules: &RuleSet) -> (Expr, Vec<TraceStep>) {
         // Track seen expressions to avoid cycles
         let mut seen: HashSet<String> = HashSet::new();
 
@@ -259,7 +292,11 @@ impl BeamSearch {
         let mut best_complexity = expr.complexity();
         let mut best_from_rule = false;
 
-        let mut trace = vec![expr.clone()];
+        let mut trace = vec![TraceStep {
+            expr: expr.clone(),
+            rule_name: None,
+            rule_display: None,
+        }];
 
         for _step in 0..self.max_steps {
             let all_rewrites: Vec<Rewrite> = beam
@@ -281,8 +318,12 @@ impl BeamSearch {
                         best = rewrite.expr.clone();
                         best_complexity = complexity;
                         best_from_rule = rewrite.from_rule;
-                        if trace.last() != Some(&best) {
-                            trace.push(best.clone());
+                        if trace.last().map(|s| &s.expr) != Some(&best) {
+                            trace.push(TraceStep {
+                                expr: best.clone(),
+                                rule_name: rewrite.rule_name.clone(),
+                                rule_display: rewrite.rule_display.clone(),
+                            });
                         }
                     }
 
@@ -336,7 +377,7 @@ pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
     }
 }
 
-pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
+pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<TraceStep>) {
     // Use wider beam to explore both distribution and factoring paths
     let wide_search = BeamSearch::new(20, 200);
 
@@ -345,19 +386,31 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
 
     let folded = eval_constants(&current);
     if folded != current {
-        trace.push(folded.clone());
+        trace.push(TraceStep {
+            expr: folded.clone(),
+            rule_name: None,
+            rule_display: None,
+        });
         current = folded;
     }
 
     let collected = collect_linear_terms(&current);
     if collected != current {
-        trace.push(collected.clone());
+        trace.push(TraceStep {
+            expr: collected.clone(),
+            rule_name: None,
+            rule_display: None,
+        });
         current = collected;
     }
 
     let final_fold = eval_constants(&current);
     if final_fold != current {
-        trace.push(final_fold.clone());
+        trace.push(TraceStep {
+            expr: final_fold.clone(),
+            rule_name: None,
+            rule_display: None,
+        });
         current = final_fold;
     }
 
