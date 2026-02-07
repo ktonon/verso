@@ -453,7 +453,50 @@ fn simplify(expr: &Expr, model: &OrtSession, rules: &RuleSet) -> Expr {
 4. **Validation harness**: call Rust rule engine to validate predicted sequences
 5. **ONNX export**: save trained model for Rust consumption
 
-## 9. Open Questions
+## 9. M4 Results & Observations
+
+### Phase 1 Training Run (100 epochs, CPU)
+
+| Metric | Value |
+|--------|-------|
+| Model parameters | 1,430,549 |
+| Architecture | d_model=128, d_ff=256, 4+4 layers, 4 heads |
+| Training examples | ~13.2K (90% of ~14.7K) |
+| Validation examples | ~1.5K |
+| Final train loss | 0.20 |
+| Final val loss | 0.53 |
+| Best val loss | ~0.53 (epoch ~85) |
+| Time per epoch | ~39s (CPU) |
+
+### Overfitting Analysis
+
+The train/val gap (0.20 vs 0.53) is expected given the data/parameter ratio (~10 examples per parameter). The model memorized training traces but still generalized meaningfully — random guessing would yield loss ~5.6 (ln(277 decoder tokens)).
+
+This is acceptable for Phase 1's purpose: learning the structure of valid action sequences as a warm start for Phase 2 (self-play/RL). The key metric is M5's validity rate — what fraction of the model's predicted action sequences are actually applicable. If validity is reasonable (>50%), Phase 2 can take over.
+
+If Phase 1 needs improvement before proceeding:
+1. **More data** (most impactful) — generate additional rounds with new seeds
+2. **Label smoothing** — `label_smoothing=0.1` on CrossEntropyLoss
+3. **Increase dropout** — 0.1 → 0.2
+
+### Restarting from Scratch
+
+The AST structure and rule set are not finalized. Any change to `Expr` variants, rule definitions, or tokenization invalidates all training data and checkpoints. To rebuild everything:
+
+```bash
+# 1. Clean old artifacts
+npm run ml:reset
+
+# 2. Regenerate training data (3 rounds, ~14.7K examples)
+npm run build:data
+
+# 3. Retrain from scratch (100 epochs, ~1 hour on CPU)
+npm run train
+```
+
+`npm run ml:reset` removes `data_training/`, `checkpoints/`, and any cached model artifacts. Always run this after changing AST nodes, rule definitions, tokenization logic, or the De Bruijn variable mapping.
+
+## 10. Open Questions
 
 1. **Position stability across transformations**: Positions refer to the initial AST, but rules change the tree structure. Should we re-tokenize after each action and use step-relative positions? This is more accurate but makes the output vocabulary step-dependent.
 
@@ -467,7 +510,7 @@ fn simplify(expr: &Expr, model: &OrtSession, rules: &RuleSet) -> Expr {
 
 6. **Beam search in the decoder**: Should we use beam search decoding (exploring multiple action sequences in parallel) to improve the quality of predicted plans? This is decoder-level beam search, distinct from the expression-level beam search used for data generation.
 
-## 10. Milestones
+## 11. Milestones
 
 | Phase | Deliverable | Scope |
 |-------|------------|-------|
