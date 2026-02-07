@@ -74,62 +74,36 @@ The trained model lives in the same binary as the rule engine. No ONNX export st
 
 ### Disadvantages
 
-**1. Burn's API is more verbose than PyTorch.**
-Burn uses Rust generics extensively. A simple model definition requires explicit backend type parameters:
+**1. Risk of framework immaturity.**
+Burn is actively developed but still pre-1.0. APIs may change between minor versions. Edge cases in the transformer implementation or Metal backend could require workarounds that aren't documented. If we hit a Burn bug, debugging requires reading framework internals. PyTorch is battle-tested at massive scale.
 
-```rust
-// Burn
-#[derive(Module, Debug)]
-struct MyModel<B: Backend> {
-    encoder: TransformerEncoder<B>,
-    decoder: TransformerDecoder<B>,
-    output: Linear<B>,
-}
+**2. Compile times affect the feedback loop.**
+Rust compile times (especially with GPU backends) are slower than Python's instant edit-run cycle. Incremental compilation helps, but a clean build with CubeCL could take minutes. Hyperparameters should be exposed as CLI args to avoid recompilation for tuning.
 
-impl<B: Backend> MyModel<B> {
-    fn forward(&self, enc: Tensor<B, 2, Int>, dec: Tensor<B, 2, Int>) -> Tensor<B, 3> {
-        // ...
-    }
-}
-```
+**3. Checkpoint portability.**
+Burn checkpoints are Rust-specific. If we ever need to inspect the model from Python (analysis, visualization), we'd need an export step.
 
-```python
-# PyTorch
-class MyModel(nn.Module):
-    def __init__(self):
-        self.encoder = nn.TransformerEncoder(...)
-        self.decoder = nn.TransformerDecoder(...)
-        self.output = nn.Linear(...)
+### Non-issues (LLM-assisted development)
 
-    def forward(self, enc, dec):
-        # ...
-```
+The following are commonly cited disadvantages of Burn vs PyTorch that **do not apply** when an LLM is writing the code:
 
-**2. Smaller ecosystem and community.**
-PyTorch has thousands of tutorials, StackOverflow answers, and pre-built components. Burn has ~14k GitHub stars and a Discord. When you hit a problem, you may need to read Burn's source code rather than finding a blog post.
-
-**3. No built-in RL primitives.**
-REINFORCE must be implemented manually. The core math (log_softmax, gather, masked sum) exists as tensor operations, but there are no high-level RL abstractions. This is roughly the same amount of work as what we already wrote in `rl_train.py`.
-
-**4. Iteration speed.**
-Rust compile times (especially with GPU backends) are slower than Python's edit-run cycle. Hyperparameter tuning involves more recompilation. Mitigated somewhat by `cargo watch` and incremental compilation, but still slower than `python train.py --lr 1e-4`.
-
-**5. Risk of framework immaturity.**
-Burn is actively developed but still pre-1.0. APIs may change between minor versions. Edge cases in the transformer implementation or Metal backend could require workarounds. PyTorch is battle-tested at massive scale.
-
-**6. Checkpoint portability.**
-Burn checkpoints are Rust-specific (MessagePack or similar). If you ever need to use the model from Python (e.g., for analysis, visualization, or integration with other tools), you'd need an export step. PyTorch checkpoints are widely interoperable.
+- **API verbosity**: Burn's generics-heavy API requires more boilerplate than PyTorch. An LLM generates verbose Rust as easily as concise Python — typing speed is not a bottleneck.
+- **Smaller ecosystem**: PyTorch has thousands of tutorials and StackOverflow answers. An LLM has knowledge of Burn's API and can read source code directly when documentation is sparse.
+- **No built-in RL primitives**: REINFORCE must be implemented manually with tensor ops. We already wrote this logic once in Python; translating it to Burn tensor ops is mechanical.
+- **Two-framework learning curve**: There is no second developer who needs to learn Burn. The LLM already knows both frameworks.
 
 ### Effort estimate
 
-- Rewrite model.py → Burn Module: **Medium** (Burn has TransformerEncoder/Decoder built-in)
-- Rewrite train.py → Burn training loop: **Medium** (standard supervised loop)
-- Rewrite rl_train.py → Burn REINFORCE: **Medium** (tensor ops are available, RL logic is custom)
+An LLM writes the Burn model, training loops, and REINFORCE logic directly from the existing Python implementations. The translation is largely mechanical — same algorithms, different tensor API.
+
+- Rewrite model.py → Burn Module: **Low** (Burn has TransformerEncoder/Decoder built-in, direct translation)
+- Rewrite train.py → Burn training loop: **Low** (standard supervised loop, same structure)
+- Rewrite rl_train.py → Burn REINFORCE: **Low-Medium** (tensor ops exist, RL logic translates directly)
 - Rewrite dataset.py → Burn DataLoader: **Low** (JSONL reading is straightforward)
 - Eliminate vocab.py: **Free** (use Rust types directly)
 - Eliminate evaluate.py subprocess: **Free** (call validate_action_sequence directly)
 
-Total: **~1-2 weeks** of focused work, assuming no major Burn roadblocks.
+Total: **~1-3 sessions** of LLM-assisted work, assuming no major Burn roadblocks. The primary risk is Burn edge cases, not implementation effort.
 
 ## Option B: Keep Python, Eliminate Subprocess via PyO3
 
@@ -146,37 +120,29 @@ Use [PyO3](https://pyo3.rs) to compile the Rust validation logic as a native Pyt
 
 **1. Eliminates subprocess bottleneck** without rewriting the ML code.
 
-**2. Minimal disruption.** The Python training code stays as-is. Only `run_validation_batch()` in evaluate.py changes from a subprocess call to a function call.
-
-**3. Preserves PyTorch ecosystem.** Keep all the mature tooling, tutorials, and community support.
-
-**4. Incremental adoption.** Can expose more Rust functions over time (tokenization, expression parsing) without committing to a full rewrite.
+**2. Preserves PyTorch ecosystem** for experimentation.
 
 ### Disadvantages
 
-**1. Adds build complexity.** PyO3 requires `maturin` or `setuptools-rust` for building the native extension. The build process becomes: `cargo build` + `maturin develop` + `python train.py`.
+**1. Adds build complexity.** PyO3 requires `maturin` or `setuptools-rust`. The build process becomes: `cargo build` + `maturin develop` + `python train.py`. A third build tool in an already two-language project.
 
-**2. Data marshaling at the FFI boundary.** Expressions, tokens, and actions still need to be converted between Python dicts and Rust structs. PyO3 handles this, but it's not free — there's serialization overhead (though much less than subprocess I/O).
+**2. Data marshaling at the FFI boundary.** Expressions, tokens, and actions still need to be converted between Python dicts and Rust structs. PyO3 handles this, but there's serialization overhead (though much less than subprocess I/O).
 
 **3. Doesn't solve the data contract problem.** vocab.json and JSONL schemas still need to be synchronized. Token IDs still need to match by convention.
 
-**4. Two-language complexity remains.** Debugging spans Rust and Python. Stack traces cross the FFI boundary. New developers need both toolchains.
+**4. Two-language complexity remains** — and now with a third build tool (maturin).
+
+**5. Solves only the immediate bottleneck.** The fundamental cost of maintaining two languages, syncing data contracts, and needing ONNX for M7 all remain. This is a band-aid.
 
 ### Effort estimate
 
-- Create PyO3 crate wrapping validate logic: **Low-Medium** (~2-3 days)
-- Update evaluate.py to use native module: **Low** (~1 day)
-- Build system integration (maturin): **Low** (~1 day)
-
-Total: **~1 week**
+Total: **~1 session** of LLM-assisted work. But every session spent on PyO3 plumbing is a session not spent on Option A, which solves all the same problems plus more.
 
 ## Option C: Keep Current Architecture (Status Quo)
 
 ### Advantages
 
 - Already working. M6 completed successfully.
-- PyTorch is the industry standard. Any ML practitioner can understand the code.
-- The subprocess overhead, while suboptimal, is bounded. With batch_size=32 and ~30k training examples, each epoch has ~940 subprocess calls. At ~0.5s each, that's ~8 minutes of validation overhead per epoch.
 
 ### Disadvantages
 
@@ -184,6 +150,7 @@ Total: **~1 week**
 - GPU underutilization (model too small, bottleneck is I/O).
 - Two-language maintenance burden persists.
 - M7 (ONNX inference) requires yet another format translation layer.
+- "PyTorch is the industry standard" matters for team onboarding. With LLM-assisted development, the framework choice matters less than the architecture quality.
 
 ## Option D: Candle (Alternative Rust Framework)
 
@@ -203,26 +170,27 @@ Candle would be a reasonable choice if Burn's verbosity is a dealbreaker, but th
 | Subprocess eliminated | Yes | Yes | No | Yes |
 | Vocab sync eliminated | Yes | No | No | Yes |
 | GPU utilization | Good (CubeCL) | Same as now | Poor | Good |
-| PyTorch ecosystem | Lost | Kept | Kept | Lost |
-| Build complexity | Simple (cargo) | Medium (maturin) | Simple | Simple (cargo) |
-| Iteration speed | Slower (compile) | Same as now | Fast | Slower (compile) |
+| Build complexity | Simple (cargo) | Worse (maturin) | Two languages | Simple (cargo) |
 | Framework maturity | Pre-1.0 | N/A | Battle-tested | Pre-1.0 |
 | M7 (inference) | Free (same binary) | Still needs ONNX | Needs ONNX | Free (same binary) |
-| Effort | ~1-2 weeks | ~1 week | 0 | ~2-3 weeks |
+| Languages in project | 1 | 3 (Rust + Python + FFI) | 2 | 1 |
+| Effort (LLM-assisted) | ~1-3 sessions | ~1 session | 0 | ~2-4 sessions |
 | Risk | Medium (Burn edge cases) | Low | None | Medium-High |
 
 ## Recommendation
 
-**Option A (Pure Rust with Burn)** is the strongest long-term choice for this project specifically, for these reasons:
+**Option A (Pure Rust with Burn).** The reasoning:
 
-1. **The model is small** (1.4M params, 4 encoder + 4 decoder layers, d_model=128). We're not training GPT — we're training a compact policy network. Burn's transformer modules are well-suited for this scale. The risk of hitting framework limitations at large scale doesn't apply.
+1. **The model is small** (1.4M params, 4 encoder + 4 decoder layers, d_model=128). We're not training GPT — we're training a compact policy network. Burn's transformer modules are well-suited for this scale.
 
-2. **The validation bottleneck is the primary pain point**, and only Options A/B/D eliminate it. But Option A also eliminates the data contract synchronization, the ONNX export step (M7), and the two-language maintenance burden.
+2. **The validation bottleneck is the primary pain point**, and Option A eliminates it along with the data contract synchronization, the ONNX export step (M7), and the two-language maintenance burden. Option B only fixes the first.
 
-3. **The project is already Rust-first.** The rule engine, parser, tokenizer, expression representation, and data generation are all Rust. Python is only used for the ~500 lines of ML code. Making that Rust too creates a single coherent codebase.
+3. **The project is already Rust-first.** The rule engine, parser, tokenizer, expression representation, and data generation are all Rust. Python is only used for ~500 lines of ML code. Making that Rust too creates a single coherent codebase.
 
 4. **M7 becomes trivial.** The current plan calls for ONNX export for Rust inference. With a Burn model, inference is just `model.forward()` in the same binary — no export, no runtime dependency.
 
-**However**, if rapid iteration on training hyperparameters and RL algorithms is the near-term priority, **Option B (PyO3)** gives the best effort-to-impact ratio. It solves the immediate subprocess bottleneck in ~1 week while preserving the PyTorch ecosystem for experimentation.
+5. **LLM-assisted development changes the calculus.** The traditional argument for Option B ("do the quick fix now, big rewrite later") assumes the rewrite is expensive. With an LLM writing the code, the effort difference between Option A and B is ~1-2 sessions, not weeks. The incremental approach adds complexity (maturin, FFI layer) that we'd throw away during the inevitable migration to Option A.
 
-A pragmatic path: **Start with Option B now** to unblock faster RL training, then **migrate to Option A** when the training pipeline stabilizes and you're ready for M7.
+Option B is a local optimum: less risk, less reward, and leaves technical debt. Option A is the global optimum: slightly more risk from Burn edge cases, but eliminates an entire language from the project and solves M7 for free.
+
+**Skip the band-aid. Go straight to Burn.**
