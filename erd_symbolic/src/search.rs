@@ -687,6 +687,8 @@ fn expand_mul(left: &Expr, right: &Expr) -> Expr {
 /// Create a canonical key for an expression, handling commutativity of Mul.
 /// Also normalizes Mul(x, x) to match Pow(x, 2) for term collection.
 fn canonical_key(expr: &Expr) -> String {
+    use crate::expr::{classify_mul, MulKind};
+
     match expr {
         Expr::Mul(a, b) => {
             let ka = canonical_key(a);
@@ -694,6 +696,9 @@ fn canonical_key(expr: &Expr) -> String {
             // Normalize x * x to match x^2
             if ka == kb {
                 format!("Pow({}, 2)", ka)
+            } else if classify_mul(a, b) == MulKind::Outer {
+                // Outer products are non-commutative, preserve order
+                format!("Mul({}, {})", ka, kb)
             } else if ka <= kb {
                 format!("Mul({}, {})", ka, kb)
             } else {
@@ -819,7 +824,11 @@ fn flatten_mul(expr: &Expr, out: &mut Vec<Expr>) {
 /// Normalize a Mul expression by sorting factors and combining like terms into powers.
 /// Constants come first, then factors sorted by canonical key.
 /// Identical factors are combined: x * x -> x^2
+/// NOTE: If any factor has tensor indices, we only move constants to front but preserve
+/// the relative order of tensors (since tensor products may not be commutative).
 fn normalize_mul(expr: Expr) -> Expr {
+    use crate::expr::{classify_mul, has_indices, MulKind};
+
     if !matches!(expr, Expr::Mul(_, _)) {
         return expr;
     }
@@ -827,20 +836,56 @@ fn normalize_mul(expr: Expr) -> Expr {
     let mut factors = Vec::new();
     flatten_mul(&expr, &mut factors);
 
-    // Sort: constants/named first (by value), then by canonical key
-    factors.sort_by(|a, b| {
-        let key_a = match a {
-            Expr::Const(n) => (0, format!("{:020.10}", n)),
-            Expr::Named(nc) => (0, format!("{:020.10}", nc.value())),
-            _ => (1, canonical_key(a)),
-        };
-        let key_b = match b {
-            Expr::Const(n) => (0, format!("{:020.10}", n)),
-            Expr::Named(nc) => (0, format!("{:020.10}", nc.value())),
-            _ => (1, canonical_key(b)),
-        };
-        key_a.cmp(&key_b)
-    });
+    // Check if any adjacent pair of tensor factors forms an outer product (non-commutative)
+    let has_outer_product = {
+        let tensor_factors: Vec<&Expr> = factors.iter().filter(|f| has_indices(f)).collect();
+        tensor_factors
+            .windows(2)
+            .any(|pair| classify_mul(pair[0], pair[1]) == MulKind::Outer)
+    };
+
+    if has_outer_product {
+        // For outer products, only move constants to front, preserve tensor order
+        let mut constants: Vec<Expr> = Vec::new();
+        let mut others: Vec<Expr> = Vec::new();
+        for f in factors {
+            match &f {
+                Expr::Const(_) | Expr::Named(_) => constants.push(f),
+                _ => others.push(f),
+            }
+        }
+        // Sort constants by value
+        constants.sort_by(|a, b| {
+            let val_a = match a {
+                Expr::Const(n) => *n,
+                Expr::Named(nc) => nc.value(),
+                _ => 0.0,
+            };
+            let val_b = match b {
+                Expr::Const(n) => *n,
+                Expr::Named(nc) => nc.value(),
+                _ => 0.0,
+            };
+            val_a.partial_cmp(&val_b).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        factors = constants;
+        factors.extend(others);
+    } else {
+        // For scalar expressions, full sorting is safe
+        factors.sort_by(|a, b| {
+            let key_a = match a {
+                Expr::Const(n) => (0, format!("{:020.10}", n)),
+                Expr::Named(nc) => (0, format!("{:020.10}", nc.value())),
+                _ => (1, canonical_key(a)),
+            };
+            let key_b = match b {
+                Expr::Const(n) => (0, format!("{:020.10}", n)),
+                Expr::Named(nc) => (0, format!("{:020.10}", nc.value())),
+                _ => (1, canonical_key(b)),
+            };
+            key_a.cmp(&key_b)
+        });
+    }
 
     // Combine identical factors into powers: x * x -> x^2
     let mut combined: Vec<Expr> = Vec::new();
@@ -2293,11 +2338,8 @@ mod tests {
             tensor("v", vec![upper("sigma")]),
         );
         let result = simplify(&expr, &rules);
-        // No contraction, factors normalized: v * δ (ASCII 'v' < Unicode 'δ')
-        assert_eq!(result, mul(
-            tensor("v", vec![upper("sigma")]),
-            tensor("δ", vec![upper("mu"), lower("nu")]),
-        ));
+        // No contraction, order preserved (tensor products are not commutative)
+        assert_eq!(result, expr);
     }
 
     #[test]
