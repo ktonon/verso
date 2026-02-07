@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import torch
 from torch.utils.data import DataLoader
 
-from .config import TrainConfig
+from .config import TrainConfig, detect_device
 from .dataset import SimplificationDataset, collate_fn, load_data
 from .model import SimplificationModel
 from .vocab import DecoderVocab, EncoderVocab
@@ -29,7 +29,7 @@ class EvalConfig:
     checkpoint: str = "checkpoints/best.pt"
     data_dir: str = "data_training"
     batch_size: int = 64
-    device: str = "cpu"
+    device: str = field(default_factory=detect_device)
     validate_bin: str = "target/release/validate"
     max_gen_len: int = 101
     invalid_penalty: float = 0.5
@@ -184,22 +184,32 @@ def compute_metrics(
     )
 
 
-def evaluate(config: EvalConfig) -> EvalMetrics:
-    """Run full evaluation pipeline."""
-    print(f"Loading checkpoint from {config.checkpoint}...")
-    checkpoint = torch.load(
-        config.checkpoint, map_location=config.device, weights_only=False
-    )
-    train_config: TrainConfig = checkpoint["config"]
+def evaluate(
+    config: EvalConfig,
+    model: SimplificationModel | None = None,
+) -> EvalMetrics:
+    """Run full evaluation pipeline.
 
+    If model is provided, uses it directly (for RL training eval).
+    Otherwise loads from config.checkpoint.
+    """
     enc_vocab = EncoderVocab(config.data_dir)
     dec_vocab = DecoderVocab(config.data_dir)
 
-    model = SimplificationModel(
-        train_config, enc_vocab.size(), dec_vocab.size()
-    )
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model = model.to(config.device)
+    if model is None:
+        print(f"Loading checkpoint from {config.checkpoint}...")
+        checkpoint = torch.load(
+            config.checkpoint, map_location=config.device, weights_only=False
+        )
+        train_config: TrainConfig = checkpoint["config"]
+        model = SimplificationModel(
+            train_config, enc_vocab.size(), dec_vocab.size()
+        )
+        model.load_state_dict(checkpoint["model_state_dict"])
+        model = model.to(config.device)
+    else:
+        train_config = model.config
+
     model.eval()
 
     print(f"Encoder vocab: {enc_vocab.size()}, Decoder vocab: {dec_vocab.size()}")

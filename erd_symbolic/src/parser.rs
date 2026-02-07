@@ -5,6 +5,18 @@ use crate::expr::{
 };
 use crate::rational::Rational;
 
+// TODO: allow the input of special characters by using a latex style.
+// For example \delta becomes δ.
+// δ can be interpretted as the Kronecker delta.
+// Likewise we can stop parsing pi and require \pi for consistency.
+// Likewise \epsilon becomes ε for the Levi-Civita symbol.
+//
+// The command :lsc short for list special characters will output all supported special characters.
+//
+// The repl can also support like special character replacement if:
+// - the user has typed enough following a \ to disambiguate
+// - the user then presses tab
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseError {
     UnexpectedEof,
@@ -225,8 +237,8 @@ impl Parser {
 
         loop {
             match self.peek() {
-                Some(Token::Star) | Some(Token::Slash) | Some(Token::Tensor) | Some(Token::DotOp)
-                | Some(Token::Colon) => {
+                Some(Token::Star) | Some(Token::Slash) | Some(Token::Tensor)
+                | Some(Token::DotOp) | Some(Token::Colon) => {
                     let op = self.next().unwrap();
                     let rhs = self.parse_unary()?;
                     expr = match op {
@@ -411,7 +423,10 @@ impl Parser {
         Ok(mul(ln(arg), inv(ln(base))))
     }
 
-    fn parse_indices(&mut self, mut expr: crate::expr::Expr) -> Result<crate::expr::Expr, ParseError> {
+    fn parse_indices(
+        &mut self,
+        mut expr: crate::expr::Expr,
+    ) -> Result<crate::expr::Expr, ParseError> {
         let mut lowers: Vec<Index> = Vec::new();
         let mut uppers: Vec<Index> = Vec::new();
 
@@ -452,7 +467,10 @@ impl Parser {
                     Some(Token::Ident(name)) => name,
                     _ => return Err(ParseError::InvalidIndexList),
                 };
-                indices.push(Index { name: ident, position: position.clone() });
+                indices.push(Index {
+                    name: ident,
+                    position: position.clone(),
+                });
                 match self.peek() {
                     Some(Token::Comma) => {
                         self.next();
@@ -491,10 +509,7 @@ impl Parser {
     fn next_starts_primary(&self) -> bool {
         matches!(
             self.peek(),
-            Some(Token::Number(_))
-                | Some(Token::Ident(_))
-                | Some(Token::LParen)
-                | Some(Token::Pi)
+            Some(Token::Number(_)) | Some(Token::Ident(_)) | Some(Token::LParen) | Some(Token::Pi)
         )
     }
 }
@@ -554,19 +569,13 @@ mod tests {
     #[test]
     fn parse_tensor_indices() {
         let expr = parse_expr("X_(i,j)^(k)").unwrap();
-        assert_eq!(
-            expr,
-            tensor("X", vec![lower("i"), lower("j"), upper("k")])
-        );
+        assert_eq!(expr, tensor("X", vec![lower("i"), lower("j"), upper("k")]));
     }
 
     #[test]
     fn parse_compact_indices() {
         let expr = parse_expr("d^v_p").unwrap();
-        assert_eq!(
-            expr,
-            tensor("d", vec![lower("p"), upper("v")])
-        );
+        assert_eq!(expr, tensor("d", vec![lower("p"), upper("v")]));
     }
 
     #[test]
@@ -622,10 +631,7 @@ mod tests {
         let expr = parse_expr("log_(a + b)(x)").unwrap();
         assert_eq!(
             expr,
-            mul(
-                ln(scalar("x")),
-                inv(ln(add(scalar("a"), scalar("b"))))
-            )
+            mul(ln(scalar("x")), inv(ln(add(scalar("a"), scalar("b")))))
         );
     }
 
@@ -644,28 +650,19 @@ mod tests {
     #[test]
     fn parse_implicit_mul_with_parens() {
         let expr = parse_expr("2(x + 1)").unwrap();
-        assert_eq!(
-            expr,
-            mul(constant(2.0), add(scalar("x"), constant(1.0)))
-        );
+        assert_eq!(expr, mul(constant(2.0), add(scalar("x"), constant(1.0))));
     }
 
     #[test]
     fn parse_implicit_mul_ident_parens() {
         let expr = parse_expr("x(y + 1)").unwrap();
-        assert_eq!(
-            expr,
-            mul(scalar("x"), add(scalar("y"), constant(1.0)))
-        );
+        assert_eq!(expr, mul(scalar("x"), add(scalar("y"), constant(1.0))));
     }
 
     #[test]
     fn parse_unknown_ident_parens_as_mul() {
         let expr = parse_expr("foo(x + 1)").unwrap();
-        assert_eq!(
-            expr,
-            mul(scalar("foo"), add(scalar("x"), constant(1.0)))
-        );
+        assert_eq!(expr, mul(scalar("foo"), add(scalar("x"), constant(1.0))));
     }
 
     #[test]
@@ -677,10 +674,7 @@ mod tests {
     #[test]
     fn parse_min_max_nested() {
         let expr = parse_expr("min(max(a, b), c)").unwrap();
-        assert_eq!(
-            expr,
-            min(max(scalar("a"), scalar("b")), scalar("c"))
-        );
+        assert_eq!(expr, min(max(scalar("a"), scalar("b")), scalar("c")));
     }
 
     #[test]
@@ -715,10 +709,7 @@ mod tests {
     #[test]
     fn parse_implicit_mul_chaining() {
         let expr = parse_expr("2x * y").unwrap();
-        assert_eq!(
-            expr,
-            mul(mul(constant(2.0), scalar("x")), scalar("y"))
-        );
+        assert_eq!(expr, mul(mul(constant(2.0), scalar("x")), scalar("y")));
     }
 
     #[test]
@@ -770,22 +761,13 @@ mod tests {
     #[test]
     fn parse_parentheses_precedence() {
         let expr = parse_expr("(x + y) * z").unwrap();
-        assert_eq!(
-            expr,
-            mul(add(scalar("x"), scalar("y")), scalar("z"))
-        );
+        assert_eq!(expr, mul(add(scalar("x"), scalar("y")), scalar("z")));
 
         let expr = parse_expr("x * (y + z)").unwrap();
-        assert_eq!(
-            expr,
-            mul(scalar("x"), add(scalar("y"), scalar("z")))
-        );
+        assert_eq!(expr, mul(scalar("x"), add(scalar("y"), scalar("z"))));
 
         let expr = parse_expr("-(x + y)**2").unwrap();
-        assert_eq!(
-            expr,
-            neg(pow(add(scalar("x"), scalar("y")), constant(2.0)))
-        );
+        assert_eq!(expr, neg(pow(add(scalar("x"), scalar("y")), constant(2.0))));
     }
 
     #[test]
@@ -812,7 +794,10 @@ mod tests {
         assert_eq!(expr, frac_pi(1, 1));
 
         let expr = parse_expr("2π").unwrap();
-        assert_eq!(expr, mul(Expr::Rational(Rational::from_i64(2)), frac_pi(1, 1)));
+        assert_eq!(
+            expr,
+            mul(Expr::Rational(Rational::from_i64(2)), frac_pi(1, 1))
+        );
 
         let expr = parse_expr("e").unwrap();
         assert_eq!(expr, named(NamedConst::E));
@@ -820,8 +805,8 @@ mod tests {
 
     #[test]
     fn parse_pi_fractions() {
-        use crate::search::simplify;
         use crate::rule::RuleSet;
+        use crate::search::simplify;
 
         // pi / 2 should fold to FracPi(1/2)
         let expr = parse_expr("pi / 2").unwrap();
@@ -841,8 +826,8 @@ mod tests {
 
     #[test]
     fn parse_trig_with_pi_simplifies() {
-        use crate::search::simplify;
         use crate::rule::RuleSet;
+        use crate::search::simplify;
 
         // sin(pi/2) = 1
         let expr = parse_expr("sin(pi / 2)").unwrap();

@@ -1,4 +1,15 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+import torch
+
+
+def detect_device() -> str:
+    """Auto-detect best available device: cuda > mps > cpu."""
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 @dataclass
@@ -30,4 +41,4 @@ class TrainConfig:
     log_every: int = 50
 
     # Device
-    device: str = "cpu"
+    device: str = field(default_factory=detect_device)

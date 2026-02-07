@@ -524,7 +524,51 @@ npm run train
 
 5. **The RuleDirectionId reverse lookup** (direction_id → rule_index + direction) was the main missing piece in `IndexedRuleSet`. LTR IDs are `0..num_rules`, RTL IDs are `num_rules..total_directions`, stored as a flat `Vec<(usize, Direction)>` for O(1) lookup.
 
-## 11. Open Questions (updated)
+## 11. M6 Results & Observations
+
+### REINFORCE Training (3-epoch smoke test, MPS)
+
+| Metric | Epoch 1 | Epoch 2 | Epoch 3 |
+|--------|---------|---------|---------|
+| Mean reward | +0.889 | +1.281 | +1.335 |
+| Validity (sampling) | 48.9% | 52.9% | 51.7% |
+| Loss | -1.17 | -1.25 | -0.96 |
+| Time per epoch | 483s | 694s | 679s |
+
+For comparison, Phase 1 greedy evaluation (M5): mean reward +0.30, validity 65.6%.
+
+The lower sampling validity (49-53%) vs greedy validity (65.6%) is expected — sampling explores stochastically while greedy always picks the most likely token. The reward metric is more meaningful for RL: it increased from +0.889 to +1.335 across 3 epochs, indicating the model is learning to generate better simplification trajectories.
+
+### Algorithm: REINFORCE with Baseline
+
+- **Baseline**: Exponential moving average of rewards (decay 0.99) for variance reduction
+- **Advantage normalization**: Per-batch standard deviation normalization prevents loss magnitude drift
+- **Log-prob normalization**: Trajectory log-probs divided by sequence length to decouple loss scale from sequence length
+- **Entropy bonus** (0.05): Prevents policy collapse — without this, the model degenerates to deterministic outputs within 1 epoch and crashes with NaN
+- **Logit clamping** (-50, 50): Additional numerical safety in `sample()` to prevent inf/nan after many gradient updates
+
+### Key Insights
+
+1. **Entropy collapse is the primary failure mode.** The initial implementation (entropy_bonus=0.01, no advantage normalization) trained well for 1 epoch but collapsed to a degenerate policy at epoch 2 boundary — all rewards dropped to 0 and logits became NaN. Increasing entropy bonus to 0.05 and normalizing advantages per batch solved this completely.
+
+2. **Log-prob normalization by sequence length is important.** Without it, the REINFORCE loss magnitude scales with sequence length (longer trajectories have more negative log-probs), causing the loss to grow unboundedly and dominate the gradient signal.
+
+3. **MPS (Apple Silicon GPU) is slower than CPU for this model.** The model is small (1.4M params) and the bottleneck is subprocess calls to the Rust validation binary. MPS adds data-transfer overhead without enough compute to amortize it. CPU is ~2x faster per epoch. The `enable_nested_tensor=False` flag is required for MPS compatibility with PyTorch's TransformerEncoder.
+
+4. **Auto-device detection** (`detect_device()`) selects cuda > mps > cpu automatically. Override with `--device cpu` when speed matters more than GPU utilization.
+
+5. **Reward structure works well.** The formula `delta / max(valid_steps, 1) - invalid_steps * 0.5` provides a clear learning signal: the model first learns to stop generating invalid actions (reducing penalty), then learns to generate sequences that actually simplify (increasing delta).
+
+### Restarting RL from Scratch
+
+```bash
+# Full pipeline: supervised warm start → RL fine-tuning
+npm run train          # Phase 1: supervised (saves checkpoints/best.pt)
+npm run rl-train       # Phase 2: REINFORCE (saves checkpoints/rl_best.pt, rl_latest.pt)
+npm run evaluate -- --checkpoint checkpoints/rl_best.pt  # Evaluate RL model
+```
+
+## 12. Open Questions (updated)
 
 1. ~~**Position stability across transformations**~~: Resolved — positions are step-relative. The validator re-tokenizes after each rule application, matching training data generation. The model learned this successfully (65.6% fully valid sequences).
 
@@ -538,7 +582,11 @@ npm run train
 
 6. **Beam search in the decoder**: Should we use beam search decoding (exploring multiple action sequences in parallel) to improve the quality of predicted plans? This is decoder-level beam search, distinct from the expression-level beam search used for data generation.
 
-## 12. Milestones
+7. **RL training duration**: The 3-epoch smoke test showed clear improvement but reward may not have converged. A longer run (20-50 epochs) on CPU would reveal the ceiling. Is the reward plateauing or still climbing?
+
+8. **PPO vs REINFORCE**: REINFORCE works but has high variance. PPO's clipped objective could enable larger learning rates and faster convergence. Worth trying if REINFORCE plateaus.
+
+## 13. Milestones
 
 | Phase | Deliverable | Scope |
 |-------|------------|-------|
@@ -547,6 +595,6 @@ npm run train
 | **M3** | Training data generator | Rust: random AST + trace export to JSON with position annotations | **Done** — `gen_expr.rs`, `training_data.rs`, `bin/gen_data.rs` |
 | **M4** | Supervised baseline model | Python: transformer encoder-decoder trained on beam search traces | **Done** — `erd_training/` |
 | **M5** | Sequence validation harness | Rust/Python: apply predicted action sequences, compute reward | **Done** — `validate.rs`, `bin/validate.rs`, `evaluate.py` |
-| **M6** | Self-play training | Python: REINFORCE/PPO with trajectory reward |
+| **M6** | Self-play training | Python: REINFORCE/PPO with trajectory reward | **Done** — `rl_train.py`, `model.py:sample()` |
 | **M7** | ONNX inference in Rust | Rust: load model, generate action sequences, apply and validate |
 | **M8** | Production integration | Rust: ML simplify with beam search fallback |
