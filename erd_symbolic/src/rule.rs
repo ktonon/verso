@@ -190,6 +190,9 @@ pub struct Rule {
     pub name: String,
     pub lhs: Pattern,
     pub rhs: Pattern,
+    /// If true, beam search applies this rule in both directions (LTR and RTL).
+    /// Default is false (LTR only), suitable for one-way simplifications like sin(π/4) = √2/2.
+    pub reversible: bool,
 }
 
 /// Expression bindings: wildcard name -> matched expression
@@ -467,12 +470,23 @@ pub struct RuleSet {
     rules: Vec<Rule>,
 }
 
-/// Helper to create a rule.
+/// Helper to create a rule (LTR only by default).
 pub fn rule(name: &str, lhs: Pattern, rhs: Pattern) -> Rule {
     Rule {
         name: name.to_string(),
         lhs,
         rhs,
+        reversible: false,
+    }
+}
+
+/// Helper to create a reversible rule (applied in both directions by beam search).
+pub fn rule_reversible(name: &str, lhs: Pattern, rhs: Pattern) -> Rule {
+    Rule {
+        name: name.to_string(),
+        lhs,
+        rhs,
+        reversible: true,
     }
 }
 
@@ -739,6 +753,7 @@ impl RuleSet {
 
         // === Pythagorean identity ===
         // sin²x + cos²x = 1
+        // Both orderings needed since trig ruleset may be used without add_commute
         rs.add(rule(
             "pythagorean",
             p_add(
@@ -747,7 +762,6 @@ impl RuleSet {
             ),
             p_const(1.0),
         ));
-        // cos²x + sin²x = 1 (reversed order)
         rs.add(rule(
             "pythagorean_rev",
             p_add(
@@ -808,31 +822,21 @@ impl RuleSet {
             ),
         ));
 
-        // tanh(x) = sinh(x) / cosh(x)
-        rs.add(rule(
+        // tanh(x) = sinh(x) / cosh(x) (reversible: RTL contracts back)
+        rs.add(rule_reversible(
             "tanh_def",
             p_tanh(x()),
             p_mul(p_sinh(x()), p_inv(p_cosh(x()))),
-        ));
-        // sinh(x) / cosh(x) = tanh(x)
-        rs.add(rule(
-            "tanh_def_contract",
-            p_mul(p_sinh(x()), p_inv(p_cosh(x()))),
-            p_tanh(x()),
         ));
 
         // === Angle shift identities ===
 
         // Complementary angles: sin(π/2 - x) = cos(x), cos(π/2 - x) = sin(x)
         // π/2 - x is represented as Add(Const(π/2), Neg(x))
+        // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_complementary",
             p_sin(p_add(p_const(FRAC_PI_2), p_neg(x()))),
-            p_cos(x()),
-        ));
-        rs.add(rule(
-            "sin_complementary_rev",
-            p_sin(p_add(p_neg(x()), p_const(FRAC_PI_2))),
             p_cos(x()),
         ));
         rs.add(rule(
@@ -840,21 +844,12 @@ impl RuleSet {
             p_cos(p_add(p_const(FRAC_PI_2), p_neg(x()))),
             p_sin(x()),
         ));
-        rs.add(rule(
-            "cos_complementary_rev",
-            p_cos(p_add(p_neg(x()), p_const(FRAC_PI_2))),
-            p_sin(x()),
-        ));
 
         // Supplementary angles: sin(π - x) = sin(x), cos(π - x) = -cos(x)
+        // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_supplementary",
             p_sin(p_add(p_const(PI), p_neg(x()))),
-            p_sin(x()),
-        ));
-        rs.add(rule(
-            "sin_supplementary_rev",
-            p_sin(p_add(p_neg(x()), p_const(PI))),
             p_sin(x()),
         ));
         rs.add(rule(
@@ -862,21 +857,12 @@ impl RuleSet {
             p_cos(p_add(p_const(PI), p_neg(x()))),
             p_neg(p_cos(x())),
         ));
-        rs.add(rule(
-            "cos_supplementary_rev",
-            p_cos(p_add(p_neg(x()), p_const(PI))),
-            p_neg(p_cos(x())),
-        ));
 
         // Periodicity: sin(x + 2π) = sin(x), cos(x + 2π) = cos(x)
+        // (add_commute handles reversed argument order)
         rs.add(rule(
             "sin_period",
             p_sin(p_add(x(), p_const(TAU))),
-            p_sin(x()),
-        ));
-        rs.add(rule(
-            "sin_period_rev",
-            p_sin(p_add(p_const(TAU), x())),
             p_sin(x()),
         ));
         rs.add(rule(
@@ -884,66 +870,34 @@ impl RuleSet {
             p_cos(p_add(x(), p_const(TAU))),
             p_cos(x()),
         ));
-        rs.add(rule(
-            "cos_period_rev",
-            p_cos(p_add(p_const(TAU), x())),
-            p_cos(x()),
-        ));
 
         // Periodicity: tan(x + π) = tan(x)
+        // (add_commute handles reversed argument order)
         rs.add(rule(
             "tan_period",
             p_tan(p_add(x(), p_const(PI))),
             p_tan(x()),
         ));
-        rs.add(rule(
-            "tan_period_rev",
-            p_tan(p_add(p_const(PI), x())),
-            p_tan(x()),
-        ));
 
-        // tan(x) = sin(x) / cos(x)
-        rs.add(rule(
+        // tan(x) = sin(x) / cos(x) (reversible: RTL contracts back)
+        rs.add(rule_reversible(
             "tan_def",
             p_tan(x()),
             p_mul(p_sin(x()), p_inv(p_cos(x()))),
         ));
-        // sin(x) / cos(x) = tan(x)
-        rs.add(rule(
-            "tan_def_contract",
-            p_mul(p_sin(x()), p_inv(p_cos(x()))),
-            p_tan(x()),
-        ));
 
         // === Double angle formulas ===
+        // (reversible: RTL contracts, mul_commute handles 2*x vs x*2 and sin*cos vs cos*sin)
 
-        // sin(2x) = 2·sin(x)·cos(x) (expansion)
-        rs.add(rule(
+        // sin(2x) = 2·sin(x)·cos(x)
+        rs.add(rule_reversible(
             "sin_double_angle",
             p_sin(p_mul(p_const(2.0), x())),
             p_mul(p_const(2.0), p_mul(p_sin(x()), p_cos(x()))),
         ));
-        rs.add(rule(
-            "sin_double_angle_rev",
-            p_sin(p_mul(x(), p_const(2.0))),
-            p_mul(p_const(2.0), p_mul(p_sin(x()), p_cos(x()))),
-        ));
 
-        // 2·sin(x)·cos(x) = sin(2x) (contraction - reduces complexity!)
-        // Pattern: 2 * (sin(x) * cos(x)) or 2 * (cos(x) * sin(x))
-        rs.add(rule(
-            "double_angle_sin",
-            p_mul(p_const(2.0), p_mul(p_sin(x()), p_cos(x()))),
-            p_sin(p_mul(p_const(2.0), x())),
-        ));
-        rs.add(rule(
-            "double_angle_sin_rev",
-            p_mul(p_const(2.0), p_mul(p_cos(x()), p_sin(x()))),
-            p_sin(p_mul(p_const(2.0), x())),
-        ));
-
-        // cos(2x) = cos²(x) - sin²(x) (expansion)
-        rs.add(rule(
+        // cos(2x) = cos²(x) - sin²(x)
+        rs.add(rule_reversible(
             "cos_double_angle",
             p_cos(p_mul(p_const(2.0), x())),
             p_add(
@@ -951,31 +905,12 @@ impl RuleSet {
                 p_neg(p_pow(p_sin(x()), p_const(2.0))),
             ),
         ));
-        rs.add(rule(
-            "cos_double_angle_rev",
-            p_cos(p_mul(x(), p_const(2.0))),
-            p_add(
-                p_pow(p_cos(x()), p_const(2.0)),
-                p_neg(p_pow(p_sin(x()), p_const(2.0))),
-            ),
-        ));
-
-        // cos²(x) - sin²(x) = cos(2x) (contraction - reduces complexity!)
-        rs.add(rule(
-            "double_angle_cos",
-            p_add(
-                p_pow(p_cos(x()), p_const(2.0)),
-                p_neg(p_pow(p_sin(x()), p_const(2.0))),
-            ),
-            p_cos(p_mul(p_const(2.0), x())),
-        ));
 
         // === Power reduction formulas ===
-        // These convert squared trig functions to double angle form.
-        // Note: Expansion increases complexity; contraction reduces it.
+        // (reversible: RTL contracts, mul_commute handles (1/2)*expr vs expr*(1/2))
 
-        // sin²(x) = (1 - cos(2x))/2 (expansion - increases complexity)
-        rs.add(rule(
+        // sin²(x) = (1 - cos(2x))/2
+        rs.add(rule_reversible(
             "sin_sq_to_double_angle",
             p_pow(p_sin(x()), p_const(2.0)),
             p_mul(
@@ -984,28 +919,8 @@ impl RuleSet {
             ),
         ));
 
-        // (1 - cos(2x))/2 = sin²(x) (contraction - reduces complexity!)
-        // Pattern: (1/2) * (1 + (-cos(2x)))
-        rs.add(rule(
-            "double_angle_to_sin_sq",
-            p_mul(
-                p_inv(p_const(2.0)),
-                p_add(p_const(1.0), p_neg(p_cos(p_mul(p_const(2.0), x())))),
-            ),
-            p_pow(p_sin(x()), p_const(2.0)),
-        ));
-        // Also match (1 + (-cos(2x))) * (1/2)
-        rs.add(rule(
-            "double_angle_to_sin_sq_rev",
-            p_mul(
-                p_add(p_const(1.0), p_neg(p_cos(p_mul(p_const(2.0), x())))),
-                p_inv(p_const(2.0)),
-            ),
-            p_pow(p_sin(x()), p_const(2.0)),
-        ));
-
-        // cos²(x) = (1 + cos(2x))/2 (expansion - increases complexity)
-        rs.add(rule(
+        // cos²(x) = (1 + cos(2x))/2
+        rs.add(rule_reversible(
             "cos_sq_to_double_angle",
             p_pow(p_cos(x()), p_const(2.0)),
             p_mul(
@@ -1014,32 +929,13 @@ impl RuleSet {
             ),
         ));
 
-        // (1 + cos(2x))/2 = cos²(x) (contraction - reduces complexity!)
-        rs.add(rule(
-            "double_angle_to_cos_sq",
-            p_mul(
-                p_inv(p_const(2.0)),
-                p_add(p_const(1.0), p_cos(p_mul(p_const(2.0), x()))),
-            ),
-            p_pow(p_cos(x()), p_const(2.0)),
-        ));
-        // Also match (1 + cos(2x)) * (1/2)
-        rs.add(rule(
-            "double_angle_to_cos_sq_rev",
-            p_mul(
-                p_add(p_const(1.0), p_cos(p_mul(p_const(2.0), x()))),
-                p_inv(p_const(2.0)),
-            ),
-            p_pow(p_cos(x()), p_const(2.0)),
-        ));
-
         // === Sum/difference formulas ===
-        // These use two independent wildcards (a and b).
+        // (reversible: RTL contracts, commutativity handles factor ordering)
         let a = || wildcard("a");
         let b = || wildcard("b");
 
         // sin(a + b) = sin(a)·cos(b) + cos(a)·sin(b)
-        rs.add(rule(
+        rs.add(rule_reversible(
             "sin_sum",
             p_sin(p_add(a(), b())),
             p_add(
@@ -1048,19 +944,8 @@ impl RuleSet {
             ),
         ));
 
-        // sin(a)·cos(b) + cos(a)·sin(b) = sin(a + b) (contraction)
-        rs.add(rule(
-            "sin_sum_contract",
-            p_add(
-                p_mul(p_sin(a()), p_cos(b())),
-                p_mul(p_cos(a()), p_sin(b())),
-            ),
-            p_sin(p_add(a(), b())),
-        ));
-
         // sin(a - b) = sin(a)·cos(b) - cos(a)·sin(b)
-        // a - b is represented as Add(a, Neg(b))
-        rs.add(rule(
+        rs.add(rule_reversible(
             "sin_diff",
             p_sin(p_add(a(), p_neg(b()))),
             p_add(
@@ -1069,18 +954,8 @@ impl RuleSet {
             ),
         ));
 
-        // sin(a)·cos(b) - cos(a)·sin(b) = sin(a - b) (contraction)
-        rs.add(rule(
-            "sin_diff_contract",
-            p_add(
-                p_mul(p_sin(a()), p_cos(b())),
-                p_neg(p_mul(p_cos(a()), p_sin(b()))),
-            ),
-            p_sin(p_add(a(), p_neg(b()))),
-        ));
-
         // cos(a + b) = cos(a)·cos(b) - sin(a)·sin(b)
-        rs.add(rule(
+        rs.add(rule_reversible(
             "cos_sum",
             p_cos(p_add(a(), b())),
             p_add(
@@ -1089,18 +964,8 @@ impl RuleSet {
             ),
         ));
 
-        // cos(a)·cos(b) - sin(a)·sin(b) = cos(a + b) (contraction)
-        rs.add(rule(
-            "cos_sum_contract",
-            p_add(
-                p_mul(p_cos(a()), p_cos(b())),
-                p_neg(p_mul(p_sin(a()), p_sin(b()))),
-            ),
-            p_cos(p_add(a(), b())),
-        ));
-
         // cos(a - b) = cos(a)·cos(b) + sin(a)·sin(b)
-        rs.add(rule(
+        rs.add(rule_reversible(
             "cos_diff",
             p_cos(p_add(a(), p_neg(b()))),
             p_add(
@@ -1109,21 +974,11 @@ impl RuleSet {
             ),
         ));
 
-        // cos(a)·cos(b) + sin(a)·sin(b) = cos(a - b) (contraction)
-        rs.add(rule(
-            "cos_diff_contract",
-            p_add(
-                p_mul(p_cos(a()), p_cos(b())),
-                p_mul(p_sin(a()), p_sin(b())),
-            ),
-            p_cos(p_add(a(), p_neg(b()))),
-        ));
-
         // === Product-to-sum identities ===
-        // These convert products of trig functions to sums/differences.
+        // (reversible: RTL contracts, mul_commute handles (1/2)*expr vs expr*(1/2))
 
         // sin(a)·cos(b) = ½[sin(a+b) + sin(a-b)]
-        rs.add(rule(
+        rs.add(rule_reversible(
             "sin_cos_product_to_sum",
             p_mul(p_sin(a()), p_cos(b())),
             p_mul(
@@ -1135,33 +990,8 @@ impl RuleSet {
             ),
         ));
 
-        // ½[sin(a+b) + sin(a-b)] = sin(a)·cos(b) (contraction - reduces complexity!)
-        rs.add(rule(
-            "sum_to_sin_cos_product",
-            p_mul(
-                p_inv(p_const(2.0)),
-                p_add(
-                    p_sin(p_add(a(), b())),
-                    p_sin(p_add(a(), p_neg(b()))),
-                ),
-            ),
-            p_mul(p_sin(a()), p_cos(b())),
-        ));
-        // Also match (sum) * (1/2)
-        rs.add(rule(
-            "sum_to_sin_cos_product_rev",
-            p_mul(
-                p_add(
-                    p_sin(p_add(a(), b())),
-                    p_sin(p_add(a(), p_neg(b()))),
-                ),
-                p_inv(p_const(2.0)),
-            ),
-            p_mul(p_sin(a()), p_cos(b())),
-        ));
-
         // cos(a)·cos(b) = ½[cos(a+b) + cos(a-b)]
-        rs.add(rule(
+        rs.add(rule_reversible(
             "cos_cos_product_to_sum",
             p_mul(p_cos(a()), p_cos(b())),
             p_mul(
@@ -1173,32 +1003,8 @@ impl RuleSet {
             ),
         ));
 
-        // ½[cos(a+b) + cos(a-b)] = cos(a)·cos(b) (contraction)
-        rs.add(rule(
-            "sum_to_cos_cos_product",
-            p_mul(
-                p_inv(p_const(2.0)),
-                p_add(
-                    p_cos(p_add(a(), b())),
-                    p_cos(p_add(a(), p_neg(b()))),
-                ),
-            ),
-            p_mul(p_cos(a()), p_cos(b())),
-        ));
-        rs.add(rule(
-            "sum_to_cos_cos_product_rev",
-            p_mul(
-                p_add(
-                    p_cos(p_add(a(), b())),
-                    p_cos(p_add(a(), p_neg(b()))),
-                ),
-                p_inv(p_const(2.0)),
-            ),
-            p_mul(p_cos(a()), p_cos(b())),
-        ));
-
         // sin(a)·sin(b) = ½[cos(a-b) - cos(a+b)]
-        rs.add(rule(
+        rs.add(rule_reversible(
             "sin_sin_product_to_sum",
             p_mul(p_sin(a()), p_sin(b())),
             p_mul(
@@ -1208,30 +1014,6 @@ impl RuleSet {
                     p_neg(p_cos(p_add(a(), b()))),
                 ),
             ),
-        ));
-
-        // ½[cos(a-b) - cos(a+b)] = sin(a)·sin(b) (contraction)
-        rs.add(rule(
-            "sum_to_sin_sin_product",
-            p_mul(
-                p_inv(p_const(2.0)),
-                p_add(
-                    p_cos(p_add(a(), p_neg(b()))),
-                    p_neg(p_cos(p_add(a(), b()))),
-                ),
-            ),
-            p_mul(p_sin(a()), p_sin(b())),
-        ));
-        rs.add(rule(
-            "sum_to_sin_sin_product_rev",
-            p_mul(
-                p_add(
-                    p_cos(p_add(a(), p_neg(b()))),
-                    p_neg(p_cos(p_add(a(), b()))),
-                ),
-                p_inv(p_const(2.0)),
-            ),
-            p_mul(p_sin(a()), p_sin(b())),
         ));
 
         // === Inverse trig compositions (principal value) ===
@@ -1247,81 +1029,53 @@ impl RuleSet {
         rs.add(rule("ln_exp", p_ln(p_exp(x())), x())); // ln(e^x) = x
 
         // === Logarithm/Exponential extensions ===
+        // (reversible: RTL contracts, mul_commute handles factor ordering)
 
-        // ln(a·b) = ln(a) + ln(b) (expansion)
-        rs.add(rule(
+        // ln(a·b) = ln(a) + ln(b)
+        rs.add(rule_reversible(
             "ln_product",
             p_ln(p_mul(a(), b())),
             p_add(p_ln(a()), p_ln(b())),
         ));
 
-        // ln(a) + ln(b) = ln(a·b) (contraction - reduces complexity!)
-        rs.add(rule(
-            "ln_product_contract",
-            p_add(p_ln(a()), p_ln(b())),
-            p_ln(p_mul(a(), b())),
-        ));
-
-        // ln(a/b) = ln(a) - ln(b), where a/b is represented as a * (1/b)
-        rs.add(rule(
+        // ln(a/b) = ln(a) - ln(b)
+        rs.add(rule_reversible(
             "ln_quotient",
             p_ln(p_mul(a(), p_inv(b()))),
             p_add(p_ln(a()), p_neg(p_ln(b()))),
         ));
 
-        // ln(a) - ln(b) = ln(a/b) (contraction)
-        rs.add(rule(
-            "ln_quotient_contract",
-            p_add(p_ln(a()), p_neg(p_ln(b()))),
-            p_ln(p_mul(a(), p_inv(b()))),
-        ));
-
-        // ln(a^n) = n·ln(a) (expansion)
+        // ln(a^n) = n·ln(a)
+        // Not reversible: normalize_mul reorders n*ln(a) → ln(a)*n, breaking RTL match
         rs.add(rule(
             "ln_power",
             p_ln(p_pow(a(), b())),
             p_mul(b(), p_ln(a())),
         ));
-
-        // n·ln(a) = ln(a^n) (contraction - reduces complexity!)
+        // Explicit contraction rules for both orderings
         rs.add(rule(
             "ln_power_contract",
             p_mul(b(), p_ln(a())),
             p_ln(p_pow(a(), b())),
         ));
-        // Also match ln(a) * n
         rs.add(rule(
             "ln_power_contract_rev",
             p_mul(p_ln(a()), b()),
             p_ln(p_pow(a(), b())),
         ));
 
-        // exp(a + b) = exp(a)·exp(b) (expansion)
-        rs.add(rule(
+        // exp(a + b) = exp(a)·exp(b)
+        rs.add(rule_reversible(
             "exp_sum",
             p_exp(p_add(a(), b())),
             p_mul(p_exp(a()), p_exp(b())),
         ));
 
-        // exp(a)·exp(b) = exp(a + b) (contraction - reduces complexity!)
-        rs.add(rule(
-            "exp_sum_contract",
-            p_mul(p_exp(a()), p_exp(b())),
-            p_exp(p_add(a(), b())),
-        ));
-
-        // exp(a - b) = exp(a)/exp(b) = exp(a) * (1/exp(b))
-        rs.add(rule(
+        // exp(a - b) = exp(a)/exp(b)
+        rs.add(rule_reversible(
             "exp_diff",
             p_exp(p_add(a(), p_neg(b()))),
             p_mul(p_exp(a()), p_inv(p_exp(b()))),
-        ));
-
-        // exp(a) * (1/exp(b)) = exp(a - b) (contraction)
-        rs.add(rule(
-            "exp_diff_contract",
-            p_mul(p_exp(a()), p_inv(p_exp(b()))),
-            p_exp(p_add(a(), p_neg(b()))),
         ));
 
         rs
@@ -1402,34 +1156,19 @@ impl RuleSet {
             p_mul(p_inv(x()), p_inv(y())),
         ));
 
-        // === Multiplication associativity (for reordering) ===
+        // === Associativity (reversible: RTL gives opposite direction) ===
         // (x * y) * z = x * (y * z)
-        rs.add(rule(
-            "mul_assoc_right",
+        rs.add(rule_reversible(
+            "mul_assoc",
             p_mul(p_mul(x(), y()), wildcard("z")),
             p_mul(x(), p_mul(y(), wildcard("z"))),
         ));
 
-        // x * (y * z) = (x * y) * z
-        rs.add(rule(
-            "mul_assoc_left",
-            p_mul(x(), p_mul(y(), wildcard("z"))),
-            p_mul(p_mul(x(), y()), wildcard("z")),
-        ));
-
-        // === Addition associativity ===
         // (x + y) + z = x + (y + z)
-        rs.add(rule(
-            "add_assoc_right",
+        rs.add(rule_reversible(
+            "add_assoc",
             p_add(p_add(x(), y()), wildcard("z")),
             p_add(x(), p_add(y(), wildcard("z"))),
-        ));
-
-        // x + (y + z) = (x + y) + z
-        rs.add(rule(
-            "add_assoc_left",
-            p_add(x(), p_add(y(), wildcard("z"))),
-            p_add(p_add(x(), y()), wildcard("z")),
         ));
 
         // === Distribution (for expanding/factoring) ===
@@ -1783,19 +1522,7 @@ impl RuleSet {
             p_mul(p_add(a(), p_const(1.0)), x()),
         ));
 
-        // x + x*a = x*(a + 1) - factor left with bare x (reversed order)
-        rs.add(rule(
-            "factor_left_bare_rev",
-            p_add(x(), p_mul(x(), a())),
-            p_mul(x(), p_add(a(), p_const(1.0))),
-        ));
-
-        // x + a*x = (a + 1)*x - factor right with bare x (reversed order)
-        rs.add(rule(
-            "factor_right_bare_rev",
-            p_add(x(), p_mul(a(), x())),
-            p_mul(p_add(a(), p_const(1.0)), x()),
-        ));
+        // (add_commute handles reversed order: x + x*a and x + a*x)
 
         // x*a - x = x*(a - 1) - factor left with bare x subtraction
         rs.add(rule(
@@ -2116,6 +1843,7 @@ mod tests {
             name: name.to_string(),
             lhs: wildcard("x"),
             rhs: wildcard("x"),
+            reversible: false,
         }
     }
 
@@ -2167,121 +1895,101 @@ mod tests {
     #[test]
     fn apply_ltr_identity() {
         // Rule: x + 0 -> x (additive identity)
-        let rule = Rule {
-            name: "add_zero".to_string(),
-            lhs: p_add(wildcard("x"), Pattern::Const(0.0)),
-            rhs: wildcard("x"),
-        };
+        let r = rule("add_zero", p_add(wildcard("x"), Pattern::Const(0.0)), wildcard("x"));
 
         // Expression: a + 0
         let expr = add(scalar("a"), constant(0.0));
-        let result = rule.apply_ltr(&expr).unwrap();
+        let result = r.apply_ltr(&expr).unwrap();
         assert_eq!(result, scalar("a"));
     }
 
     #[test]
     fn apply_ltr_no_match() {
         // Rule: x + 0 -> x
-        let rule = Rule {
-            name: "add_zero".to_string(),
-            lhs: p_add(wildcard("x"), Pattern::Const(0.0)),
-            rhs: wildcard("x"),
-        };
+        let r = rule("add_zero", p_add(wildcard("x"), Pattern::Const(0.0)), wildcard("x"));
 
         // Expression: a + b (doesn't match x + 0)
         let expr = add(scalar("a"), scalar("b"));
-        assert!(rule.apply_ltr(&expr).is_none());
+        assert!(r.apply_ltr(&expr).is_none());
     }
 
     #[test]
     fn apply_rtl_identity() {
         // Rule: x + 0 -> x (apply in reverse: x -> x + 0)
-        let rule = Rule {
-            name: "add_zero".to_string(),
-            lhs: p_add(wildcard("x"), Pattern::Const(0.0)),
-            rhs: wildcard("x"),
-        };
+        let r = rule("add_zero", p_add(wildcard("x"), Pattern::Const(0.0)), wildcard("x"));
 
         // Expression: a (matches rhs pattern "x")
         let expr = scalar("a");
-        let result = rule.apply_rtl(&expr).unwrap();
+        let result = r.apply_rtl(&expr).unwrap();
         assert_eq!(result, add(scalar("a"), constant(0.0)));
     }
 
     #[test]
     fn apply_ltr_double_negation() {
         // Rule: --x -> x (double negation elimination)
-        let rule = Rule {
-            name: "double_neg".to_string(),
-            lhs: p_neg(p_neg(wildcard("x"))),
-            rhs: wildcard("x"),
-        };
+        let r = rule("double_neg", p_neg(p_neg(wildcard("x"))), wildcard("x"));
 
         // Expression: --a
         let expr = neg(neg(scalar("a")));
-        let result = rule.apply_ltr(&expr).unwrap();
+        let result = r.apply_ltr(&expr).unwrap();
         assert_eq!(result, scalar("a"));
     }
 
     #[test]
     fn apply_rtl_double_negation() {
         // Rule: --x -> x (apply in reverse: x -> --x)
-        let rule = Rule {
-            name: "double_neg".to_string(),
-            lhs: p_neg(p_neg(wildcard("x"))),
-            rhs: wildcard("x"),
-        };
+        let r = rule("double_neg", p_neg(p_neg(wildcard("x"))), wildcard("x"));
 
         // Expression: a
         let expr = scalar("a");
-        let result = rule.apply_rtl(&expr).unwrap();
+        let result = r.apply_rtl(&expr).unwrap();
         assert_eq!(result, neg(neg(scalar("a"))));
     }
 
     #[test]
     fn apply_ltr_with_repeated_wildcard() {
         // Rule: x * x -> x^2 (squaring)
-        let rule = Rule {
-            name: "square".to_string(),
-            lhs: p_mul(wildcard("x"), wildcard("x")),
-            rhs: Pattern::Pow(Box::new(wildcard("x")), Box::new(Pattern::Const(2.0))),
-        };
+        let r = rule(
+            "square",
+            p_mul(wildcard("x"), wildcard("x")),
+            Pattern::Pow(Box::new(wildcard("x")), Box::new(Pattern::Const(2.0))),
+        );
 
         // Expression: a * a
         let expr = mul(scalar("a"), scalar("a"));
-        let result = rule.apply_ltr(&expr).unwrap();
+        let result = r.apply_ltr(&expr).unwrap();
         assert_eq!(result, pow(scalar("a"), constant(2.0)));
     }
 
     #[test]
     fn apply_ltr_repeated_wildcard_no_match() {
         // Rule: x * x -> x^2
-        let rule = Rule {
-            name: "square".to_string(),
-            lhs: p_mul(wildcard("x"), wildcard("x")),
-            rhs: Pattern::Pow(Box::new(wildcard("x")), Box::new(Pattern::Const(2.0))),
-        };
+        let r = rule(
+            "square",
+            p_mul(wildcard("x"), wildcard("x")),
+            Pattern::Pow(Box::new(wildcard("x")), Box::new(Pattern::Const(2.0))),
+        );
 
         // Expression: a * b (different operands, won't match x * x)
         let expr = mul(scalar("a"), scalar("b"));
-        assert!(rule.apply_ltr(&expr).is_none());
+        assert!(r.apply_ltr(&expr).is_none());
     }
 
     #[test]
     fn apply_ltr_nested() {
         // Rule: (x + y) * z -> x*z + y*z (distribution, simplified)
-        let rule = Rule {
-            name: "distribute".to_string(),
-            lhs: p_mul(p_add(wildcard("x"), wildcard("y")), wildcard("z")),
-            rhs: p_add(
+        let r = rule(
+            "distribute",
+            p_mul(p_add(wildcard("x"), wildcard("y")), wildcard("z")),
+            p_add(
                 p_mul(wildcard("x"), wildcard("z")),
                 p_mul(wildcard("y"), wildcard("z")),
             ),
-        };
+        );
 
         // Expression: (a + b) * c
         let expr = mul(add(scalar("a"), scalar("b")), scalar("c"));
-        let result = rule.apply_ltr(&expr).unwrap();
+        let result = r.apply_ltr(&expr).unwrap();
         assert_eq!(
             result,
             add(mul(scalar("a"), scalar("c")), mul(scalar("b"), scalar("c")))
@@ -2291,18 +1999,18 @@ mod tests {
     #[test]
     fn apply_rtl_factoring() {
         // Rule: (x + y) * z -> x*z + y*z (apply in reverse to factor)
-        let rule = Rule {
-            name: "distribute".to_string(),
-            lhs: p_mul(p_add(wildcard("x"), wildcard("y")), wildcard("z")),
-            rhs: p_add(
+        let r = rule(
+            "distribute",
+            p_mul(p_add(wildcard("x"), wildcard("y")), wildcard("z")),
+            p_add(
                 p_mul(wildcard("x"), wildcard("z")),
                 p_mul(wildcard("y"), wildcard("z")),
             ),
-        };
+        );
 
         // Expression: a*c + b*c (matches rhs pattern)
         let expr = add(mul(scalar("a"), scalar("c")), mul(scalar("b"), scalar("c")));
-        let result = rule.apply_rtl(&expr).unwrap();
+        let result = r.apply_rtl(&expr).unwrap();
         assert_eq!(result, mul(add(scalar("a"), scalar("b")), scalar("c")));
     }
 
@@ -3078,7 +2786,7 @@ mod tests {
 
         let result = rs
             .iter()
-            .find(|r| r.name == "mul_assoc_right")
+            .find(|r| r.name == "mul_assoc")
             .and_then(|r| r.apply_ltr(&expr));
 
         assert_eq!(

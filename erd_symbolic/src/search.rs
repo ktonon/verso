@@ -60,6 +60,16 @@ impl BeamSearch {
                     from_rule: true,
                 });
             }
+            // Also try RTL for reversible rules
+            if rule.reversible {
+                if let Some(rewritten) = rule.apply_rtl(expr) {
+                    let folded = fold_constants(&rewritten);
+                    results.push(Rewrite {
+                        expr: folded,
+                        from_rule: true,
+                    });
+                }
+            }
         }
 
         // Stop recursion at depth limit
