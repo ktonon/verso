@@ -1,2 +1,2 @@
 [workspace]
-members = ["erd_model", "erd_symbolic", "erd_viewer"]
+members = ["erd_model", "erd_symbolic", "erd_training", "erd_viewer"]

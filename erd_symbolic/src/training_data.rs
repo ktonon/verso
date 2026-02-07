@@ -1,18 +1,18 @@
 use crate::expr::{FnKind, NamedConst};
 use crate::random_search::{ChildIndex, IndexedRuleSet, SearchRun};
 use crate::token::{path_to_position, tokenize, DeBruijn, Token};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io::Write;
 
 /// One action in a simplification trace for ML training.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrainingAction {
     pub rule_direction: u16,
     pub position: usize,
 }
 
 /// One complete training example: an expression and its simplification trace.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrainingExample {
     pub input_tokens: Vec<String>,
     pub actions: Vec<TrainingAction>,
