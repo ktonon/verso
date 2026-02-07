@@ -5,6 +5,9 @@ public/*.webm
 public/*.webp
 public/erd_viewer*
 scripts/.cdk-outputs.json
+__pycache__/
+*.egg-info/
+checkpoints/
 data_training/
 target/
 erd_app/build-date.ts
