@@ -173,7 +173,7 @@ impl<B: Backend> SimplificationModel<B> {
 
             // Argmax
             let next_tokens = logits.argmax(1); // [B, 1]
-            let next_data: Vec<i64> = next_tokens.reshape([batch_size]).into_data().to_vec().unwrap();
+            let next_data = int_tensor_to_vec(next_tokens.reshape([batch_size]));
 
             for (i, &tok) in next_data.iter().enumerate() {
                 if !finished[i] {
@@ -333,7 +333,21 @@ fn multinomial_sample<B: Backend>(probs: Tensor<B, 2>, device: &B::Device) -> Ve
     let masked_indices = ge.clone().float().mul(indices) + ge.bool_not().float().mul(large);
     let sampled = masked_indices.argmin(1); // [B, 1]
 
-    sampled.reshape([batch_size]).into_data().to_vec().unwrap()
+    int_tensor_to_vec(sampled.reshape([batch_size]))
+}
+
+/// Extract integer values from a 1D Int tensor, handling both i32 (wgpu) and i64 (ndarray) backends.
+fn int_tensor_to_vec<B: Backend>(tensor: Tensor<B, 1, Int>) -> Vec<i64> {
+    let data = tensor.into_data();
+    // Try i64 first (NdArray backend), fall back to i32 (Wgpu backend)
+    data.to_vec::<i64>()
+        .unwrap_or_else(|_| {
+            data.to_vec::<i32>()
+                .unwrap()
+                .into_iter()
+                .map(|x| x as i64)
+                .collect()
+        })
 }
 
 #[cfg(test)]

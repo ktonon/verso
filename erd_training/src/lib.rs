@@ -1,5 +1,6 @@
 pub mod config;
 pub mod dataset;
+pub mod evaluate;
 pub mod model;
 pub mod schedule;
 pub mod train;

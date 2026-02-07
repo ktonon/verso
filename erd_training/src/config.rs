@@ -54,6 +54,74 @@ pub struct TrainConfig {
     pub device: String,
 }
 
+/// Configuration for evaluation.
+#[derive(Parser, Debug, Clone)]
+pub struct EvalConfig {
+    #[arg(long, default_value = "checkpoints/best")]
+    pub checkpoint: String,
+    #[arg(long, default_value = "data_training")]
+    pub data_dir: String,
+    #[arg(long, default_value_t = 64)]
+    pub batch_size: usize,
+    #[arg(long, default_value_t = 0.1)]
+    pub val_fraction: f64,
+    #[arg(long, default_value_t = 42)]
+    pub seed: u64,
+    #[arg(long, default_value = "cpu")]
+    pub device: String,
+    #[arg(long, default_value_t = 0.5)]
+    pub invalid_penalty: f64,
+
+    // Model architecture (must match training config)
+    #[arg(long, default_value_t = 128)]
+    pub d_model: usize,
+    #[arg(long, default_value_t = 4)]
+    pub n_encoder_layers: usize,
+    #[arg(long, default_value_t = 4)]
+    pub n_decoder_layers: usize,
+    #[arg(long, default_value_t = 4)]
+    pub n_heads: usize,
+    #[arg(long, default_value_t = 256)]
+    pub d_ff: usize,
+    #[arg(long, default_value_t = 0.1)]
+    pub dropout: f64,
+    #[arg(long, default_value_t = 64)]
+    pub max_enc_len: usize,
+    #[arg(long, default_value_t = 128)]
+    pub max_dec_len: usize,
+    #[arg(long, default_value_t = 64)]
+    pub max_positions: usize,
+}
+
+impl EvalConfig {
+    /// Convert to a TrainConfig for model loading.
+    pub fn to_train_config(&self) -> TrainConfig {
+        TrainConfig {
+            data_dir: self.data_dir.clone(),
+            val_fraction: self.val_fraction,
+            max_actions: 50,
+            seed: self.seed,
+            d_model: self.d_model,
+            n_encoder_layers: self.n_encoder_layers,
+            n_decoder_layers: self.n_decoder_layers,
+            n_heads: self.n_heads,
+            d_ff: self.d_ff,
+            dropout: self.dropout,
+            max_enc_len: self.max_enc_len,
+            max_dec_len: self.max_dec_len,
+            batch_size: self.batch_size,
+            lr: 3e-4,
+            weight_decay: 0.01,
+            warmup_steps: 200,
+            max_epochs: 100,
+            patience: 10,
+            checkpoint_dir: String::new(),
+            log_every: 50,
+            device: self.device.clone(),
+        }
+    }
+}
+
 /// Configuration for REINFORCE training.
 #[derive(Parser, Debug, Clone)]
 pub struct RLConfig {
