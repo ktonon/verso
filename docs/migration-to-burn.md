@@ -487,7 +487,7 @@ If any phase fails verification, we can debug against the Python implementation 
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1 | Scaffold + Vocabulary + Data Loading | Done |
-| 2 | Model | |
+| 2 | Model | Done |
 | 3 | Supervised Training | |
 | 4 | Evaluation | |
 | 5 | REINFORCE Training | |
