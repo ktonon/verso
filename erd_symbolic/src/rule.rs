@@ -1436,6 +1436,29 @@ impl RuleSet {
             p_mul(p_neg(x()), y()),
         ));
 
+        // Pull negation out of multiplication (reverse of pushing in)
+        // x * (-y) = -(x * y)
+        rs.add(rule(
+            "mul_neg_right",
+            p_mul(x(), p_neg(y())),
+            p_neg(p_mul(x(), y())),
+        ));
+
+        // (-x) * y = -(x * y)
+        rs.add(rule(
+            "mul_neg_left",
+            p_mul(p_neg(x()), y()),
+            p_neg(p_mul(x(), y())),
+        ));
+
+        // === Power expansion ===
+        // x^2 = x * x (allows distribution when x is a sum)
+        rs.add(rule(
+            "pow_2_expand",
+            p_pow(x(), p_const(2.0)),
+            p_mul(x(), x()),
+        ));
+
         // === Kronecker delta contraction ===
         // δ^i_j * v^j = v^i (delta contracts with vector, result has free index)
         rs.add(rule(
