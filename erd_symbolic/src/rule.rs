@@ -1920,6 +1920,11 @@ impl RuleSet {
     pub fn iter(&self) -> impl Iterator<Item = &Rule> {
         self.rules.iter()
     }
+
+    /// Consume this RuleSet into its underlying Vec<Rule>.
+    pub fn into_rules(self) -> Vec<Rule> {
+        self.rules
+    }
 }
 
 #[cfg(test)]

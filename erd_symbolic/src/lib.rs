@@ -6,6 +6,7 @@ pub mod repl;
 mod rule;
 mod search;
 mod to_tex;
+pub mod random_search;
 pub mod token;
 
 pub use expr::*;

@@ -463,8 +463,8 @@ fn simplify(expr: &Expr, model: &OrtSession, rules: &RuleSet) -> Expr {
 
 | Phase | Deliverable | Scope |
 |-------|------------|-------|
-| **M1** | Tokenizer + position mapper | Rust: `Expr ↔ tokens`, AST path ↔ pre-order index, De Bruijn canonicalization |
-| **M2** | Randomized beam search | Rust: shuffled rule order, stochastic selection, multi-run traces |
+| **M1** | Tokenizer + position mapper | Rust: `Expr ↔ tokens`, AST path ↔ pre-order index, De Bruijn canonicalization | **Done** — `token.rs` |
+| **M2** | Randomized beam search | Rust: shuffled rule order, stochastic selection, multi-run traces | **Done** — `random_search.rs` |
 | **M3** | Training data generator | Rust: random AST + trace export to JSON with position annotations |
 | **M4** | Supervised baseline model | Python: transformer encoder-decoder trained on beam search traces |
 | **M5** | Sequence validation harness | Rust/Python: apply predicted action sequences, compute reward |

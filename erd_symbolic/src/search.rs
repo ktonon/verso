@@ -468,7 +468,7 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<TraceStep
 /// Pure constant evaluation: arithmetic on Rational/FracPi values and trig at constant arguments.
 /// No normalization (no factor sorting, no mul shortcuts). This is mathematical evaluation,
 /// not a search strategy choice.
-fn eval_constants(expr: &Expr) -> Expr {
+pub(crate) fn eval_constants(expr: &Expr) -> Expr {
     match expr {
         Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
         Expr::Neg(a) => {
@@ -762,7 +762,7 @@ impl Coeff {
     }
 }
 
-fn collect_linear_terms(expr: &Expr) -> Expr {
+pub(crate) fn collect_linear_terms(expr: &Expr) -> Expr {
     let mut terms = Vec::new();
     flatten_add(expr, &mut terms);
 
