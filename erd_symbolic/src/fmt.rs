@@ -1,23 +1,182 @@
 use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind, NamedConst};
 use std::fmt::Display;
 
+// ANSI color codes for terminal output
+mod color {
+    pub const RESET: &str = "\x1b[0m";
+    pub const DIM: &str = "\x1b[2m";           // Gray for operators
+    pub const CYAN: &str = "\x1b[36m";         // Constants
+    pub const MAGENTA: &str = "\x1b[35m";      // Named constants (π, e, √2)
+    pub const YELLOW: &str = "\x1b[33m";        // 1st order tensors
+    pub const BOLD_YELLOW: &str = "\x1b[1;33m"; // 2nd order tensors (bold yellow)
+    pub const BLUE: &str = "\x1b[34m";         // Functions
+}
+
+/// Wrapper for colored display of expressions
+pub struct Colored<'a>(pub &'a Expr);
+
+impl<'a> Display for Colored<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", fmt_colored(self.0))
+    }
+}
+
+/// Format an expression with ANSI colors
+pub fn fmt_colored(expr: &Expr) -> String {
+    match expr {
+        Expr::Const(n) => {
+            let s = if n.fract() == 0.0 {
+                format!("{}", *n as i64)
+            } else {
+                format!("{}", n)
+            };
+            format!("{}{}{}", color::CYAN, s, color::RESET)
+        }
+        Expr::Named(nc) => {
+            format!("{}{}{}", color::MAGENTA, nc, color::RESET)
+        }
+        Expr::Var { name, indices } => {
+            let order = indices.len();
+            let (start_color, end_color) = match order {
+                0 => (color::YELLOW, color::RESET),         // Scalar: default
+                1 => (color::YELLOW, color::RESET),         // 1st order: yellow
+                _ => (color::BOLD_YELLOW, color::RESET),    // 2nd+: bold yellow
+            };
+
+            if indices.is_empty() {
+                format!("{}{}{}", start_color, name, end_color)
+            } else {
+                let upper: Vec<_> = indices
+                    .iter()
+                    .filter(|i| i.position == IndexPosition::Upper)
+                    .map(|i| format!("{}", i))
+                    .collect();
+                let lower: Vec<_> = indices
+                    .iter()
+                    .filter(|i| i.position == IndexPosition::Lower)
+                    .map(|i| format!("{}", i))
+                    .collect();
+
+                // Color the tensor name, dim the indices
+                let mut result = format!("{}{}{}", start_color, name, color::RESET);
+                if !lower.is_empty() {
+                    result.push_str(&format!("{}_({}){}", color::DIM, lower.join(","), color::RESET));
+                }
+                if !upper.is_empty() {
+                    result.push_str(&format!("{}^({}){}", color::DIM, upper.join(","), color::RESET));
+                }
+                result
+            }
+        }
+        Expr::Add(a, b) => {
+            let op = format!("{} + {}", color::DIM, color::RESET);
+            match b.as_ref() {
+                Expr::Neg(inner) => {
+                    let op = format!("{} - {}", color::DIM, color::RESET);
+                    format!("{}{}{}", fmt_colored(a), op, fmt_colored(inner))
+                }
+                Expr::Const(n) if *n < 0.0 => {
+                    let op = format!("{} - {}", color::DIM, color::RESET);
+                    format!("{}{}{}{}{}", fmt_colored(a), op, color::CYAN, fmt_const(-*n), color::RESET)
+                }
+                _ => {
+                    format!("{}{}{}", fmt_colored(a), op, fmt_colored(b))
+                }
+            }
+        }
+        Expr::Mul(a, b) => {
+            if let Some((base, arg)) = match_log_base(a, b) {
+                return format!("{}log{}_{}{}{}({}){}",
+                    color::BLUE, color::RESET, color::DIM, fmt_log_base_colored(base),
+                    color::BLUE, fmt_colored(arg), color::RESET);
+            }
+
+            match b.as_ref() {
+                Expr::Inv(inner) => {
+                    let op = format!("{}/{}", color::DIM, color::RESET);
+                    format!("{}{}{}", maybe_paren_colored(a, expr), op, maybe_paren_colored(inner, expr))
+                }
+                _ => {
+                    let mul_kind = classify_mul(a, b);
+                    // Coefficient notation: 2x instead of 2 * x
+                    if let Expr::Const(n) = a.as_ref() {
+                        if mul_kind == MulKind::Scalar {
+                            let coeff = if n.fract() == 0.0 {
+                                format!("{}", *n as i64)
+                            } else {
+                                format!("{}", n)
+                            };
+                            return format!("{}{}{}{}", color::CYAN, coeff, color::RESET,
+                                maybe_paren_colored(b, expr));
+                        }
+                    }
+                    let op_char = match mul_kind {
+                        MulKind::Scalar => "⋅",
+                        MulKind::Outer => "⊗",
+                        MulKind::Single => "⋅",
+                        MulKind::Double => ":",
+                    };
+                    let op = format!("{}{}{}", color::DIM, op_char, color::RESET);
+                    format!("{}{}{}", maybe_paren_colored(a, expr), op, maybe_paren_colored(b, expr))
+                }
+            }
+        }
+        Expr::Neg(a) => {
+            format!("{}-{}{}", color::DIM, color::RESET, maybe_paren_colored(a, expr))
+        }
+        Expr::Inv(a) => {
+            format!("{}1/{}{}", color::DIM, color::RESET, maybe_paren_colored(a, expr))
+        }
+        Expr::Pow(base, exp) => {
+            if is_sqrt_exp(exp) {
+                return format!("{}sqrt({}){}",
+                    color::BLUE, fmt_colored(base), color::RESET);
+            }
+            let op = format!("{}**{}", color::DIM, color::RESET);
+            format!("{}{}{}", maybe_paren_colored(base, expr), op, maybe_paren_colored(exp, expr))
+        }
+        Expr::Fn(kind, arg) => {
+            format!("{}{}{}({})", color::BLUE, kind, color::RESET, fmt_colored(arg))
+        }
+        Expr::FnN(kind, args) => {
+            let rendered: Vec<String> = args.iter().map(fmt_colored).collect();
+            format!("{}{}{}({})", color::BLUE, kind, color::RESET, rendered.join(", "))
+        }
+    }
+}
+
+fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
+    if child.precedence() < parent.precedence() {
+        format!("{}({}{}){}", color::DIM, color::RESET, fmt_colored(child), color::DIM)
+    } else {
+        fmt_colored(child)
+    }
+}
+
+fn fmt_log_base_colored(base: &Expr) -> String {
+    match base {
+        Expr::Const(_) | Expr::Var { .. } => fmt_colored(base),
+        _ => format!("{}({}{}){}", color::DIM, color::RESET, fmt_colored(base), color::DIM),
+    }
+}
+
 impl Display for NamedConst {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             NamedConst::Pi => write!(f, "π"),
-            NamedConst::FracPi2 => write!(f, "π / 2"),
-            NamedConst::FracPi3 => write!(f, "π / 3"),
-            NamedConst::FracPi4 => write!(f, "π / 4"),
-            NamedConst::FracPi6 => write!(f, "π / 6"),
-            NamedConst::Frac2Pi3 => write!(f, "2π / 3"),
-            NamedConst::Frac3Pi4 => write!(f, "3π / 4"),
-            NamedConst::Frac5Pi6 => write!(f, "5π / 6"),
+            NamedConst::FracPi2 => write!(f, "π/2"),
+            NamedConst::FracPi3 => write!(f, "π/3"),
+            NamedConst::FracPi4 => write!(f, "π/4"),
+            NamedConst::FracPi6 => write!(f, "π/6"),
+            NamedConst::Frac2Pi3 => write!(f, "2π/3"),
+            NamedConst::Frac3Pi4 => write!(f, "3π/4"),
+            NamedConst::Frac5Pi6 => write!(f, "5π/6"),
             NamedConst::TwoPi => write!(f, "2π"),
             NamedConst::E => write!(f, "e"),
             NamedConst::Sqrt2 => write!(f, "√2"),
             NamedConst::Sqrt3 => write!(f, "√3"),
-            NamedConst::Frac1Sqrt2 => write!(f, "√2 / 2"),
-            NamedConst::FracSqrt3By2 => write!(f, "√3 / 2"),
+            NamedConst::Frac1Sqrt2 => write!(f, "√2/2"),
+            NamedConst::FracSqrt3By2 => write!(f, "√3/2"),
         }
     }
 }
@@ -107,7 +266,7 @@ impl std::fmt::Display for Expr {
 
                 match b.as_ref() {
                     Expr::Inv(inner) => {
-                        write!(f, "{} / {}", maybe_paren(a, self), maybe_paren(inner, self))
+                        write!(f, "{}/{}", maybe_paren(a, self), maybe_paren(inner, self))
                     }
                     _ => {
                         let mul_kind = classify_mul(a, b);
@@ -118,11 +277,12 @@ impl std::fmt::Display for Expr {
                             }
                         }
                         // Choose operator based on multiplication kind (Einstein notation)
+                        // No spaces around operators for tighter visual binding
                         let op = match mul_kind {
-                            MulKind::Scalar => " * ", // scalar multiplication
-                            MulKind::Outer => " ⊗ ",  // outer/tensor product
-                            MulKind::Single => " ⋅ ", // single contraction (dot product)
-                            MulKind::Double => " : ", // double contraction
+                            MulKind::Scalar => "⋅",  // scalar multiplication
+                            MulKind::Outer => "⊗",   // outer/tensor product
+                            MulKind::Single => "⋅",  // single contraction (dot product)
+                            MulKind::Double => ":",  // double contraction
                         };
                         write!(f, "{}{}{}", maybe_paren(a, self), op, maybe_paren(b, self))
                     }
@@ -230,7 +390,7 @@ mod tests {
     #[test]
     fn display_mul_scalar() {
         // Scalar multiplication (no indices, no contractions)
-        assert_eq!(format!("{}", mul(scalar("x"), scalar("y"))), "x * y");
+        assert_eq!(format!("{}", mul(scalar("x"), scalar("y"))), "x⋅y");
         // Coefficient notation preserved
         assert_eq!(format!("{}", mul(constant(2.0), scalar("y"))), "2y");
     }
@@ -239,7 +399,7 @@ mod tests {
     fn display_mul_single_contraction() {
         // A^i B_i contracts on i → single contraction → dot
         let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![lower("i")]));
-        assert_eq!(format!("{}", e), "A^(i) ⋅ B_(i)");
+        assert_eq!(format!("{}", e), "A^(i)⋅B_(i)");
     }
 
     #[test]
@@ -249,19 +409,19 @@ mod tests {
             tensor("A", vec![upper("i"), upper("j")]),
             tensor("B", vec![lower("i"), lower("j")]),
         );
-        assert_eq!(format!("{}", e), "A^(i,j) : B_(i,j)");
+        assert_eq!(format!("{}", e), "A^(i,j):B_(i,j)");
     }
 
     #[test]
     fn display_mul_outer_product() {
         // A^i B^j has no contractions (both upper) → outer/tensor product
         let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]));
-        assert_eq!(format!("{}", e), "A^(i) ⊗ B^(j)");
+        assert_eq!(format!("{}", e), "A^(i)⊗B^(j)");
     }
 
     #[test]
     fn display_div() {
-        assert_eq!(format!("{}", div(scalar("x"), scalar("y"))), "x / y");
+        assert_eq!(format!("{}", div(scalar("x"), scalar("y"))), "x/y");
     }
 
     #[test]

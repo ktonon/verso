@@ -1,3 +1,4 @@
+use crate::fmt::fmt_colored;
 use crate::parser::parse_expr;
 use crate::rule::RuleSet;
 use crate::search;
@@ -58,9 +59,9 @@ pub fn run() -> Result<(), ReadlineError> {
                             let (simplified, trace) =
                                 search::simplify_with_trace(&expr, &RuleSet::full());
                             for (i, step) in trace.iter().enumerate() {
-                                println!("{}: {}", i, step);
+                                println!("{}: {}", i, fmt_colored(step));
                             }
-                            println!("final: {}\n", simplified);
+                            println!("final: {}\n", fmt_colored(&simplified));
                             record_result(
                                 &mut result_history,
                                 &mut rl,
@@ -69,7 +70,7 @@ pub fn run() -> Result<(), ReadlineError> {
                             );
                         } else {
                             let simplified = search::simplify(&expr, &RuleSet::full());
-                            println!("{}\n", simplified);
+                            println!("{}\n", fmt_colored(&simplified));
                             record_result(
                                 &mut result_history,
                                 &mut rl,
