@@ -1,5 +1,6 @@
 use crate::expr::{classify_mul, Expr, FnKind, MulKind, NamedConst};
 use crate::rule::RuleSet;
+use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 pub trait SearchStrategy {
@@ -53,8 +54,8 @@ impl BeamSearch {
         // Try applying each rule at the root
         for rule in rules.iter() {
             if let Some(rewritten) = rule.apply_ltr(expr) {
-                // Fold constants immediately so complexity is accurate
-                let folded = fold_constants(&rewritten);
+                // Evaluate constants so complexity is accurate
+                let folded = eval_constants(&rewritten);
                 results.push(Rewrite {
                     expr: folded,
                     from_rule: true,
@@ -63,7 +64,7 @@ impl BeamSearch {
             // Also try RTL for reversible rules
             if rule.reversible {
                 if let Some(rewritten) = rule.apply_rtl(expr) {
-                    let folded = fold_constants(&rewritten);
+                    let folded = eval_constants(&rewritten);
                     results.push(Rewrite {
                         expr: folded,
                         from_rule: true,
@@ -191,34 +192,35 @@ impl SearchStrategy for BeamSearch {
         let mut best_from_rule = false;
 
         for _step in 0..self.max_steps {
+            // Generate all rewrites in parallel across candidates
+            let all_rewrites: Vec<Rewrite> = beam
+                .par_iter()
+                .flat_map(|candidate| self.all_rewrites(candidate, rules))
+                .collect();
+
+            // Deduplicate and track best (serial — fast)
             let mut next_beam: Vec<Expr> = Vec::new();
+            for rewrite in all_rewrites {
+                let key = Self::expr_key(&rewrite.expr);
+                if !seen.contains(&key) {
+                    seen.insert(key);
 
-            // Generate all rewrites from all current candidates
-            for candidate in &beam {
-                for rewrite in self.all_rewrites(candidate, rules) {
-                    let key = Self::expr_key(&rewrite.expr);
-                    if !seen.contains(&key) {
-                        seen.insert(key);
+                    let complexity = rewrite.expr.complexity();
 
-                        let complexity = rewrite.expr.complexity();
+                    // Update best if:
+                    // 1. This is strictly simpler, OR
+                    // 2. Same complexity but this is from a rule and current best isn't
+                    //    (prefer canonical rule-based forms over original/swapped forms)
+                    let dominated = complexity < best_complexity
+                        || (complexity == best_complexity && rewrite.from_rule && !best_from_rule);
 
-                        // Update best if:
-                        // 1. This is strictly simpler, OR
-                        // 2. Same complexity but this is from a rule and current best isn't
-                        //    (prefer canonical rule-based forms over original/swapped forms)
-                        let dominated = complexity < best_complexity
-                            || (complexity == best_complexity
-                                && rewrite.from_rule
-                                && !best_from_rule);
-
-                        if dominated {
-                            best = rewrite.expr.clone();
-                            best_complexity = complexity;
-                            best_from_rule = rewrite.from_rule;
-                        }
-
-                        next_beam.push(rewrite.expr);
+                    if dominated {
+                        best = rewrite.expr.clone();
+                        best_complexity = complexity;
+                        best_from_rule = rewrite.from_rule;
                     }
+
+                    next_beam.push(rewrite.expr);
                 }
             }
 
@@ -255,31 +257,31 @@ impl BeamSearch {
         let mut trace = vec![expr.clone()];
 
         for _step in 0..self.max_steps {
+            let all_rewrites: Vec<Rewrite> = beam
+                .par_iter()
+                .flat_map(|candidate| self.all_rewrites(candidate, rules))
+                .collect();
+
             let mut next_beam: Vec<Expr> = Vec::new();
+            for rewrite in all_rewrites {
+                let key = Self::expr_key(&rewrite.expr);
+                if !seen.contains(&key) {
+                    seen.insert(key);
 
-            for candidate in &beam {
-                for rewrite in self.all_rewrites(candidate, rules) {
-                    let key = Self::expr_key(&rewrite.expr);
-                    if !seen.contains(&key) {
-                        seen.insert(key);
+                    let complexity = rewrite.expr.complexity();
+                    let dominated = complexity < best_complexity
+                        || (complexity == best_complexity && rewrite.from_rule && !best_from_rule);
 
-                        let complexity = rewrite.expr.complexity();
-                        let dominated = complexity < best_complexity
-                            || (complexity == best_complexity
-                                && rewrite.from_rule
-                                && !best_from_rule);
-
-                        if dominated {
-                            best = rewrite.expr.clone();
-                            best_complexity = complexity;
-                            best_from_rule = rewrite.from_rule;
-                            if trace.last() != Some(&best) {
-                                trace.push(best.clone());
-                            }
+                    if dominated {
+                        best = rewrite.expr.clone();
+                        best_complexity = complexity;
+                        best_from_rule = rewrite.from_rule;
+                        if trace.last() != Some(&best) {
+                            trace.push(best.clone());
                         }
-
-                        next_beam.push(rewrite.expr);
                     }
+
+                    next_beam.push(rewrite.expr);
                 }
             }
 
@@ -304,19 +306,19 @@ pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
 
     // First pass with beam search
     let simplified = wide_search.simplify(expr, rules);
-    let simplified = fold_constants(&simplified);
+    let simplified = eval_constants(&simplified);
 
-    // Re-run rules after constant folding so identities like cos(pi/2) apply
+    // Re-run rules after constant evaluation so identities like cos(pi/2) apply
     let simplified = wide_search.simplify(&simplified, rules);
-    let simplified = fold_constants(&simplified);
+    let simplified = eval_constants(&simplified);
     let simplified = collect_linear_terms(&simplified);
-    let simplified = fold_constants(&simplified);
+    let simplified = eval_constants(&simplified);
 
     // Another pass to catch remaining simplifications
     let simplified = wide_search.simplify(&simplified, rules);
-    let simplified = fold_constants(&simplified);
+    let simplified = eval_constants(&simplified);
     let simplified = collect_linear_terms(&simplified);
-    let simplified = fold_constants(&simplified);
+    let simplified = eval_constants(&simplified);
 
     // Final pass to try factoring only (don't apply other rules that might
     // undo our work or change argument order)
@@ -336,7 +338,7 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
     let (best, mut trace) = wide_search.simplify_with_trace(expr, rules);
     let mut current = best;
 
-    let folded = fold_constants(&current);
+    let folded = eval_constants(&current);
     if folded != current {
         trace.push(folded.clone());
         current = folded;
@@ -348,7 +350,7 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
         current = collected;
     }
 
-    let final_fold = fold_constants(&current);
+    let final_fold = eval_constants(&current);
     if final_fold != current {
         trace.push(final_fold.clone());
         current = final_fold;
@@ -469,64 +471,52 @@ fn try_fold_trig(kind: &FnKind, arg: &Expr) -> Option<Expr> {
     None
 }
 
-fn fold_constants(expr: &Expr) -> Expr {
+/// Pure constant evaluation: arithmetic on Const values and trig at constant arguments.
+/// No normalization (no factor sorting, no mul shortcuts). This is mathematical evaluation,
+/// not a search strategy choice.
+fn eval_constants(expr: &Expr) -> Expr {
     match expr {
         Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
-        Expr::Neg(a) => match fold_constants(a) {
+        Expr::Neg(a) => match eval_constants(a) {
             Expr::Const(n) => Expr::Const(-n),
             other => Expr::Neg(Box::new(other)),
         },
-        Expr::Inv(a) => match fold_constants(a) {
+        Expr::Inv(a) => match eval_constants(a) {
             Expr::Const(n) => Expr::Const(1.0 / n),
             other => Expr::Inv(Box::new(other)),
         },
         Expr::Add(a, b) => {
-            let left = fold_constants(a);
-            let right = fold_constants(b);
+            let left = eval_constants(a);
+            let right = eval_constants(b);
             match (&left, &right) {
                 (Expr::Const(x), Expr::Const(y)) => Expr::Const(x + y),
                 _ => Expr::Add(Box::new(left), Box::new(right)),
             }
         }
         Expr::Mul(a, b) => {
-            let left = fold_constants(a);
-            let right = fold_constants(b);
+            let left = eval_constants(a);
+            let right = eval_constants(b);
             match (&left, &right) {
                 (Expr::Const(x), Expr::Const(y)) => Expr::Const(x * y),
-                (Expr::Const(x), _) if (*x + 1.0).abs() < f64::EPSILON => {
-                    Expr::Neg(Box::new(right))
-                }
-                (_, Expr::Const(x)) if (*x + 1.0).abs() < f64::EPSILON => {
-                    Expr::Neg(Box::new(left))
-                }
-                (Expr::Const(x), _) if (*x - 1.0).abs() < f64::EPSILON => right,
-                (_, Expr::Const(x)) if (*x - 1.0).abs() < f64::EPSILON => left,
-                _ => {
-                    // Normalize factor order for canonical form
-                    normalize_mul(Expr::Mul(Box::new(left), Box::new(right)))
-                }
+                _ => Expr::Mul(Box::new(left), Box::new(right)),
             }
         }
         Expr::Pow(base, exp) => {
-            let b = fold_constants(base);
-            let e = fold_constants(exp);
+            let b = eval_constants(base);
+            let e = eval_constants(exp);
             match (&b, &e) {
                 (Expr::Const(x), Expr::Const(y)) => Expr::Const(x.powf(*y)),
                 _ => Expr::Pow(Box::new(b), Box::new(e)),
             }
         }
         Expr::Fn(kind, a) => {
-            let folded_arg = fold_constants(a);
-            // Try to evaluate trig functions on constant arguments
+            let folded_arg = eval_constants(a);
             if let Some(result) = try_fold_trig(kind, &folded_arg) {
                 return result;
             }
             Expr::Fn(kind.clone(), Box::new(folded_arg))
         }
-        Expr::FnN(kind, args) => Expr::FnN(
-            kind.clone(),
-            args.iter().map(fold_constants).collect(),
-        ),
+        Expr::FnN(kind, args) => Expr::FnN(kind.clone(), args.iter().map(eval_constants).collect()),
     }
 }
 
@@ -765,119 +755,6 @@ fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
     }
 }
 
-fn flatten_mul(expr: &Expr, out: &mut Vec<Expr>) {
-    match expr {
-        Expr::Mul(a, b) => {
-            flatten_mul(a, out);
-            flatten_mul(b, out);
-        }
-        _ => out.push(expr.clone()),
-    }
-}
-
-/// Normalize a Mul expression by sorting factors and combining like terms into powers.
-/// Constants come first, then factors sorted by canonical key.
-/// Identical factors are combined: x * x -> x^2
-/// NOTE: If any factor has tensor indices, we only move constants to front but preserve
-/// the relative order of tensors (since tensor products may not be commutative).
-fn normalize_mul(expr: Expr) -> Expr {
-    use crate::expr::{classify_mul, has_indices, MulKind};
-
-    if !matches!(expr, Expr::Mul(_, _)) {
-        return expr;
-    }
-
-    let mut factors = Vec::new();
-    flatten_mul(&expr, &mut factors);
-
-    // Check if any adjacent pair of tensor factors forms an outer product (non-commutative)
-    let has_outer_product = {
-        let tensor_factors: Vec<&Expr> = factors.iter().filter(|f| has_indices(f)).collect();
-        tensor_factors
-            .windows(2)
-            .any(|pair| classify_mul(pair[0], pair[1]) == MulKind::Outer)
-    };
-
-    if has_outer_product {
-        // For outer products, only move constants to front, preserve tensor order
-        let mut constants: Vec<Expr> = Vec::new();
-        let mut others: Vec<Expr> = Vec::new();
-        for f in factors {
-            match &f {
-                Expr::Const(_) | Expr::Named(_) => constants.push(f),
-                _ => others.push(f),
-            }
-        }
-        // Sort constants by value
-        constants.sort_by(|a, b| {
-            let val_a = match a {
-                Expr::Const(n) => *n,
-                Expr::Named(nc) => nc.value(),
-                _ => 0.0,
-            };
-            let val_b = match b {
-                Expr::Const(n) => *n,
-                Expr::Named(nc) => nc.value(),
-                _ => 0.0,
-            };
-            val_a.partial_cmp(&val_b).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        factors = constants;
-        factors.extend(others);
-    } else {
-        // For scalar expressions, full sorting is safe
-        factors.sort_by(|a, b| {
-            let key_a = match a {
-                Expr::Const(n) => (0, format!("{:020.10}", n)),
-                Expr::Named(nc) => (0, format!("{:020.10}", nc.value())),
-                _ => (1, canonical_key(a)),
-            };
-            let key_b = match b {
-                Expr::Const(n) => (0, format!("{:020.10}", n)),
-                Expr::Named(nc) => (0, format!("{:020.10}", nc.value())),
-                _ => (1, canonical_key(b)),
-            };
-            key_a.cmp(&key_b)
-        });
-    }
-
-    // Combine identical factors into powers: x * x -> x^2
-    let mut combined: Vec<Expr> = Vec::new();
-    let mut i = 0;
-    while i < factors.len() {
-        let current = &factors[i];
-        let current_key = canonical_key(current);
-        let mut count = 1;
-
-        // Count consecutive identical factors
-        while i + count < factors.len() && canonical_key(&factors[i + count]) == current_key {
-            count += 1;
-        }
-
-        if count > 1 {
-            // Combine into power: x * x * x -> x^3
-            combined.push(Expr::Pow(
-                Box::new(current.clone()),
-                Box::new(Expr::Const(count as f64)),
-            ));
-        } else {
-            combined.push(current.clone());
-        }
-        i += count;
-    }
-
-    // Rebuild left-associative Mul tree
-    if combined.is_empty() {
-        return Expr::Const(1.0);
-    }
-    let mut iter = combined.into_iter();
-    let mut acc = iter.next().unwrap();
-    for factor in iter {
-        acc = Expr::Mul(Box::new(acc), Box::new(factor));
-    }
-    acc
-}
-
 fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
     match expr {
         Expr::Const(c) => Some((Expr::Const(1.0), *c)),
@@ -948,7 +825,9 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expr::{add, constant, cos, div, inv, mul, named, neg, pow, scalar, sin, tensor, upper, NamedConst};
+    use crate::expr::{
+        add, constant, cos, div, inv, mul, named, neg, pow, scalar, sin, tensor, upper, NamedConst,
+    };
 
     #[test]
     fn simplify_add_zero() {
@@ -1010,11 +889,16 @@ mod tests {
 
     #[test]
     fn simplify_inv_mul_reorder_to_div() {
-        // (1/x) * y normalized to (1/x) * y (Inv before Var in canonical order)
+        // (1/x) * y — either ordering is valid without normalize_mul
         let rules = RuleSet::standard();
         let expr = mul(div(constant(1.0), scalar("x")), scalar("y"));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, mul(inv(scalar("x")), scalar("y")));
+        assert!(
+            result == mul(inv(scalar("x")), scalar("y"))
+                || result == mul(scalar("y"), inv(scalar("x"))),
+            "expected y * (1/x) or (1/x) * y, got {:?}",
+            result,
+        );
     }
 
     #[test]
@@ -1031,9 +915,18 @@ mod tests {
         let result = simplify(&expr, &rules);
         // Result should be equivalent to 2y/x - 1
         // Accept various equivalent forms due to commutativity and distribution
-        let form1 = add(mul(mul(constant(2.0), inv(scalar("x"))), scalar("y")), constant(-1.0));
-        let form2 = add(mul(add(scalar("y"), scalar("y")), inv(scalar("x"))), constant(-1.0));
-        let form3 = add(mul(inv(scalar("x")), add(scalar("y"), scalar("y"))), constant(-1.0));
+        let form1 = add(
+            mul(mul(constant(2.0), inv(scalar("x"))), scalar("y")),
+            constant(-1.0),
+        );
+        let form2 = add(
+            mul(add(scalar("y"), scalar("y")), inv(scalar("x"))),
+            constant(-1.0),
+        );
+        let form3 = add(
+            mul(inv(scalar("x")), add(scalar("y"), scalar("y"))),
+            constant(-1.0),
+        );
         assert!(
             result == form1 || result == form2 || result == form3,
             "Expected 2y/x - 1 in some form, got: {:?}",
@@ -1419,8 +1312,13 @@ mod tests {
         let rules = RuleSet::trigonometric();
         let expr = add(ln(scalar("a")), neg(ln(scalar("b"))));
         let result = simplify(&expr, &rules);
-        // Normalized: ln((1/b) * a) since Inv comes before Var
-        assert_eq!(result, ln(mul(inv(scalar("b")), scalar("a"))));
+        // ln(a * (1/b)) or ln((1/b) * a) — either ordering is valid
+        assert!(
+            result == ln(mul(inv(scalar("b")), scalar("a")))
+                || result == ln(mul(scalar("a"), inv(scalar("b")))),
+            "expected ln(a/b) in either order, got {:?}",
+            result,
+        );
     }
 
     #[test]
@@ -1739,10 +1637,7 @@ mod tests {
         assert_eq!(inner_result, tensor("v", vec![upper("nu")]));
 
         // Second contraction: δ^μ_ν * v^ν -> v^μ
-        let outer = mul(
-            tensor("δ", vec![upper("mu"), lower("nu")]),
-            inner_result,
-        );
+        let outer = mul(tensor("δ", vec![upper("mu"), lower("nu")]), inner_result);
         let final_result = simplify(&outer, &rules);
         assert_eq!(final_result, tensor("v", vec![upper("mu")]));
     }
@@ -1848,7 +1743,10 @@ mod tests {
         let expr = mul(add(scalar("x"), scalar("y")), add(scalar("a"), scalar("b")));
         let result = simplify(&expr, &rules);
         // Factors are normalized: (a + b) * (x + y) since "a" < "x" alphabetically
-        assert_eq!(result, mul(add(scalar("a"), scalar("b")), add(scalar("x"), scalar("y"))));
+        assert_eq!(
+            result,
+            mul(add(scalar("a"), scalar("b")), add(scalar("x"), scalar("y")))
+        );
     }
 
     #[test]
@@ -2041,21 +1939,18 @@ mod tests {
             mul(constant(2.0), tensor("A", vec![upper("i")])),
         );
         let result = simplify(&expr, &rules);
-        assert_eq!(
-            result,
-            mul(constant(4.0), tensor("A", vec![upper("i")]))
-        );
+        assert_eq!(result, mul(constant(4.0), tensor("A", vec![upper("i")])));
     }
 
     #[test]
     fn simplify_collect_with_subtraction() {
         let rules = RuleSet::standard();
-        let expr = add(add(mul(constant(3.0), scalar("y")), scalar("x")), neg(scalar("y")));
-        let result = simplify(&expr, &rules);
-        assert_eq!(
-            result,
-            add(scalar("x"), mul(constant(2.0), scalar("y")))
+        let expr = add(
+            add(mul(constant(3.0), scalar("y")), scalar("x")),
+            neg(scalar("y")),
         );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, add(scalar("x"), mul(constant(2.0), scalar("y"))));
     }
 
     #[test]
@@ -2088,14 +1983,21 @@ mod tests {
         // Result is x*y (order may vary due to commutativity)
         let xy = mul(scalar("x"), scalar("y"));
         let yx = mul(scalar("y"), scalar("x"));
-        assert!(result == xy || result == yx, "Expected x*y or y*x, got {:?}", result);
+        assert!(
+            result == xy || result == yx,
+            "Expected x*y or y*x, got {:?}",
+            result
+        );
     }
 
     #[test]
     fn simplify_distribute_one_plus_and_cancel() {
         let rules = RuleSet::full();
         let expr = add(
-            add(mul(scalar("x"), add(constant(1.0), scalar("y"))), neg(mul(scalar("x"), scalar("y")))),
+            add(
+                mul(scalar("x"), add(constant(1.0), scalar("y"))),
+                neg(mul(scalar("x"), scalar("y"))),
+            ),
             scalar("x"),
         );
         let result = simplify(&expr, &rules);
@@ -2110,8 +2012,12 @@ mod tests {
             neg(mul(scalar("x"), scalar("b"))),
         );
         let result = simplify(&expr, &rules);
-        // Factors normalized: a * x since "a" < "x"
-        assert_eq!(result, mul(scalar("a"), scalar("x")));
+        // a * x or x * a — either ordering is valid
+        assert!(
+            result == mul(scalar("a"), scalar("x")) || result == mul(scalar("x"), scalar("a")),
+            "expected a * x in either order, got {:?}",
+            result,
+        );
     }
 
     #[test]
@@ -2153,10 +2059,7 @@ mod tests {
     fn simplify_trig_at_pi_over_2_from_division() {
         // cos(pi/2) should simplify after constant folding.
         let rules = RuleSet::trigonometric();
-        let expr = cos(mul(
-            constant(std::f64::consts::PI),
-            inv(constant(2.0)),
-        ));
+        let expr = cos(mul(constant(std::f64::consts::PI), inv(constant(2.0))));
         assert_eq!(simplify(&expr, &rules), constant(0.0));
     }
 
@@ -2210,11 +2113,16 @@ mod tests {
         // x * (y + z) has complexity 5, x*y + x*z has complexity 7
         // Beam search explores the distributed form, but since no follow-up rules
         // reduce complexity below the original, the original is returned.
-        // Factors are normalized: (y + z) * x since Add comes before Var
+        // Either factor ordering is valid without normalize_mul
         let rules = RuleSet::tensor();
         let expr = mul(scalar("x"), add(scalar("y"), scalar("z")));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, mul(add(scalar("y"), scalar("z")), scalar("x")));
+        assert!(
+            result == mul(scalar("x"), add(scalar("y"), scalar("z")))
+                || result == mul(add(scalar("y"), scalar("z")), scalar("x")),
+            "expected x * (y + z) in either order, got {:?}",
+            result,
+        );
     }
 
     #[test]
@@ -2246,7 +2154,10 @@ mod tests {
         let expr = add(
             mul(
                 pow(
-                    add(mul(pow(scalar("x"), constant(1.0)), constant(1.0)), constant(0.0)),
+                    add(
+                        mul(pow(scalar("x"), constant(1.0)), constant(1.0)),
+                        constant(0.0),
+                    ),
                     constant(1.0),
                 ),
                 constant(1.0),
@@ -2318,7 +2229,10 @@ mod tests {
         // (a + 0) + (b + 0) + (c + 0) should simplify to a + b + c
         let rules = RuleSet::standard();
         let expr = add(
-            add(add(scalar("a"), constant(0.0)), add(scalar("b"), constant(0.0))),
+            add(
+                add(scalar("a"), constant(0.0)),
+                add(scalar("b"), constant(0.0)),
+            ),
             add(scalar("c"), constant(0.0)),
         );
         let result = simplify(&expr, &rules);
@@ -2372,7 +2286,10 @@ mod tests {
     fn simplify_nested_pow_with_identities() {
         // ((x^1)^0)^1 should become 1^1 = 1
         let rules = RuleSet::standard();
-        let expr = pow(pow(pow(scalar("x"), constant(1.0)), constant(0.0)), constant(1.0));
+        let expr = pow(
+            pow(pow(scalar("x"), constant(1.0)), constant(0.0)),
+            constant(1.0),
+        );
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -2381,7 +2298,10 @@ mod tests {
     fn simplify_zero_in_exponent_nested() {
         // (x + y)^0 * z should become 1 * z = z
         let rules = RuleSet::standard();
-        let expr = mul(pow(add(scalar("x"), scalar("y")), constant(0.0)), scalar("z"));
+        let expr = mul(
+            pow(add(scalar("x"), scalar("y")), constant(0.0)),
+            scalar("z"),
+        );
         let result = simplify(&expr, &rules);
         assert_eq!(result, scalar("z"));
     }
@@ -2390,7 +2310,10 @@ mod tests {
     fn simplify_one_to_complex_power() {
         // 1^(x + y + z) should become 1
         let rules = RuleSet::standard();
-        let expr = pow(constant(1.0), add(add(scalar("x"), scalar("y")), scalar("z")));
+        let expr = pow(
+            constant(1.0),
+            add(add(scalar("x"), scalar("y")), scalar("z")),
+        );
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -2648,10 +2571,7 @@ mod tests {
         // a^i + a^j should NOT combine (different free indices)
         let rules = RuleSet::full();
 
-        let expr = add(
-            tensor("a", vec![upper("i")]),
-            tensor("a", vec![upper("j")]),
-        );
+        let expr = add(tensor("a", vec![upper("i")]), tensor("a", vec![upper("j")]));
         let result = simplify(&expr, &rules);
 
         // Should remain as a^i + a^j (or equivalent ordering)
@@ -2944,7 +2864,10 @@ mod tests {
         let term5 = neg(mul(constant(2.0), mul(x(), y())));
         let term6 = neg(mul(constant(2.0), x()));
         let term7 = neg(mul(constant(2.0), y()));
-        let expr = add(add(add(add(add(add(term1, term2), term3), term4), term5), term6), term7);
+        let expr = add(
+            add(add(add(add(add(term1, term2), term3), term4), term5), term6),
+            term7,
+        );
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
     }
@@ -3053,10 +2976,7 @@ mod tests {
     fn simplify_factor_common() {
         // ax + ay → a(x + y)
         let rules = RuleSet::full();
-        let expr = add(
-            mul(scalar("a"), scalar("x")),
-            mul(scalar("a"), scalar("y")),
-        );
+        let expr = add(mul(scalar("a"), scalar("x")), mul(scalar("a"), scalar("y")));
         let result = simplify(&expr, &rules);
 
         // Should factor to a * (x + y) or (x + y) * a
@@ -3108,7 +3028,10 @@ mod tests {
         // x² + 2x + 1 → (x + 1)²
         let rules = RuleSet::full();
         let expr = add(
-            add(pow(scalar("x"), constant(2.0)), mul(constant(2.0), scalar("x"))),
+            add(
+                pow(scalar("x"), constant(2.0)),
+                mul(constant(2.0), scalar("x")),
+            ),
             constant(1.0),
         );
         let result = simplify(&expr, &rules);
