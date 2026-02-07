@@ -321,11 +321,21 @@ pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
     let expanded = collect_linear_terms(&expanded);
     let expanded = fold_constants(&expanded);
 
-    // Only use expanded form if it's simpler
-    if expanded.complexity() < simplified.complexity() {
+    // Pick the simplest form so far
+    let best_so_far = if expanded.complexity() < simplified.complexity() {
         expanded
     } else {
         simplified
+    };
+
+    // Try factoring and see if it produces a simpler form
+    let factored = try_factor_sum(&best_so_far);
+    let factored = fold_constants(&factored);
+
+    if factored.complexity() < best_so_far.complexity() {
+        factored
+    } else {
+        best_so_far
     }
 }
 
@@ -1097,6 +1107,215 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
         },
         _ => Some((expr.clone(), 1.0)),
     }
+}
+
+/// Try to factor a sum expression.
+/// For example: ab + ac → a(b + c), or ab + 2a + b + 2 → (a + 1)(b + 2)
+fn try_factor_sum(expr: &Expr) -> Expr {
+    // Only works on sums
+    if !matches!(expr, Expr::Add(_, _)) {
+        return expr.clone();
+    }
+
+    let mut terms = Vec::new();
+    flatten_add(expr, &mut terms);
+
+    if terms.len() < 2 {
+        return expr.clone();
+    }
+
+    // Extract factors from each term
+    let term_factors: Vec<Vec<Expr>> = terms.iter().map(|t| get_factors(t)).collect();
+
+    // Find candidate factors (expressions that appear in at least 2 terms)
+    let mut factor_counts: HashMap<String, (Expr, usize)> = HashMap::new();
+    for factors in &term_factors {
+        for f in factors {
+            let key = canonical_key(f);
+            factor_counts
+                .entry(key)
+                .or_insert_with(|| (f.clone(), 0))
+                .1 += 1;
+        }
+    }
+
+    // Try factoring out each candidate that appears in at least 2 terms
+    let mut best_result = expr.clone();
+    let mut best_complexity = expr.complexity();
+
+    for (_, (factor, count)) in factor_counts {
+        if count < 2 {
+            continue;
+        }
+
+        // Skip trivial factors (constants 1, -1)
+        if let Expr::Const(n) = &factor {
+            if (*n - 1.0).abs() < f64::EPSILON || (*n + 1.0).abs() < f64::EPSILON {
+                continue;
+            }
+        }
+
+        // Try to factor out this expression
+        if let Some(factored) = try_factor_out(&terms, &factor) {
+            let complexity = factored.complexity();
+            if complexity < best_complexity {
+                best_result = factored;
+                best_complexity = complexity;
+            }
+        }
+    }
+
+    // Recursively try to factor the result
+    if best_result != *expr {
+        let further = try_factor_sum(&best_result);
+        if further.complexity() < best_result.complexity() {
+            return further;
+        }
+        return best_result;
+    }
+
+    expr.clone()
+}
+
+/// Get all multiplicative factors of an expression.
+fn get_factors(expr: &Expr) -> Vec<Expr> {
+    let mut factors = Vec::new();
+    collect_factors(expr, &mut factors);
+    factors
+}
+
+fn collect_factors(expr: &Expr, out: &mut Vec<Expr>) {
+    match expr {
+        Expr::Mul(a, b) => {
+            collect_factors(a, out);
+            collect_factors(b, out);
+        }
+        Expr::Neg(inner) => {
+            out.push(Expr::Const(-1.0));
+            collect_factors(inner, out);
+        }
+        Expr::Const(n) if (*n - 1.0).abs() < f64::EPSILON => {
+            // Skip multiplying by 1
+        }
+        _ => {
+            out.push(expr.clone());
+        }
+    }
+}
+
+/// Try to factor out a given factor from terms, returning factored form if successful.
+fn try_factor_out(terms: &[Expr], factor: &Expr) -> Option<Expr> {
+    let factor_key = canonical_key(factor);
+
+    let mut quotients: Vec<Expr> = Vec::new(); // Terms after dividing by factor
+    let mut remainder: Vec<Expr> = Vec::new(); // Terms that don't contain factor
+
+    for term in terms {
+        if let Some(quotient) = divide_by_factor(term, factor, &factor_key) {
+            quotients.push(quotient);
+        } else {
+            remainder.push(term.clone());
+        }
+    }
+
+    if quotients.is_empty() {
+        return None;
+    }
+
+    // Build the quotient sum
+    let quotient_sum = build_sum(&quotients);
+
+    // If all terms were divisible, result is factor * quotient_sum
+    if remainder.is_empty() {
+        return Some(Expr::Mul(
+            Box::new(factor.clone()),
+            Box::new(quotient_sum),
+        ));
+    }
+
+    // Check if quotient_sum equals remainder_sum (enabling full factorization)
+    let remainder_sum = build_sum(&remainder);
+    let quotient_key = canonical_key(&quotient_sum);
+    let remainder_key = canonical_key(&remainder_sum);
+
+    if quotient_key == remainder_key {
+        // factor * quotient_sum + quotient_sum = (factor + 1) * quotient_sum
+        let factor_plus_one = Expr::Add(Box::new(factor.clone()), Box::new(Expr::Const(1.0)));
+        return Some(Expr::Mul(
+            Box::new(factor_plus_one),
+            Box::new(quotient_sum),
+        ));
+    }
+
+    // Partial factoring: factor * quotient_sum + remainder
+    let factored_part = Expr::Mul(Box::new(factor.clone()), Box::new(quotient_sum));
+    Some(Expr::Add(Box::new(factored_part), Box::new(remainder_sum)))
+}
+
+/// Try to divide a term by a factor, returning the quotient if successful.
+fn divide_by_factor(term: &Expr, factor: &Expr, factor_key: &str) -> Option<Expr> {
+    // Direct match
+    if canonical_key(term) == factor_key {
+        return Some(Expr::Const(1.0));
+    }
+
+    // Check if term is a product containing the factor
+    match term {
+        Expr::Mul(a, b) => {
+            let a_key = canonical_key(a);
+            let b_key = canonical_key(b);
+
+            if a_key == factor_key {
+                return Some((**b).clone());
+            }
+            if b_key == factor_key {
+                return Some((**a).clone());
+            }
+
+            // Recursively try in nested products
+            if let Some(quotient) = divide_by_factor(a, factor, factor_key) {
+                if matches!(quotient, Expr::Const(n) if (n - 1.0).abs() < f64::EPSILON) {
+                    return Some((**b).clone());
+                }
+                return Some(Expr::Mul(Box::new(quotient), b.clone()));
+            }
+            if let Some(quotient) = divide_by_factor(b, factor, factor_key) {
+                if matches!(quotient, Expr::Const(n) if (n - 1.0).abs() < f64::EPSILON) {
+                    return Some((**a).clone());
+                }
+                return Some(Expr::Mul(a.clone(), Box::new(quotient)));
+            }
+
+            None
+        }
+        Expr::Neg(inner) => {
+            // -x divided by y: if x/y = q, then -x/y = -q
+            if let Some(quotient) = divide_by_factor(inner, factor, factor_key) {
+                return Some(Expr::Neg(Box::new(quotient)));
+            }
+            // -x divided by -1: x
+            if let Expr::Const(n) = factor {
+                if (*n + 1.0).abs() < f64::EPSILON {
+                    return Some((**inner).clone());
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Build a sum from a list of terms.
+fn build_sum(terms: &[Expr]) -> Expr {
+    if terms.is_empty() {
+        return Expr::Const(0.0);
+    }
+    let mut iter = terms.iter().cloned();
+    let mut acc = iter.next().unwrap();
+    for t in iter {
+        acc = Expr::Add(Box::new(acc), Box::new(t));
+    }
+    acc
 }
 
 #[cfg(test)]
@@ -3183,5 +3402,58 @@ mod tests {
         let expr = cos(constant(100.0 * PI));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
+    }
+
+    #[test]
+    fn simplify_factor_common() {
+        // ax + ay → a(x + y)
+        let rules = RuleSet::full();
+        let expr = add(
+            mul(scalar("a"), scalar("x")),
+            mul(scalar("a"), scalar("y")),
+        );
+        let result = simplify(&expr, &rules);
+
+        // Should factor to a * (x + y) or (x + y) * a
+        let debug = format!("{}", result);
+        assert!(
+            debug.contains("a") && (debug.contains("(x + y)") || debug.contains("(y + x)")),
+            "Expected factored form, got: {}",
+            debug
+        );
+        assert!(result.complexity() < expr.complexity());
+    }
+
+    #[test]
+    fn simplify_factor_binomial_product() {
+        // ab + 2a + b + 2 → (a + 1)(b + 2)
+        let rules = RuleSet::full();
+        let expr = add(
+            add(
+                add(
+                    mul(scalar("a"), scalar("b")),
+                    mul(constant(2.0), scalar("a")),
+                ),
+                scalar("b"),
+            ),
+            constant(2.0),
+        );
+        let result = simplify(&expr, &rules);
+
+        // Should factor to (a + 1)(b + 2)
+        // Complexity: Mul(Add(a,1), Add(b,2)) = 1 + (1+1+1) + (1+1+1) = 7
+        // Original expanded: ab + 2a + b + 2 = complexity 9
+        let debug = format!("{}", result);
+        assert!(
+            debug.contains("(a + 1)") && debug.contains("(b + 2)"),
+            "Expected (a+1)(b+2), got: {}",
+            debug
+        );
+        assert!(
+            result.complexity() < expr.complexity(),
+            "Factored form should be simpler: {} vs {}",
+            result.complexity(),
+            expr.complexity()
+        );
     }
 }
