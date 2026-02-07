@@ -490,5 +490,5 @@ If any phase fails verification, we can debug against the Python implementation 
 | 2 | Model | Done |
 | 3 | Supervised Training | Done |
 | 4 | Evaluation | Done |
-| 5 | REINFORCE Training | |
+| 5 | REINFORCE Training | Done |
 | 6 | Cleanup | |

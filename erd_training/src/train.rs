@@ -203,16 +203,27 @@ fn validate<B: AutodiffBackend>(
 }
 
 /// Save model checkpoint and metadata.
-fn save_checkpoint<B: AutodiffBackend>(
+pub fn save_checkpoint<B: AutodiffBackend>(
     model: &SimplificationModel<B>,
     epoch: usize,
     val_loss: f64,
     checkpoint_dir: &str,
 ) {
+    save_checkpoint_named(model, epoch, val_loss, checkpoint_dir, "best");
+}
+
+/// Save model checkpoint with a custom filename.
+pub fn save_checkpoint_named<B: AutodiffBackend>(
+    model: &SimplificationModel<B>,
+    epoch: usize,
+    val_loss: f64,
+    checkpoint_dir: &str,
+    name: &str,
+) {
     std::fs::create_dir_all(checkpoint_dir).unwrap();
 
     let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::default();
-    let path = PathBuf::from(checkpoint_dir).join("best");
+    let path = PathBuf::from(checkpoint_dir).join(name);
     recorder
         .record(model.clone().into_record(), path)
         .expect("Failed to save model checkpoint");
@@ -222,10 +233,10 @@ fn save_checkpoint<B: AutodiffBackend>(
         "epoch": epoch,
         "val_loss": val_loss,
     });
-    let meta_path = PathBuf::from(checkpoint_dir).join("metadata.json");
+    let meta_path = PathBuf::from(checkpoint_dir).join(format!("{}_metadata.json", name));
     std::fs::write(meta_path, serde_json::to_string_pretty(&metadata).unwrap()).unwrap();
 
-    println!("  Checkpoint saved: {}/best.mpk", checkpoint_dir);
+    println!("  Checkpoint saved: {}/{}.mpk", checkpoint_dir, name);
 }
 
 /// Load a model from a checkpoint file.

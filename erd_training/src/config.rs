@@ -158,4 +158,59 @@ pub struct RLConfig {
     pub device: String,
     #[arg(long, default_value_t = 10)]
     pub log_every: usize,
+
+    // Data (for evaluation splits)
+    #[arg(long, default_value_t = 0.1)]
+    pub val_fraction: f64,
+    #[arg(long, default_value_t = 42)]
+    pub seed: u64,
+    #[arg(long, default_value_t = 64)]
+    pub max_positions: usize,
+
+    // Model architecture (must match training config)
+    #[arg(long, default_value_t = 128)]
+    pub d_model: usize,
+    #[arg(long, default_value_t = 4)]
+    pub n_encoder_layers: usize,
+    #[arg(long, default_value_t = 4)]
+    pub n_decoder_layers: usize,
+    #[arg(long, default_value_t = 4)]
+    pub n_heads: usize,
+    #[arg(long, default_value_t = 256)]
+    pub d_ff: usize,
+    #[arg(long, default_value_t = 0.1)]
+    pub dropout: f64,
+    #[arg(long, default_value_t = 64)]
+    pub max_enc_len: usize,
+    #[arg(long, default_value_t = 128)]
+    pub max_dec_len: usize,
+}
+
+impl RLConfig {
+    /// Convert to a TrainConfig for model loading.
+    pub fn to_train_config(&self) -> TrainConfig {
+        TrainConfig {
+            data_dir: self.data_dir.clone(),
+            val_fraction: self.val_fraction,
+            max_actions: 50,
+            seed: self.seed,
+            d_model: self.d_model,
+            n_encoder_layers: self.n_encoder_layers,
+            n_decoder_layers: self.n_decoder_layers,
+            n_heads: self.n_heads,
+            d_ff: self.d_ff,
+            dropout: self.dropout,
+            max_enc_len: self.max_enc_len,
+            max_dec_len: self.max_dec_len,
+            batch_size: self.batch_size,
+            lr: self.lr,
+            weight_decay: 0.01,
+            warmup_steps: 0,
+            max_epochs: self.max_epochs,
+            patience: self.max_epochs,
+            checkpoint_dir: self.checkpoint_dir.clone(),
+            log_every: self.log_every,
+            device: self.device.clone(),
+        }
+    }
 }

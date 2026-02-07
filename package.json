@@ -17,7 +17,7 @@
 		"ml:reset": "rm -rf data_training checkpoints",
 		"train": "cargo run --release -p erd_training --bin train -- --device wgpu",
 		"evaluate": "cargo run --release -p erd_training --bin evaluate -- --device wgpu",
-		"rl-train": "cargo build --release --bin validate && PYTHONUNBUFFERED=1 PYTHONPATH=erd_training python3 -m erd_training.rl_train",
+		"rl-train": "cargo run --release -p erd_training --bin rl_train -- --device wgpu",
 		"start": "./scripts/build-app.js --server"
 	},
 	"devDependencies": {
