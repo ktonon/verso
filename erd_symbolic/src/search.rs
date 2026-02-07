@@ -413,11 +413,15 @@ fn normalize_pi_coeff(expr: Expr) -> Expr {
 /// not a search strategy choice.
 fn eval_constants(expr: &Expr) -> Expr {
     match expr {
-        Expr::Const(_)
-        | Expr::Rational(_)
-        | Expr::FracPi(_)
-        | Expr::Named(_)
-        | Expr::Var { .. } => expr.clone(),
+        Expr::Const(n) => {
+            // Convert integer-valued Const to Rational for exact arithmetic
+            if n.fract() == 0.0 && n.abs() < (i64::MAX / 2) as f64 {
+                Expr::Rational(Rational::from_i64(*n as i64))
+            } else {
+                expr.clone()
+            }
+        }
+        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
         Expr::Neg(a) => {
             let inner = eval_constants(a);
             match &inner {
@@ -670,23 +674,96 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
     }
 }
 
+/// A coefficient that preserves exact Rational arithmetic when possible.
+#[derive(Clone, Copy)]
+enum Coeff {
+    Exact(Rational),
+    Float(f64),
+}
+
+impl Coeff {
+    fn value(&self) -> f64 {
+        match self {
+            Coeff::Exact(r) => r.value(),
+            Coeff::Float(f) => *f,
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            Coeff::Exact(r) => r.is_zero(),
+            Coeff::Float(f) => f.abs() < f64::EPSILON,
+        }
+    }
+
+    fn is_one(&self) -> bool {
+        match self {
+            Coeff::Exact(r) => *r == Rational::ONE,
+            Coeff::Float(f) => (f - 1.0).abs() < f64::EPSILON,
+        }
+    }
+
+    fn is_neg_one(&self) -> bool {
+        match self {
+            Coeff::Exact(r) => *r == Rational::NEG_ONE,
+            Coeff::Float(f) => (f + 1.0).abs() < f64::EPSILON,
+        }
+    }
+
+    fn is_positive(&self) -> bool {
+        match self {
+            Coeff::Exact(r) => r.is_positive(),
+            Coeff::Float(f) => *f > 0.0,
+        }
+    }
+
+    fn neg(self) -> Coeff {
+        match self {
+            Coeff::Exact(r) => Coeff::Exact(-r),
+            Coeff::Float(f) => Coeff::Float(-f),
+        }
+    }
+
+    fn add(self, other: Coeff) -> Coeff {
+        match (self, other) {
+            (Coeff::Exact(a), Coeff::Exact(b)) => Coeff::Exact(a + b),
+            (a, b) => Coeff::Float(a.value() + b.value()),
+        }
+    }
+
+    fn to_expr(self) -> Expr {
+        match self {
+            Coeff::Exact(r) => Expr::Rational(r),
+            Coeff::Float(f) => {
+                if f.fract() == 0.0 && f.abs() < (i64::MAX / 2) as f64 {
+                    Expr::Rational(Rational::from_i64(f as i64))
+                } else {
+                    Expr::Const(f)
+                }
+            }
+        }
+    }
+}
+
 fn collect_linear_terms(expr: &Expr) -> Expr {
     let mut terms = Vec::new();
     flatten_add(expr, &mut terms);
 
-    let mut coeffs: HashMap<String, (Expr, f64)> = HashMap::new();
-    let mut const_sum = 0.0;
+    let mut coeffs: HashMap<String, (Expr, Coeff)> = HashMap::new();
+    let mut const_sum = Coeff::Exact(Rational::ZERO);
     let mut rest: Vec<Expr> = Vec::new();
 
     for term in terms {
         if let Some((base, coeff)) = extract_term(&term) {
             if matches!(base, Expr::Const(_) | Expr::Rational(_)) {
-                const_sum += coeff;
+                const_sum = const_sum.add(coeff);
                 continue;
             }
             let key = canonical_key(&base);
-            let entry = coeffs.entry(key).or_insert((base, 0.0));
-            entry.1 += coeff;
+            let entry = coeffs
+                .entry(key)
+                .or_insert((base, Coeff::Exact(Rational::ZERO)));
+            entry.1 = entry.1.add(coeff);
         } else {
             rest.push(term);
         }
@@ -699,22 +776,22 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
     coeff_keys.sort();
     for key in coeff_keys {
         let (var, coeff) = coeffs.remove(&key).unwrap();
-        if coeff.abs() < f64::EPSILON {
+        if coeff.is_zero() {
             continue;
         }
-        let term = if (coeff - 1.0).abs() < f64::EPSILON {
+        let term = if coeff.is_one() {
             var
-        } else if (coeff + 1.0).abs() < f64::EPSILON {
+        } else if coeff.is_neg_one() {
             Expr::Neg(Box::new(var))
-        } else if coeff < 0.0 {
+        } else if !coeff.is_positive() {
             Expr::Neg(Box::new(Expr::Mul(
-                Box::new(Expr::Const(-coeff)),
+                Box::new(coeff.neg().to_expr()),
                 Box::new(var),
             )))
         } else {
-            Expr::Mul(Box::new(Expr::Const(coeff)), Box::new(var))
+            Expr::Mul(Box::new(coeff.to_expr()), Box::new(var))
         };
-        if coeff > 0.0 {
+        if coeff.is_positive() {
             positive_terms.push((key, term));
         } else {
             negative_terms.push((key, term));
@@ -725,13 +802,13 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
     // Put positive terms first, then negative terms
     let mut ordered: Vec<Expr> = positive_terms.into_iter().map(|(_, e)| e).collect();
     ordered.extend(negative_terms.into_iter().map(|(_, e)| e));
-    if const_sum.abs() >= f64::EPSILON {
-        ordered.push(Expr::Const(const_sum));
+    if !const_sum.is_zero() {
+        ordered.push(const_sum.to_expr());
     }
     ordered.extend(rest);
 
     match ordered.len() {
-        0 => Expr::Const(0.0),
+        0 => Expr::Rational(Rational::ZERO),
         1 => ordered.into_iter().next().unwrap(),
         _ => {
             let mut iter = ordered.into_iter();
@@ -754,55 +831,59 @@ fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
     }
 }
 
-fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
+fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
+    let one = Coeff::Exact(Rational::ONE);
     match expr {
-        Expr::Const(c) => Some((Expr::Const(1.0), *c)),
-        Expr::Rational(r) => Some((Expr::Const(1.0), r.value())),
+        Expr::Const(c) => Some((Expr::Rational(Rational::ONE), Coeff::Float(*c))),
+        Expr::Rational(r) => Some((Expr::Rational(Rational::ONE), Coeff::Exact(*r))),
         Expr::Neg(inner) => {
             if let Some((base, coeff)) = extract_term(inner) {
-                Some((base, -coeff))
+                Some((base, coeff.neg()))
             } else {
                 None
             }
         }
         Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
-            (Expr::Const(c), other) | (other, Expr::Const(c)) => Some((other.clone(), *c)),
-            (Expr::Rational(r), other) | (other, Expr::Rational(r)) => {
-                Some((other.clone(), r.value()))
+            (Expr::Const(c), other) | (other, Expr::Const(c)) => {
+                Some((other.clone(), Coeff::Float(*c)))
             }
-            // Handle nested Mul with leading constant: Mul(Mul(c, x), y) => c * Mul(x, y)
+            (Expr::Rational(r), other) | (other, Expr::Rational(r)) => {
+                Some((other.clone(), Coeff::Exact(*r)))
+            }
+            // Handle nested Mul with leading constant/rational
             (Expr::Mul(inner_a, inner_b), _) => {
                 if let Expr::Const(c) = inner_a.as_ref() {
-                    // Mul(Mul(c, x), y) => c * Mul(x, y)
                     let rest = Expr::Mul(inner_b.clone(), b.clone());
-                    Some((rest, *c))
+                    Some((rest, Coeff::Float(*c)))
+                } else if let Expr::Rational(r) = inner_a.as_ref() {
+                    let rest = Expr::Mul(inner_b.clone(), b.clone());
+                    Some((rest, Coeff::Exact(*r)))
                 } else if let Some((inner_base, inner_coeff)) = extract_term(a) {
-                    // Recursively extract from nested Mul
-                    if (inner_coeff - 1.0).abs() > f64::EPSILON {
+                    if !inner_coeff.is_one() {
                         let rest = Expr::Mul(Box::new(inner_base), b.clone());
                         Some((rest, inner_coeff))
                     } else {
-                        Some((expr.clone(), 1.0))
+                        Some((expr.clone(), one))
                     }
                 } else {
-                    Some((expr.clone(), 1.0))
+                    Some((expr.clone(), one))
                 }
             }
             // Handle Neg inside Mul: Mul(Neg(x), y) => -1 * Mul(x, y)
             (Expr::Neg(inner_a), _) => {
                 let new_mul = Expr::Mul(inner_a.clone(), b.clone());
                 if let Some((base, coeff)) = extract_term(&new_mul) {
-                    Some((base, -coeff))
+                    Some((base, coeff.neg()))
                 } else {
-                    Some((new_mul, -1.0))
+                    Some((new_mul, Coeff::Exact(Rational::NEG_ONE)))
                 }
             }
             (_, Expr::Neg(inner_b)) => {
                 let new_mul = Expr::Mul(a.clone(), inner_b.clone());
                 if let Some((base, coeff)) = extract_term(&new_mul) {
-                    Some((base, -coeff))
+                    Some((base, coeff.neg()))
                 } else {
-                    Some((new_mul, -1.0))
+                    Some((new_mul, Coeff::Exact(Rational::NEG_ONE)))
                 }
             }
             _ => {
@@ -817,10 +898,10 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
                         std::mem::swap(&mut left, &mut right);
                     }
                 }
-                Some((Expr::Mul(left, right), 1.0))
+                Some((Expr::Mul(left, right), one))
             }
         },
-        _ => Some((expr.clone(), 1.0)),
+        _ => Some((expr.clone(), one)),
     }
 }
 
@@ -2515,7 +2596,7 @@ mod tests {
             debug
         );
         assert!(
-            debug.contains("2.0") || debug.contains("Const(2"),
+            debug.contains("2.0") || debug.contains("Const(2") || debug.contains("num: 2, den: 1"),
             "Should have coefficient 2, got: {}",
             debug
         );
@@ -2552,7 +2633,7 @@ mod tests {
             debug
         );
         assert!(
-            debug.contains("2.0") || debug.contains("Const(2"),
+            debug.contains("2.0") || debug.contains("Const(2") || debug.contains("num: 2, den: 1"),
             "Should have coefficient 2, got: {}",
             debug
         );
@@ -3044,6 +3125,7 @@ mod tests {
         assert!(
             matches!(&result, Expr::Pow(base, exp)
                 if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON)
+                    || matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO)
                 && matches!(base.as_ref(), Expr::Add(_, _))
             ),
             "Expected (x + 1)², got: {:?}",
@@ -3068,6 +3150,7 @@ mod tests {
         assert!(
             matches!(&result, Expr::Pow(_, exp)
                 if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON)
+                    || matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO)
             ),
             "Expected (x - 1)², got: {:?}",
             result
