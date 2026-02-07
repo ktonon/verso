@@ -684,15 +684,111 @@ fn expand_mul(left: &Expr, right: &Expr) -> Expr {
     Expr::Mul(Box::new(left.clone()), Box::new(right.clone()))
 }
 
+/// Collect all indices from an expression.
+fn collect_all_indices(expr: &Expr) -> Vec<(String, crate::expr::IndexPosition)> {
+    let mut result = Vec::new();
+    collect_all_indices_rec(expr, &mut result);
+    result
+}
+
+fn collect_all_indices_rec(expr: &Expr, result: &mut Vec<(String, crate::expr::IndexPosition)>) {
+    match expr {
+        Expr::Var { indices, .. } => {
+            for idx in indices {
+                result.push((idx.name.clone(), idx.position.clone()));
+            }
+        }
+        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+            collect_all_indices_rec(a, result);
+            collect_all_indices_rec(b, result);
+        }
+        Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => {
+            collect_all_indices_rec(a, result);
+        }
+        Expr::FnN(_, args) => {
+            for arg in args {
+                collect_all_indices_rec(arg, result);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Find contracted (dummy) indices - those that appear both upper and lower.
+fn find_contracted_indices(
+    indices: &[(String, crate::expr::IndexPosition)],
+) -> std::collections::HashSet<String> {
+    use crate::expr::IndexPosition;
+    use std::collections::HashSet;
+
+    let mut uppers: HashSet<String> = HashSet::new();
+    let mut lowers: HashSet<String> = HashSet::new();
+
+    for (name, pos) in indices {
+        match pos {
+            IndexPosition::Upper => {
+                uppers.insert(name.clone());
+            }
+            IndexPosition::Lower => {
+                lowers.insert(name.clone());
+            }
+        }
+    }
+
+    // Contracted = appears in both upper and lower
+    uppers.intersection(&lowers).cloned().collect()
+}
+
+/// Build a mapping from contracted index names to canonical names (_0, _1, ...).
+fn build_dummy_map(expr: &Expr) -> HashMap<String, String> {
+    let indices = collect_all_indices(expr);
+    let contracted = find_contracted_indices(&indices);
+
+    // Sort for deterministic ordering, then assign canonical names
+    let mut contracted_sorted: Vec<_> = contracted.into_iter().collect();
+    contracted_sorted.sort();
+
+    contracted_sorted
+        .into_iter()
+        .enumerate()
+        .map(|(i, name)| (name, format!("_{}", i)))
+        .collect()
+}
+
 /// Create a canonical key for an expression, handling commutativity of Mul.
 /// Also normalizes Mul(x, x) to match Pow(x, 2) for term collection.
+/// Dummy indices (contracted) are renamed to canonical names for alpha-equivalence.
 fn canonical_key(expr: &Expr) -> String {
-    use crate::expr::{classify_mul, MulKind};
+    let dummy_map = build_dummy_map(expr);
+    canonical_key_with_map(expr, &dummy_map)
+}
+
+fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> String {
+    use crate::expr::{classify_mul, IndexPosition, MulKind};
 
     match expr {
+        Expr::Const(n) => format!("Const({})", n),
+        Expr::Named(nc) => format!("Named({:?})", nc),
+        Expr::Var { name, indices } => {
+            if indices.is_empty() {
+                format!("Var({})", name)
+            } else {
+                let normalized_indices: Vec<String> = indices
+                    .iter()
+                    .map(|idx| {
+                        let idx_name = dummy_map.get(&idx.name).unwrap_or(&idx.name);
+                        match idx.position {
+                            IndexPosition::Upper => format!("^{}", idx_name),
+                            IndexPosition::Lower => format!("_{}", idx_name),
+                        }
+                    })
+                    .collect();
+                format!("Var({}[{}])", name, normalized_indices.join(","))
+            }
+        }
         Expr::Mul(a, b) => {
-            let ka = canonical_key(a);
-            let kb = canonical_key(b);
+            let ka = canonical_key_with_map(a, dummy_map);
+            let kb = canonical_key_with_map(b, dummy_map);
             // Normalize x * x to match x^2
             if ka == kb {
                 format!("Pow({}, 2)", ka)
@@ -706,24 +802,36 @@ fn canonical_key(expr: &Expr) -> String {
             }
         }
         Expr::Add(a, b) => {
-            format!("Add({}, {})", canonical_key(a), canonical_key(b))
+            format!(
+                "Add({}, {})",
+                canonical_key_with_map(a, dummy_map),
+                canonical_key_with_map(b, dummy_map)
+            )
         }
-        Expr::Neg(a) => format!("Neg({})", canonical_key(a)),
-        Expr::Inv(a) => format!("Inv({})", canonical_key(a)),
+        Expr::Neg(a) => format!("Neg({})", canonical_key_with_map(a, dummy_map)),
+        Expr::Inv(a) => format!("Inv({})", canonical_key_with_map(a, dummy_map)),
         Expr::Pow(base, exp) => {
             // Normalize Pow(x, 2) for consistency with Mul(x, x)
             if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON) {
-                format!("Pow({}, 2)", canonical_key(base))
+                format!("Pow({}, 2)", canonical_key_with_map(base, dummy_map))
             } else {
-                format!("Pow({}, {})", canonical_key(base), canonical_key(exp))
+                format!(
+                    "Pow({}, {})",
+                    canonical_key_with_map(base, dummy_map),
+                    canonical_key_with_map(exp, dummy_map)
+                )
             }
         }
-        Expr::Fn(kind, a) => format!("Fn({:?}, {})", kind, canonical_key(a)),
+        Expr::Fn(kind, a) => {
+            format!("Fn({:?}, {})", kind, canonical_key_with_map(a, dummy_map))
+        }
         Expr::FnN(kind, args) => {
-            let arg_keys: Vec<_> = args.iter().map(canonical_key).collect();
+            let arg_keys: Vec<_> = args
+                .iter()
+                .map(|a| canonical_key_with_map(a, dummy_map))
+                .collect();
             format!("FnN({:?}, [{}])", kind, arg_keys.join(", "))
         }
-        _ => format!("{:?}", expr),
     }
 }
 
@@ -2605,6 +2713,90 @@ mod tests {
         let result = simplify(&expr, &rules);
         // Symmetry allows reordering; current search preserves nu, mu ordering.
         assert_eq!(result, tensor("h", vec![lower("nu"), lower("mu")]));
+    }
+
+    #[test]
+    fn simplify_dummy_index_normalization() {
+        // a^i*b_i + a^j*b_j should combine to 2a^i*b_i
+        // The dummy indices i and j are equivalent (both are contracted)
+        use crate::expr::lower;
+        let rules = RuleSet::full();
+
+        let expr = add(
+            mul(tensor("a", vec![upper("i")]), tensor("b", vec![lower("i")])),
+            mul(tensor("a", vec![upper("j")]), tensor("b", vec![lower("j")])),
+        );
+        let result = simplify(&expr, &rules);
+
+        // Should combine to 2 * (a^i * b_i) (with some index, doesn't matter which)
+        // Check that result is NOT an Add (terms combined) and contains coefficient 2
+        let debug = format!("{:?}", result);
+        assert!(
+            !matches!(result, Expr::Add(_, _)),
+            "Terms should combine but got Add: {}",
+            debug
+        );
+        assert!(
+            debug.contains("2.0") || debug.contains("Const(2"),
+            "Should have coefficient 2, got: {}",
+            debug
+        );
+        assert!(
+            debug.contains("\"a\"") && debug.contains("\"b\""),
+            "Should contain both tensors a and b, got: {}",
+            debug
+        );
+    }
+
+    #[test]
+    fn simplify_dummy_index_double_contraction() {
+        // a^(i,j)*b_(i,j) + a^(k,m)*b_(k,m) should combine to 2a^(i,j)*b_(i,j)
+        use crate::expr::lower;
+        let rules = RuleSet::full();
+
+        let expr = add(
+            mul(
+                tensor("a", vec![upper("i"), upper("j")]),
+                tensor("b", vec![lower("i"), lower("j")]),
+            ),
+            mul(
+                tensor("a", vec![upper("k"), upper("m")]),
+                tensor("b", vec![lower("k"), lower("m")]),
+            ),
+        );
+        let result = simplify(&expr, &rules);
+
+        // Should combine to 2 * (a^(i,j) * b_(i,j))
+        let debug = format!("{:?}", result);
+        assert!(
+            !matches!(result, Expr::Add(_, _)),
+            "Terms should combine but got Add: {}",
+            debug
+        );
+        assert!(
+            debug.contains("2.0") || debug.contains("Const(2"),
+            "Should have coefficient 2, got: {}",
+            debug
+        );
+    }
+
+    #[test]
+    fn simplify_free_indices_not_normalized() {
+        // a^i + a^j should NOT combine (different free indices)
+        let rules = RuleSet::full();
+
+        let expr = add(
+            tensor("a", vec![upper("i")]),
+            tensor("a", vec![upper("j")]),
+        );
+        let result = simplify(&expr, &rules);
+
+        // Should remain as a^i + a^j (or equivalent ordering)
+        assert!(
+            matches!(result, Expr::Add(_, _)),
+            "Different free indices should NOT combine, got: {:?}",
+            result
+        );
     }
 
     #[test]
