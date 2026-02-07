@@ -703,8 +703,6 @@ impl RuleSet {
         let y = || wildcard("y");
         let lo = || wildcard("lo");
         let hi = || wildcard("hi");
-        let v = || p_var_wild("v", vec![]);
-
         let mut rs = Self::new();
 
         // Additive identity: x + 0 = x
@@ -747,13 +745,6 @@ impl RuleSet {
         // Inverse cancellation: x * (1/x) = 1
         rs.add(rule("mul_inv_right", p_mul(x(), p_inv(x())), p_const(1.0)));
         rs.add(rule("mul_inv_left", p_mul(p_inv(x()), x()), p_const(1.0)));
-
-        // Prefer placing inverse on the right for division formatting: (1/v) * x = x / v
-        rs.add(rule(
-            "inv_mul_commute",
-            p_mul(p_inv(v()), x()),
-            p_mul(x(), p_inv(v())),
-        ));
 
         // Power identities
         rs.add(rule("pow_one", p_pow(x(), p_const(1.0)), x())); // x^1 = x
@@ -801,23 +792,6 @@ impl RuleSet {
             "mul_self_square",
             p_mul(x(), x()),
             p_pow(x(), p_const(2.0)),
-        ));
-
-        // Combine like terms (variables only)
-        rs.add(rule(
-            "combine_like_terms_left",
-            p_add(p_mul(const_wild("a"), v()), v()),
-            p_mul(p_add(const_wild("a"), p_const(1.0)), v()),
-        ));
-        rs.add(rule(
-            "combine_like_terms_right",
-            p_add(v(), p_mul(const_wild("a"), v())),
-            p_mul(p_add(const_wild("a"), p_const(1.0)), v()),
-        ));
-        rs.add(rule(
-            "combine_like_terms_self",
-            p_add(v(), v()),
-            p_mul(p_const(2.0), v()),
         ));
 
         // Combine like terms (general — matches any expression, not just variables)
