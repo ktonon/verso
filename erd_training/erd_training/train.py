@@ -150,8 +150,8 @@ def main():
     )
     print(f"  Train: {len(train_examples)}, Val: {len(val_examples)}")
 
-    enc_vocab = EncoderVocab()
-    dec_vocab = DecoderVocab()
+    enc_vocab = EncoderVocab(config.data_dir)
+    dec_vocab = DecoderVocab(config.data_dir)
     print(f"  Encoder vocab: {enc_vocab.size()}, Decoder vocab: {dec_vocab.size()}")
 
     train_ds = SimplificationDataset(

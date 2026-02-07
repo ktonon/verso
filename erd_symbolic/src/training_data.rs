@@ -1,5 +1,5 @@
 use crate::expr::{FnKind, NamedConst};
-use crate::random_search::{ChildIndex, SearchRun};
+use crate::random_search::{ChildIndex, IndexedRuleSet, SearchRun};
 use crate::token::{path_to_position, tokenize, Token};
 use serde::Serialize;
 use std::io::Write;
@@ -55,7 +55,7 @@ pub fn token_to_string(token: &Token) -> String {
     }
 }
 
-fn fn_kind_string(kind: &FnKind) -> String {
+pub fn fn_kind_string(kind: &FnKind) -> String {
     match kind {
         FnKind::Sin => "SIN",
         FnKind::Cos => "COS",
@@ -79,7 +79,7 @@ fn fn_kind_string(kind: &FnKind) -> String {
     .to_string()
 }
 
-fn named_const_string(nc: &NamedConst) -> String {
+pub fn named_const_string(nc: &NamedConst) -> String {
     match nc {
         NamedConst::E => "E",
         NamedConst::Sqrt2 => "SQRT2",
@@ -150,6 +150,131 @@ pub fn write_jsonl<W: Write>(
         writer.write_all(b"\n")?;
     }
     Ok(())
+}
+
+/// One entry in the rule direction vocabulary.
+#[derive(Debug, Clone, Serialize)]
+pub struct RuleDirectionEntry {
+    pub id: u16,
+    pub name: String,
+    pub direction: String,
+}
+
+/// Complete vocabulary metadata for the Python training code.
+#[derive(Debug, Clone, Serialize)]
+pub struct VocabMetadata {
+    pub encoder_tokens: Vec<String>,
+    pub rule_directions: Vec<RuleDirectionEntry>,
+    pub total_directions: u16,
+}
+
+/// All FnKind variants in a fixed order for vocabulary enumeration.
+const ALL_FN_KINDS: &[FnKind] = &[
+    FnKind::Sin,
+    FnKind::Cos,
+    FnKind::Tan,
+    FnKind::Asin,
+    FnKind::Acos,
+    FnKind::Atan,
+    FnKind::Sign,
+    FnKind::Sinh,
+    FnKind::Cosh,
+    FnKind::Tanh,
+    FnKind::Floor,
+    FnKind::Ceil,
+    FnKind::Round,
+    FnKind::Min,
+    FnKind::Max,
+    FnKind::Clamp,
+    FnKind::Exp,
+    FnKind::Ln,
+];
+
+/// All NamedConst variants in a fixed order for vocabulary enumeration.
+const ALL_NAMED_CONSTS: &[NamedConst] = &[
+    NamedConst::E,
+    NamedConst::Sqrt2,
+    NamedConst::Sqrt3,
+    NamedConst::Frac1Sqrt2,
+    NamedConst::FracSqrt3By2,
+];
+
+/// Build vocabulary metadata from the indexed rule set.
+///
+/// Encoder tokens cover: operators, all FnKind variants, all NamedConst variants,
+/// structural tokens, variables V0..V7, integers I_{-10}..I_{20}, indices IX0..IX3.
+pub fn build_vocab_metadata(indexed: &IndexedRuleSet) -> VocabMetadata {
+    let mut encoder_tokens = Vec::new();
+
+    // Operators
+    for tok in &[Token::Add, Token::Mul, Token::Pow, Token::Neg, Token::Inv] {
+        encoder_tokens.push(token_to_string(tok));
+    }
+
+    // All function kinds
+    for kind in ALL_FN_KINDS {
+        encoder_tokens.push(fn_kind_string(kind));
+    }
+
+    // All named constants
+    for nc in ALL_NAMED_CONSTS {
+        encoder_tokens.push(named_const_string(nc));
+    }
+
+    // Structural tokens
+    for tok in &[Token::Frac, Token::FracPi, Token::IdxLo, Token::IdxHi] {
+        encoder_tokens.push(token_to_string(tok));
+    }
+
+    // Variables V0..V7
+    for i in 0..8u16 {
+        encoder_tokens.push(format!("V{}", i));
+    }
+
+    // Integers I_{-10}..I_{20}
+    for i in -10..=20i64 {
+        encoder_tokens.push(format!("I_{}", i));
+    }
+
+    // Tensor indices IX0..IX3
+    for i in 0..4u16 {
+        encoder_tokens.push(format!("IX{}", i));
+    }
+
+    // Rule directions
+    let mut rule_directions = Vec::new();
+    for i in 0..indexed.len() {
+        let rule = indexed.rule(i);
+        rule_directions.push(RuleDirectionEntry {
+            id: indexed.ltr_id(i).0,
+            name: rule.name.clone(),
+            direction: "ltr".to_string(),
+        });
+    }
+    for i in 0..indexed.len() {
+        if let Some(rtl_id) = indexed.rtl_id(i) {
+            let rule = indexed.rule(i);
+            rule_directions.push(RuleDirectionEntry {
+                id: rtl_id.0,
+                name: rule.name.clone(),
+                direction: "rtl".to_string(),
+            });
+        }
+    }
+    // Sort by id for deterministic output
+    rule_directions.sort_by_key(|e| e.id);
+
+    VocabMetadata {
+        encoder_tokens,
+        total_directions: indexed.total_directions,
+        rule_directions,
+    }
+}
+
+/// Write vocabulary metadata as pretty JSON.
+pub fn write_vocab_json<W: Write>(metadata: &VocabMetadata, writer: &mut W) -> std::io::Result<()> {
+    serde_json::to_writer_pretty(writer, metadata)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
 #[cfg(test)]
@@ -311,6 +436,42 @@ mod tests {
             let parsed: Result<serde_json::Value, _> = serde_json::from_str(line);
             assert!(parsed.is_ok(), "invalid JSON: {}", line);
         }
+    }
+
+    #[test]
+    fn build_vocab_metadata_sanity() {
+        let rules = IndexedRuleSet::new(RuleSet::full());
+        let vocab = build_vocab_metadata(&rules);
+
+        // Encoder tokens: 5 ops + 18 fns + 5 named + 4 structural + 8 vars + 31 ints + 4 indices = 75
+        assert_eq!(vocab.encoder_tokens.len(), 75);
+        assert_eq!(vocab.encoder_tokens[0], "ADD");
+        assert!(vocab.encoder_tokens.contains(&"SIN".to_string()));
+        assert!(vocab.encoder_tokens.contains(&"E".to_string()));
+        assert!(vocab.encoder_tokens.contains(&"FRAC_PI".to_string()));
+        assert!(vocab.encoder_tokens.contains(&"V0".to_string()));
+        assert!(vocab.encoder_tokens.contains(&"V7".to_string()));
+        assert!(vocab.encoder_tokens.contains(&"I_-10".to_string()));
+        assert!(vocab.encoder_tokens.contains(&"I_20".to_string()));
+        assert!(vocab.encoder_tokens.contains(&"IX0".to_string()));
+        assert!(vocab.encoder_tokens.contains(&"IX3".to_string()));
+
+        // Rule directions should match total_directions
+        assert_eq!(vocab.rule_directions.len(), vocab.total_directions as usize);
+        assert_eq!(vocab.total_directions, rules.total_directions);
+
+        // First direction should be LTR with id 0
+        assert_eq!(vocab.rule_directions[0].id, 0);
+        assert_eq!(vocab.rule_directions[0].direction, "ltr");
+
+        // Serializes to valid JSON
+        let mut buf = Vec::new();
+        write_vocab_json(&vocab, &mut buf).unwrap();
+        let json: serde_json::Value =
+            serde_json::from_slice(&buf).expect("vocab.json should be valid JSON");
+        assert!(json["encoder_tokens"].is_array());
+        assert!(json["rule_directions"].is_array());
+        assert!(json["total_directions"].is_number());
     }
 
     #[test]

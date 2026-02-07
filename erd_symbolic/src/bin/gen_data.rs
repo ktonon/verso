@@ -1,6 +1,8 @@
 use erd_symbolic::gen_expr::{gen_expr, GenExprConfig};
 use erd_symbolic::random_search::{IndexedRuleSet, RandomizedBeamSearch};
-use erd_symbolic::training_data::{search_run_to_example, write_jsonl};
+use erd_symbolic::training_data::{
+    build_vocab_metadata, search_run_to_example, write_jsonl, write_vocab_json,
+};
 use erd_symbolic::RuleSet;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -269,6 +271,28 @@ fn main() {
             });
         }
     }
+
+    // Write vocab.json alongside the data
+    let vocab_path = std::path::Path::new(&output_path)
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join("vocab.json");
+    let vocab = build_vocab_metadata(&rules);
+    let vocab_file = File::create(&vocab_path).unwrap_or_else(|e| {
+        eprintln!("Failed to create {}: {}", vocab_path.display(), e);
+        std::process::exit(1);
+    });
+    let mut vocab_writer = BufWriter::new(vocab_file);
+    write_vocab_json(&vocab, &mut vocab_writer).unwrap_or_else(|e| {
+        eprintln!("Failed to write vocab.json: {}", e);
+        std::process::exit(1);
+    });
+    eprintln!(
+        "Vocab: {} encoder tokens, {} rule directions → {}",
+        vocab.encoder_tokens.len(),
+        vocab.total_directions,
+        vocab_path.display()
+    );
 
     // Write JSONL output
     let file = File::create(&output_path).unwrap_or_else(|e| {
