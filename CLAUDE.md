@@ -23,6 +23,15 @@ erd/
 
 ## Key Design Principles
 
+### Rules Are the Source of Truth
+
+**All expression transformations must be defined as rules.** The search algorithm's job is only to explore the space of transformations made possible by the rules. Do not add special-case logic to `search.rs` for specific transformations—add rules instead.
+
+This separation is critical because:
+1. **Rules are declarative** - they describe *what* transformations are valid, not *how* to find them
+2. **Search is the strategy** - it decides *which* rules to apply and in what order
+3. **ML-ready architecture** - we can eventually replace beam search with a learned model that outputs a sequence of rules to apply
+
 ### Prefer Composable Rules Over Specific Ones
 Instead of adding specific rules like `(x+1)(y+1) = xy + x + y + 1`, compose from simpler rules:
 - Distributive law: `x * (y + z) = xy + xz`
@@ -30,6 +39,14 @@ Instead of adding specific rules like `(x+1)(y+1) = xy + x + y + 1`, compose fro
 - `x^a * x = x^(a+1)`
 
 The beam search explores multiple rewrite paths to find simplifications.
+
+### RuleSets for Organization
+Group related rules into RuleSets:
+- `RuleSet::standard()` - basic algebraic identities (x+0=x, x*1=x, etc.)
+- `RuleSet::trigonometric()` - trig identities (sin²+cos²=1, etc.)
+- `RuleSet::tensor()` - tensor algebra (distribution, power rules)
+- `RuleSet::factoring()` - factoring patterns (common factor, perfect squares)
+- `RuleSet::full()` - combines all of the above
 
 ### Named Constants
 Mathematical constants (π, e, √2, etc.) are first-class citizens for clean output:
@@ -45,12 +62,13 @@ Mathematical constants (π, e, √2, etc.) are first-class citizens for clean ou
 
 ## Important Functions in search.rs
 
-- **`simplify()`** - Main entry point; runs beam search, constant folding, term collection, and expansion
-- **`fold_constants()`** - Evaluates constant expressions, detects pi-fractions
-- **`collect_linear_terms()`** - Combines like terms using canonical keys
-- **`expand_products()`** - Distributes multiplication over addition
-- **`canonical_key()`** - Normalizes expressions for comparison (handles Mul commutativity, Mul(x,x) = Pow(x,2))
-- **`extract_term()`** - Extracts coefficient from term (handles Neg inside Mul)
+The search module orchestrates rule application—it should not contain transformation logic itself.
+
+- **`simplify()`** - Main entry point; runs beam search with rules, then post-processing
+- **`BeamSearch`** - Explores rule application paths, keeps best candidates by complexity
+- **`fold_constants()`** - Evaluates constant expressions, detects pi-fractions (legitimate post-processing)
+- **`collect_linear_terms()`** - Combines like terms using canonical keys (legitimate post-processing)
+- **`canonical_key()`** - Normalizes expressions for comparison (handles Mul commutativity, dummy index normalization)
 
 ## REPL Usage
 
@@ -84,6 +102,8 @@ cargo test --package erd_symbolic
 5. Optionally add folding logic in `try_fold_pi_fraction()` in `search.rs`
 
 ### Adding a New Simplification Rule
-1. Add rule in `rule.rs` `RuleSet::standard()` or `::trigonometric()`
-2. Use `p_named()` for named constant outputs
-3. Add test in `search.rs`
+1. **Always add rules to `rule.rs`**, never add special-case logic to `search.rs`
+2. Choose the appropriate RuleSet: `standard()`, `trigonometric()`, `tensor()`, or `factoring()`
+3. Use `p_named()` for named constant outputs
+4. Prefer multiple simple rules over one complex rule
+5. Add test in `search.rs` to verify the beam search finds the simplification
