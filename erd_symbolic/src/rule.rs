@@ -287,10 +287,10 @@ impl Pattern {
 
             // Named matches named constants exactly, or by value against Const/Integer
             (Pattern::Named(pnc), Expr::Named(enc)) => pnc == enc,
-            (Pattern::Named(pnc), Expr::Const(n)) => (pnc.value() - n).abs() < f64::EPSILON,
+            (Pattern::Named(pnc), Expr::Const(n)) => (pnc.value() - n).abs() < 1e-12,
             (Pattern::Named(pnc), Expr::Integer(hi, lo)) => {
                 let int_val = (hi * 10 + lo.value()) as f64;
-                (pnc.value() - int_val).abs() < f64::EPSILON
+                (pnc.value() - int_val).abs() < 1e-12
             }
             (Pattern::Named(_), _) => false,
 
@@ -697,6 +697,9 @@ impl RuleSet {
         rs.add(rule("two_thirds_pi", p_mul(p_const(2.0 / 3.0), pi()), p_named(NamedConst::Frac2Pi3)));
         rs.add(rule("three_quarters_pi", p_mul(p_const(0.75), pi()), p_named(NamedConst::Frac3Pi4)));
         rs.add(rule("five_sixths_pi", p_mul(p_const(5.0 / 6.0), pi()), p_named(NamedConst::Frac5Pi6)));
+        rs.add(rule("seven_sixths_pi", p_mul(p_const(7.0 / 6.0), pi()), p_named(NamedConst::Frac7Pi6)));
+        rs.add(rule("five_quarters_pi", p_mul(p_const(1.25), pi()), p_named(NamedConst::Frac5Pi4)));
+        rs.add(rule("three_halves_pi", p_mul(p_const(1.5), pi()), p_named(NamedConst::Frac3Pi2)));
         rs.add(rule("two_pi", p_mul(p_const(2.0), pi()), p_named(NamedConst::TwoPi)));
 
         rs
@@ -779,7 +782,10 @@ impl RuleSet {
         let two_pi = || p_named(NamedConst::TwoPi);
         let frac2pi3 = || p_named(NamedConst::Frac2Pi3);
         let frac3pi4 = || p_named(NamedConst::Frac3Pi4);
+        let frac5pi4 = || p_named(NamedConst::Frac5Pi4);
         let frac5pi6 = || p_named(NamedConst::Frac5Pi6);
+        let frac7pi6 = || p_named(NamedConst::Frac7Pi6);
+        let frac3pi2 = || p_named(NamedConst::Frac3Pi2);
         let sqrt2_2 = || p_named(NamedConst::Frac1Sqrt2);
         let sqrt3_2 = || p_named(NamedConst::FracSqrt3By2);
         let sqrt3 = || p_named(NamedConst::Sqrt3);
@@ -802,13 +808,21 @@ impl RuleSet {
         rs.add(rule("cos_pi_6", p_cos(pi6()), sqrt3_2()));            // cos(π/6) = √3/2
         rs.add(rule("sin_2pi", p_sin(two_pi()), p_const(0.0)));      // sin(2π) = 0
         rs.add(rule("cos_2pi", p_cos(two_pi()), p_const(1.0)));      // cos(2π) = 1
-        // Second quadrant (sin_3pi_2 / cos_3pi_2 handled by try_fold_trig in eval_constants)
+        // Second quadrant
         rs.add(rule("sin_2pi_3", p_sin(frac2pi3()), sqrt3_2()));           // sin(2π/3) = √3/2
         rs.add(rule("cos_2pi_3", p_cos(frac2pi3()), p_const(-0.5)));      // cos(2π/3) = -1/2
         rs.add(rule("sin_3pi_4", p_sin(frac3pi4()), sqrt2_2()));           // sin(3π/4) = √2/2
         rs.add(rule("cos_3pi_4", p_cos(frac3pi4()), p_neg(sqrt2_2())));   // cos(3π/4) = -√2/2
         rs.add(rule("sin_5pi_6", p_sin(frac5pi6()), p_const(0.5)));       // sin(5π/6) = 1/2
         rs.add(rule("cos_5pi_6", p_cos(frac5pi6()), p_neg(sqrt3_2())));   // cos(5π/6) = -√3/2
+        // Third quadrant
+        rs.add(rule("sin_7pi_6", p_sin(frac7pi6()), p_const(-0.5)));      // sin(7π/6) = -1/2
+        rs.add(rule("cos_7pi_6", p_cos(frac7pi6()), p_neg(sqrt3_2())));   // cos(7π/6) = -√3/2
+        rs.add(rule("sin_5pi_4", p_sin(frac5pi4()), p_neg(sqrt2_2())));   // sin(5π/4) = -√2/2
+        rs.add(rule("cos_5pi_4", p_cos(frac5pi4()), p_neg(sqrt2_2())));   // cos(5π/4) = -√2/2
+        // 3π/2
+        rs.add(rule("sin_3pi_2", p_sin(frac3pi2()), p_const(-1.0)));      // sin(3π/2) = -1
+        rs.add(rule("cos_3pi_2", p_cos(frac3pi2()), p_const(0.0)));       // cos(3π/2) = 0
         // tan at special angles
         rs.add(rule("tan_zero", p_tan(p_const(0.0)), p_const(0.0))); // tan(0) = 0
         rs.add(rule("tan_pi", p_tan(pi()), p_const(0.0)));           // tan(π) = 0
@@ -997,6 +1011,18 @@ impl RuleSet {
             "cos_shift_even_pi",
             p_cos(p_add(x(), p_mul(int_even_wild("n"), pi()))),
             p_cos(x()),
+        ));
+        // sin(x + (2k+1) * π) = -sin(x) — shift by odd multiples of π
+        rs.add(rule(
+            "sin_shift_odd_pi",
+            p_sin(p_add(x(), p_mul(int_odd_wild("n"), pi()))),
+            p_neg(p_sin(x())),
+        ));
+        // cos(x + (2k+1) * π) = -cos(x) — shift by odd multiples of π
+        rs.add(rule(
+            "cos_shift_odd_pi",
+            p_cos(p_add(x(), p_mul(int_odd_wild("n"), pi()))),
+            p_neg(p_cos(x())),
         ));
 
         // === Double angle formulas ===

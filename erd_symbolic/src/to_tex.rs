@@ -20,7 +20,10 @@ impl ToTex for NamedConst {
             NamedConst::FracPi6 => "\\frac{\\pi}{6}".to_string(),
             NamedConst::Frac2Pi3 => "\\frac{2\\pi}{3}".to_string(),
             NamedConst::Frac3Pi4 => "\\frac{3\\pi}{4}".to_string(),
+            NamedConst::Frac5Pi4 => "\\frac{5\\pi}{4}".to_string(),
             NamedConst::Frac5Pi6 => "\\frac{5\\pi}{6}".to_string(),
+            NamedConst::Frac7Pi6 => "\\frac{7\\pi}{6}".to_string(),
+            NamedConst::Frac3Pi2 => "\\frac{3\\pi}{2}".to_string(),
             NamedConst::TwoPi => "2\\pi".to_string(),
             NamedConst::E => "e".to_string(),
             NamedConst::Sqrt2 => "\\sqrt{2}".to_string(),
@@ -322,8 +325,14 @@ mod tests {
 
     #[test]
     fn to_tex_multi_arg_functions() {
-        assert_eq!(min(scalar("a"), scalar("b")).to_tex(), "\\min\\left( a, b \\right)");
-        assert_eq!(max(scalar("a"), scalar("b")).to_tex(), "\\max\\left( a, b \\right)");
+        assert_eq!(
+            min(scalar("a"), scalar("b")).to_tex(),
+            "\\min\\left( a, b \\right)"
+        );
+        assert_eq!(
+            max(scalar("a"), scalar("b")).to_tex(),
+            "\\max\\left( a, b \\right)"
+        );
         assert_eq!(
             clamp(scalar("x"), constant(0.0), constant(1.0)).to_tex(),
             "\\operatorname{clamp}\\left( x, 0, 1 \\right)"

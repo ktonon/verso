@@ -13,7 +13,7 @@ enum HistoryMode {
 
 pub fn run() -> Result<(), ReadlineError> {
     let mut rl = DefaultEditor::new()?;
-    let mut show_steps = false;
+    let mut show_trace = false;
     let mut history_mode = HistoryMode::Inputs;
     let mut input_history: Vec<String> = Vec::new();
     let mut result_history: Vec<String> = Vec::new();
@@ -28,9 +28,9 @@ pub fn run() -> Result<(), ReadlineError> {
                 if input == ":q" || input == ":quit" || input == ":exit" {
                     break;
                 }
-                if input == ":steps" {
-                    show_steps = !show_steps;
-                    println!("steps: {}\n", if show_steps { "on" } else { "off" });
+                if input == ":trace" {
+                    show_trace = !show_trace;
+                    println!("trace: {}\n", if show_trace { "on" } else { "off" });
                     continue;
                 }
                 if input == ":history" || input == ":hist" {
@@ -55,28 +55,18 @@ pub fn run() -> Result<(), ReadlineError> {
 
                 match parse_expr(input) {
                     Ok(expr) => {
-                        if show_steps {
+                        if show_trace {
                             let (simplified, trace) =
                                 search::simplify_with_trace(&expr, &RuleSet::full());
                             for (i, step) in trace.iter().enumerate() {
                                 println!("{}: {}", i, fmt_colored(step));
                             }
                             println!("final: {}\n", fmt_colored(&simplified));
-                            record_result(
-                                &mut result_history,
-                                &mut rl,
-                                history_mode,
-                                &simplified,
-                            );
+                            record_result(&mut result_history, &mut rl, history_mode, &simplified);
                         } else {
                             let simplified = search::simplify(&expr, &RuleSet::full());
                             println!("{}\n", fmt_colored(&simplified));
-                            record_result(
-                                &mut result_history,
-                                &mut rl,
-                                history_mode,
-                                &simplified,
-                            );
+                            record_result(&mut result_history, &mut rl, history_mode, &simplified);
                         }
                     }
                     Err(err) => {

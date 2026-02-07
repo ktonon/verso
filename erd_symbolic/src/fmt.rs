@@ -4,12 +4,12 @@ use std::fmt::Display;
 // ANSI color codes for terminal output
 mod color {
     pub const RESET: &str = "\x1b[0m";
-    pub const DIM: &str = "\x1b[2m";           // Gray for operators
-    pub const CYAN: &str = "\x1b[36m";         // Constants
-    pub const MAGENTA: &str = "\x1b[35m";      // Named constants (π, e, √2)
-    pub const YELLOW: &str = "\x1b[33m";        // 1st order tensors
+    pub const DIM: &str = "\x1b[2m"; // Gray for operators
+    pub const CYAN: &str = "\x1b[36m"; // Constants
+    pub const MAGENTA: &str = "\x1b[35m"; // Named constants (π, e, √2)
+    pub const YELLOW: &str = "\x1b[33m"; // 1st order tensors
     pub const BOLD_YELLOW: &str = "\x1b[1;33m"; // 2nd order tensors (bold yellow)
-    pub const BLUE: &str = "\x1b[34m";         // Functions
+    pub const BLUE: &str = "\x1b[34m"; // Functions
 }
 
 /// Wrapper for colored display of expressions
@@ -41,9 +41,9 @@ pub fn fmt_colored(expr: &Expr) -> String {
         Expr::Var { name, indices } => {
             let order = indices.len();
             let (start_color, end_color) = match order {
-                0 => (color::YELLOW, color::RESET),         // Scalar: default
-                1 => (color::YELLOW, color::RESET),         // 1st order: yellow
-                _ => (color::BOLD_YELLOW, color::RESET),    // 2nd+: bold yellow
+                0 => (color::YELLOW, color::RESET),      // Scalar: default
+                1 => (color::YELLOW, color::RESET),      // 1st order: yellow
+                _ => (color::BOLD_YELLOW, color::RESET), // 2nd+: bold yellow
             };
 
             if indices.is_empty() {
@@ -63,10 +63,20 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 // Color the tensor name, dim the indices
                 let mut result = format!("{}{}{}", start_color, name, color::RESET);
                 if !lower.is_empty() {
-                    result.push_str(&format!("{}_({}){}", color::DIM, lower.join(","), color::RESET));
+                    result.push_str(&format!(
+                        "{}_({}){}",
+                        color::DIM,
+                        lower.join(","),
+                        color::RESET
+                    ));
                 }
                 if !upper.is_empty() {
-                    result.push_str(&format!("{}^({}){}", color::DIM, upper.join(","), color::RESET));
+                    result.push_str(&format!(
+                        "{}^({}){}",
+                        color::DIM,
+                        upper.join(","),
+                        color::RESET
+                    ));
                 }
                 result
             }
@@ -80,7 +90,14 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 }
                 Expr::Const(n) if *n < 0.0 => {
                     let op = format!("{} - {}", color::DIM, color::RESET);
-                    format!("{}{}{}{}{}", fmt_colored(a), op, color::CYAN, fmt_const(-*n), color::RESET)
+                    format!(
+                        "{}{}{}{}{}",
+                        fmt_colored(a),
+                        op,
+                        color::CYAN,
+                        fmt_const(-*n),
+                        color::RESET
+                    )
                 }
                 _ => {
                     format!("{}{}{}", fmt_colored(a), op, fmt_colored(b))
@@ -89,15 +106,27 @@ pub fn fmt_colored(expr: &Expr) -> String {
         }
         Expr::Mul(a, b) => {
             if let Some((base, arg)) = match_log_base(a, b) {
-                return format!("{}log{}_{}{}{}({}){}",
-                    color::BLUE, color::RESET, color::DIM, fmt_log_base_colored(base),
-                    color::BLUE, fmt_colored(arg), color::RESET);
+                return format!(
+                    "{}log{}_{}{}{}({}){}",
+                    color::BLUE,
+                    color::RESET,
+                    color::DIM,
+                    fmt_log_base_colored(base),
+                    color::BLUE,
+                    fmt_colored(arg),
+                    color::RESET
+                );
             }
 
             match b.as_ref() {
                 Expr::Inv(inner) => {
                     let op = format!("{}/{}", color::DIM, color::RESET);
-                    format!("{}{}{}", maybe_paren_colored(a, expr), op, maybe_paren_colored(inner, expr))
+                    format!(
+                        "{}{}{}",
+                        maybe_paren_colored(a, expr),
+                        op,
+                        maybe_paren_colored(inner, expr)
+                    )
                 }
                 _ => {
                     let mul_kind = classify_mul(a, b);
@@ -109,12 +138,22 @@ pub fn fmt_colored(expr: &Expr) -> String {
                             } else {
                                 format!("{}", n)
                             };
-                            return format!("{}{}{}{}", color::CYAN, coeff, color::RESET,
-                                maybe_paren_colored(b, expr));
+                            return format!(
+                                "{}{}{}{}",
+                                color::CYAN,
+                                coeff,
+                                color::RESET,
+                                maybe_paren_colored(b, expr)
+                            );
                         }
                         if let Expr::Integer(hi, lo) = a.as_ref() {
-                            return format!("{}{}{}{}", color::CYAN, hi * 10 + lo.value(), color::RESET,
-                                maybe_paren_colored(b, expr));
+                            return format!(
+                                "{}{}{}{}",
+                                color::CYAN,
+                                hi * 10 + lo.value(),
+                                color::RESET,
+                                maybe_paren_colored(b, expr)
+                            );
                         }
                     }
                     let op_char = match mul_kind {
@@ -124,37 +163,74 @@ pub fn fmt_colored(expr: &Expr) -> String {
                         MulKind::Double => ":",
                     };
                     let op = format!("{}{}{}", color::DIM, op_char, color::RESET);
-                    format!("{}{}{}", maybe_paren_colored(a, expr), op, maybe_paren_colored(b, expr))
+                    format!(
+                        "{}{}{}",
+                        maybe_paren_colored(a, expr),
+                        op,
+                        maybe_paren_colored(b, expr)
+                    )
                 }
             }
         }
         Expr::Neg(a) => {
-            format!("{}-{}{}", color::DIM, color::RESET, maybe_paren_colored(a, expr))
+            format!(
+                "{}-{}{}",
+                color::DIM,
+                color::RESET,
+                maybe_paren_colored(a, expr)
+            )
         }
         Expr::Inv(a) => {
-            format!("{}1/{}{}", color::DIM, color::RESET, maybe_paren_colored(a, expr))
+            format!(
+                "{}1/{}{}",
+                color::DIM,
+                color::RESET,
+                maybe_paren_colored(a, expr)
+            )
         }
         Expr::Pow(base, exp) => {
             if is_sqrt_exp(exp) {
-                return format!("{}sqrt({}){}",
-                    color::BLUE, fmt_colored(base), color::RESET);
+                return format!("{}sqrt({}){}", color::BLUE, fmt_colored(base), color::RESET);
             }
             let op = format!("{}**{}", color::DIM, color::RESET);
-            format!("{}{}{}", maybe_paren_colored(base, expr), op, maybe_paren_colored(exp, expr))
+            format!(
+                "{}{}{}",
+                maybe_paren_colored(base, expr),
+                op,
+                maybe_paren_colored(exp, expr)
+            )
         }
         Expr::Fn(kind, arg) => {
-            format!("{}{}{}({})", color::BLUE, kind, color::RESET, fmt_colored(arg))
+            format!(
+                "{}{}{}({})",
+                color::BLUE,
+                kind,
+                color::RESET,
+                fmt_colored(arg)
+            )
         }
         Expr::FnN(kind, args) => {
             let rendered: Vec<String> = args.iter().map(fmt_colored).collect();
-            format!("{}{}{}({})", color::BLUE, kind, color::RESET, rendered.join(", "))
+            format!(
+                "{}{}{}({})",
+                color::BLUE,
+                kind,
+                color::RESET,
+                rendered.join(", ")
+            )
         }
     }
 }
 
 fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
     if child.precedence() < parent.precedence() {
-        format!("{}({}{}){}", color::DIM, color::RESET, fmt_colored(child), color::DIM)
+        format!(
+            "{}({}{}){}",
+            color::DIM,
+            color::RESET,
+            fmt_colored(child),
+            color::DIM
+        )
     } else {
         fmt_colored(child)
     }
@@ -163,7 +239,13 @@ fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
 fn fmt_log_base_colored(base: &Expr) -> String {
     match base {
         Expr::Const(_) | Expr::Integer(_, _) | Expr::Var { .. } => fmt_colored(base),
-        _ => format!("{}({}{}){}", color::DIM, color::RESET, fmt_colored(base), color::DIM),
+        _ => format!(
+            "{}({}{}){}",
+            color::DIM,
+            color::RESET,
+            fmt_colored(base),
+            color::DIM
+        ),
     }
 }
 
@@ -177,7 +259,10 @@ impl Display for NamedConst {
             NamedConst::FracPi6 => write!(f, "π/6"),
             NamedConst::Frac2Pi3 => write!(f, "2π/3"),
             NamedConst::Frac3Pi4 => write!(f, "3π/4"),
+            NamedConst::Frac5Pi4 => write!(f, "5π/4"),
             NamedConst::Frac5Pi6 => write!(f, "5π/6"),
+            NamedConst::Frac7Pi6 => write!(f, "7π/6"),
+            NamedConst::Frac3Pi2 => write!(f, "3π/2"),
             NamedConst::TwoPi => write!(f, "2π"),
             NamedConst::E => write!(f, "e"),
             NamedConst::Sqrt2 => write!(f, "√2"),
@@ -284,16 +369,21 @@ impl std::fmt::Display for Expr {
                                 return write!(f, "{}{}", n, maybe_paren(b, self));
                             }
                             if let Expr::Integer(hi, lo) = a.as_ref() {
-                                return write!(f, "{}{}", hi * 10 + lo.value(), maybe_paren(b, self));
+                                return write!(
+                                    f,
+                                    "{}{}",
+                                    hi * 10 + lo.value(),
+                                    maybe_paren(b, self)
+                                );
                             }
                         }
                         // Choose operator based on multiplication kind (Einstein notation)
                         // No spaces around operators for tighter visual binding
                         let op = match mul_kind {
-                            MulKind::Scalar => "⋅",  // scalar multiplication
-                            MulKind::Outer => "⊗",   // outer/tensor product
-                            MulKind::Single => "⋅",  // single contraction (dot product)
-                            MulKind::Double => ":",  // double contraction
+                            MulKind::Scalar => "⋅", // scalar multiplication
+                            MulKind::Outer => "⊗",  // outer/tensor product
+                            MulKind::Single => "⋅", // single contraction (dot product)
+                            MulKind::Double => ":", // double contraction
                         };
                         write!(f, "{}{}{}", maybe_paren(a, self), op, maybe_paren(b, self))
                     }

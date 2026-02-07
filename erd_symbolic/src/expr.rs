@@ -85,13 +85,18 @@ impl PartialEq for Expr {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Expr::Const(a), Expr::Const(b)) => a == b,
-            (Expr::Integer(hi_a, lo_a), Expr::Integer(hi_b, lo_b)) => {
-                hi_a == hi_b && lo_a == lo_b
-            }
+            (Expr::Integer(hi_a, lo_a), Expr::Integer(hi_b, lo_b)) => hi_a == hi_b && lo_a == lo_b,
             (Expr::Named(a), Expr::Named(b)) => a == b,
-            (Expr::Var { name: n1, indices: i1 }, Expr::Var { name: n2, indices: i2 }) => {
-                n1 == n2 && i1 == i2
-            }
+            (
+                Expr::Var {
+                    name: n1,
+                    indices: i1,
+                },
+                Expr::Var {
+                    name: n2,
+                    indices: i2,
+                },
+            ) => n1 == n2 && i1 == i2,
             (Expr::Add(a1, b1), Expr::Add(a2, b2))
             | (Expr::Mul(a1, b1), Expr::Mul(a2, b2))
             | (Expr::Pow(a1, b1), Expr::Pow(a2, b2)) => a1 == a2 && b1 == b2,
@@ -99,8 +104,7 @@ impl PartialEq for Expr {
             (Expr::Fn(k1, a), Expr::Fn(k2, b)) => k1 == k2 && a == b,
             (Expr::FnN(k1, a), Expr::FnN(k2, b)) => k1 == k2 && a == b,
             // Cross-type: Const <-> Integer by value
-            (Expr::Const(f), Expr::Integer(hi, lo))
-            | (Expr::Integer(hi, lo), Expr::Const(f)) => {
+            (Expr::Const(f), Expr::Integer(hi, lo)) | (Expr::Integer(hi, lo), Expr::Const(f)) => {
                 let int_val = hi * 10 + lo.value();
                 (*f - int_val as f64).abs() < f64::EPSILON
             }
@@ -155,8 +159,11 @@ pub enum NamedConst {
     FracPi6,  // π/6
     Frac2Pi3, // 2π/3
     Frac3Pi4, // 3π/4
-    Frac5Pi6, // 5π/6
-    TwoPi,    // 2π
+    Frac5Pi4,  // 5π/4
+    Frac5Pi6,  // 5π/6
+    Frac7Pi6,  // 7π/6
+    Frac3Pi2,  // 3π/2
+    TwoPi,     // 2π
     // Other constants
     E,            // e (Euler's number)
     Sqrt2,        // √2
@@ -177,7 +184,10 @@ impl NamedConst {
             NamedConst::FracPi6 => FRAC_PI_6,
             NamedConst::Frac2Pi3 => 2.0 * FRAC_PI_3,
             NamedConst::Frac3Pi4 => 3.0 * FRAC_PI_4,
+            NamedConst::Frac5Pi4 => 5.0 * FRAC_PI_4,
             NamedConst::Frac5Pi6 => 5.0 * FRAC_PI_6,
+            NamedConst::Frac7Pi6 => 7.0 * FRAC_PI_6,
+            NamedConst::Frac3Pi2 => 3.0 * FRAC_PI_2,
             NamedConst::TwoPi => TAU,
             NamedConst::E => E,
             NamedConst::Sqrt2 => SQRT_2,
@@ -194,14 +204,17 @@ impl NamedConst {
 
         let sqrt_3 = 3.0_f64.sqrt();
         let candidates = [
+            (3.0 * FRAC_PI_2, NamedConst::Frac3Pi2),
+            (7.0 * FRAC_PI_6, NamedConst::Frac7Pi6),
+            (5.0 * FRAC_PI_6, NamedConst::Frac5Pi6),
+            (5.0 * FRAC_PI_4, NamedConst::Frac5Pi4),
+            (3.0 * FRAC_PI_4, NamedConst::Frac3Pi4),
+            (2.0 * FRAC_PI_3, NamedConst::Frac2Pi3),
             (PI, NamedConst::Pi),
             (FRAC_PI_2, NamedConst::FracPi2),
             (FRAC_PI_3, NamedConst::FracPi3),
             (FRAC_PI_4, NamedConst::FracPi4),
             (FRAC_PI_6, NamedConst::FracPi6),
-            (2.0 * FRAC_PI_3, NamedConst::Frac2Pi3),
-            (3.0 * FRAC_PI_4, NamedConst::Frac3Pi4),
-            (5.0 * FRAC_PI_6, NamedConst::Frac5Pi6),
             (TAU, NamedConst::TwoPi),
             (E, NamedConst::E),
             (SQRT_2, NamedConst::Sqrt2),
@@ -233,7 +246,12 @@ impl Expr {
 
     pub fn precedence(&self) -> u8 {
         match self {
-            Expr::Const(_) | Expr::Integer(_, _) | Expr::Named(_) | Expr::Var { .. } | Expr::Fn(_, _) | Expr::FnN(_, _) => 100,
+            Expr::Const(_)
+            | Expr::Integer(_, _)
+            | Expr::Named(_)
+            | Expr::Var { .. }
+            | Expr::Fn(_, _)
+            | Expr::FnN(_, _) => 100,
             Expr::Pow(_, _) => 80,
             Expr::Neg(_) | Expr::Inv(_) => 70,
             Expr::Mul(_, _) => 60,
@@ -277,7 +295,10 @@ pub fn constant(n: f64) -> Expr {
 /// Construct an Integer expression from a non-negative i64.
 /// For negative values, use `neg(integer(n.abs()))`.
 pub fn integer(n: i64) -> Expr {
-    assert!(n >= 0, "Integer must be non-negative; use neg(integer(..)) for negatives");
+    assert!(
+        n >= 0,
+        "Integer must be non-negative; use neg(integer(..)) for negatives"
+    );
     Expr::Integer(n / 10, LeastSigDigit::from_i64(n))
 }
 
