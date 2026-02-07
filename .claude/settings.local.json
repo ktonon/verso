@@ -14,7 +14,8 @@
       "Bash(pip --version:*)",
       "Bash(PYTHONPATH=/Users/ktonon/repos/erd/erd_training python3:*)",
       "Bash(PYTHONPATH=erd_training python3:*)",
-      "Bash(/Users/ktonon/repos/erd/target/release/validate:*)"
+      "Bash(/Users/ktonon/repos/erd/target/release/validate:*)",
+      "Bash(find:*)"
     ]
   }
 }

@@ -48,10 +48,11 @@ Group related rules into RuleSets:
 - `RuleSet::factoring()` - factoring patterns (common factor, perfect squares)
 - `RuleSet::full()` - combines all of the above
 
-### Named Constants
-Mathematical constants (π, e, √2, etc.) are first-class citizens for clean output:
-- `NamedConst::Pi`, `FracPi2`, `FracPi3`, `FracPi4`, `FracPi6`
-- `NamedConst::Sqrt2`, `Sqrt3`, `Frac1Sqrt2` (√2/2), `FracSqrt3By2` (√3/2)
+### Named Constants and Exact Types
+- `Expr::Rational(Rational)` — exact integers and fractions (e.g. `3`, `1/2`)
+- `Expr::FracPi(Rational)` — exact multiples of π (e.g. `π/4` is `FracPi(Rational(1,4))`)
+- `Expr::Const(f64)` — user-entered decimals
+- Remaining `NamedConst` variants: `E`, `Sqrt2`, `Sqrt3`, `Frac1Sqrt2` (√2/2), `FracSqrt3By2` (√3/2)
 - Display as unicode: `π / 2`, `√2 / 2`
 - LaTeX: `\frac{\pi}{2}`, `\frac{\sqrt{2}}{2}`
 
@@ -107,3 +108,48 @@ cargo test --package erd_symbolic
 3. Use `p_named()` for named constant outputs
 4. Prefer multiple simple rules over one complex rule
 5. Add test in `search.rs` to verify the beam search finds the simplification
+
+### Adding a New `FnKind` Variant
+1. Add variant to `FnKind` enum in `expr.rs`
+2. Add Display in `fmt.rs`
+3. Add LaTeX in `to_tex.rs`
+4. Add parsing in `parser.rs` (`parse_function_call`, `is_known_function`)
+5. **Silent bug risk**: Add to `ALL_FN_KINDS` array in `training_data.rs` (no compiler error if missing)
+6. **Silent bug risk**: Add to `fn_kind_string` in `training_data.rs`
+7. **Silent bug risk**: Add to `parse_token_string` in `training_data.rs` (decides `Token::Fn` vs `Token::FnN`)
+8. **Silent bug risk**: Add to `FN_POOL` in `gen_expr.rs` if it should appear in generated training data
+
+### Adding a New `NamedConst` Variant
+1. Add variant to `NamedConst` enum in `expr.rs`
+2. Add `value()` and `from_value()` cases in `expr.rs`
+3. Add Display in `fmt.rs`
+4. Add LaTeX in `to_tex.rs`
+5. **Silent bug risk**: Add to `ALL_NAMED_CONSTS` array in `training_data.rs`
+6. **Silent bug risk**: Add to `named_const_string` in `training_data.rs`
+7. **Silent bug risk**: Add to `parse_token_string` in `training_data.rs`
+
+### Adding a New `Expr` Variant
+This is the most invasive change. The Rust compiler will catch most missing match arms, but not all.
+
+**Compiler-enforced** (exhaustive match):
+1. `expr.rs` — `complexity()`, `Clone`, `PartialEq`, etc.
+2. `fmt.rs` — `Display` impl and `Colored` impl
+3. `to_tex.rs` — `ToTex` impl
+4. `rule.rs` — `Pattern` enum, `match_expr_inner`, `substitute`
+5. `search.rs` — `canonical_key`, `eval_constants`
+6. `token.rs` — `tokenize`, `detokenize`, `assign_paths`, `subexpr_at`, `replace_subexpr`
+7. `random_search.rs` — `all_rewrites_depth`
+
+**Silent bug risk** (arrays/functions that won't trigger compiler errors):
+8. `gen_expr.rs` — random expression generation (if the variant should appear in training data)
+9. `training_data.rs` — `token_to_string`, `parse_token_string` (for ML token serialization)
+
+### Invalidating ML Artifacts
+Any change to `Expr` variants, `FnKind`, `NamedConst`, rule definitions, or tokenization logic invalidates all training data and checkpoints. To rebuild:
+
+```bash
+npm run ml:reset    # removes data_training/ and checkpoints/
+npm run build:data  # regenerate training data
+npm run train       # retrain from scratch
+npm run evaluate    # validate the new model
+```

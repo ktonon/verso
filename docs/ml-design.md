@@ -496,9 +496,37 @@ npm run train
 
 `npm run ml:reset` removes `data_training/`, `checkpoints/`, and any cached model artifacts. Always run this after changing AST nodes, rule definitions, tokenization logic, or the De Bruijn variable mapping.
 
-## 10. Open Questions
+## 10. M5 Results & Observations
 
-1. **Position stability across transformations**: Positions refer to the initial AST, but rules change the tree structure. Should we re-tokenize after each action and use step-relative positions? This is more accurate but makes the output vocabulary step-dependent.
+### Validation Results (Phase 1 model, 1469 val examples)
+
+| Metric | Value |
+|--------|-------|
+| Validity rate | 65.6% (963/1469 fully valid sequences) |
+| Mean valid fraction | 65.8% |
+| Mean complexity delta | +1.55 (simplification) |
+| Improved | 737 (50.1%) |
+| Unchanged | 732 |
+| Worsened | 0 |
+| Empty sequences | 0 |
+| Mean steps | 6.9 |
+| Validation time | 0.1s (Rust binary, all 1469 examples) |
+
+### Key Insights
+
+1. **Positions are step-relative** (resolves Open Question #1). The validator re-tokenizes after each rule application, so position indices refer to the *current* expression, not the initial one. This matches how `random_search.rs` generates training data. The model successfully learned step-relative positioning — 65.6% of sequences are fully valid.
+
+2. **No worsened expressions.** When the model's sequence is valid, it always reduces or maintains complexity. This suggests the model learned the direction of simplification well, even when it makes invalid moves partway through.
+
+3. **Subprocess-based validation works well.** Python writes predictions as temp JSONL, calls the Rust `validate` binary once, and reads results. Processing 1469 examples in 0.1s avoids PyO3 complexity while being fast enough for the eval loop.
+
+4. **65.6% validity exceeds the threshold for Phase 2.** The design doc target for proceeding to RL was >50% validity. The model has learned enough structure that REINFORCE/PPO can refine it.
+
+5. **The RuleDirectionId reverse lookup** (direction_id → rule_index + direction) was the main missing piece in `IndexedRuleSet`. LTR IDs are `0..num_rules`, RTL IDs are `num_rules..total_directions`, stored as a flat `Vec<(usize, Direction)>` for O(1) lookup.
+
+## 11. Open Questions (updated)
+
+1. ~~**Position stability across transformations**~~: Resolved — positions are step-relative. The validator re-tokenizes after each rule application, matching training data generation. The model learned this successfully (65.6% fully valid sequences).
 
 2. **Attention over trees vs sequences**: Would a tree-structured attention pattern (children attend to parents and siblings) outperform flat positional attention?
 
@@ -510,7 +538,7 @@ npm run train
 
 6. **Beam search in the decoder**: Should we use beam search decoding (exploring multiple action sequences in parallel) to improve the quality of predicted plans? This is decoder-level beam search, distinct from the expression-level beam search used for data generation.
 
-## 11. Milestones
+## 12. Milestones
 
 | Phase | Deliverable | Scope |
 |-------|------------|-------|
@@ -518,7 +546,7 @@ npm run train
 | **M2** | Randomized beam search | Rust: shuffled rule order, stochastic selection, multi-run traces | **Done** — `random_search.rs` |
 | **M3** | Training data generator | Rust: random AST + trace export to JSON with position annotations | **Done** — `gen_expr.rs`, `training_data.rs`, `bin/gen_data.rs` |
 | **M4** | Supervised baseline model | Python: transformer encoder-decoder trained on beam search traces | **Done** — `erd_training/` |
-| **M5** | Sequence validation harness | Rust/Python: apply predicted action sequences, compute reward |
+| **M5** | Sequence validation harness | Rust/Python: apply predicted action sequences, compute reward | **Done** — `validate.rs`, `bin/validate.rs`, `evaluate.py` |
 | **M6** | Self-play training | Python: REINFORCE/PPO with trajectory reward |
 | **M7** | ONNX inference in Rust | Rust: load model, generate action sequences, apply and validate |
 | **M8** | Production integration | Rust: ML simplify with beam search fallback |
