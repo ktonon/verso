@@ -278,6 +278,14 @@ impl SearchStrategy for BeamSearch {
     }
 }
 
+/// Derivation record: how an expression was produced.
+struct Derivation {
+    expr: Expr,
+    parent_key: Option<String>,
+    rule_name: Option<String>,
+    rule_display: Option<String>,
+}
+
 impl BeamSearch {
     fn simplify_with_trace(&self, expr: &Expr, rules: &RuleSet) -> (Expr, Vec<TraceStep>) {
         // Track seen expressions to avoid cycles
@@ -285,46 +293,62 @@ impl BeamSearch {
 
         // Current beam of candidates, sorted by complexity
         let mut beam: Vec<Expr> = vec![expr.clone()];
-        seen.insert(Self::expr_key(expr));
+        let start_key = Self::expr_key(expr);
+        seen.insert(start_key.clone());
 
         // Track the best (lowest complexity) expression seen
-        let mut best = expr.clone();
         let mut best_complexity = expr.complexity();
         let mut best_from_rule = false;
+        let mut best_key = start_key.clone();
 
-        let mut trace = vec![TraceStep {
-            expr: expr.clone(),
-            rule_name: None,
-            rule_display: None,
-        }];
+        // Derivation map: expr_key -> how it was produced
+        let mut derivations: HashMap<String, Derivation> = HashMap::new();
+        derivations.insert(
+            start_key,
+            Derivation {
+                expr: expr.clone(),
+                parent_key: None,
+                rule_name: None,
+                rule_display: None,
+            },
+        );
 
         for _step in 0..self.max_steps {
-            let all_rewrites: Vec<Rewrite> = beam
+            // Generate rewrites paired with their parent's key
+            let all_rewrites: Vec<(String, Rewrite)> = beam
                 .par_iter()
-                .flat_map(|candidate| self.all_rewrites(candidate, rules))
+                .flat_map_iter(|candidate| {
+                    let parent_key = Self::expr_key(candidate);
+                    self.all_rewrites(candidate, rules)
+                        .into_iter()
+                        .map(move |r| (parent_key.clone(), r))
+                })
                 .collect();
 
             let mut next_beam: Vec<Expr> = Vec::new();
-            for rewrite in all_rewrites {
+            for (parent_key, rewrite) in all_rewrites {
                 let key = Self::expr_key(&rewrite.expr);
                 if !seen.contains(&key) {
-                    seen.insert(key);
+                    seen.insert(key.clone());
+
+                    derivations.insert(
+                        key.clone(),
+                        Derivation {
+                            expr: rewrite.expr.clone(),
+                            parent_key: Some(parent_key),
+                            rule_name: rewrite.rule_name,
+                            rule_display: rewrite.rule_display,
+                        },
+                    );
 
                     let complexity = rewrite.expr.complexity();
                     let dominated = complexity < best_complexity
                         || (complexity == best_complexity && rewrite.from_rule && !best_from_rule);
 
                     if dominated {
-                        best = rewrite.expr.clone();
                         best_complexity = complexity;
                         best_from_rule = rewrite.from_rule;
-                        if trace.last().map(|s| &s.expr) != Some(&best) {
-                            trace.push(TraceStep {
-                                expr: best.clone(),
-                                rule_name: rewrite.rule_name.clone(),
-                                rule_display: rewrite.rule_display.clone(),
-                            });
-                        }
+                        best_key = key;
                     }
 
                     next_beam.push(rewrite.expr);
@@ -341,6 +365,28 @@ impl BeamSearch {
             beam = next_beam;
         }
 
+        // Reconstruct the derivation path from best back to start
+        let mut trace = Vec::new();
+        let mut current_key = best_key;
+        loop {
+            if let Some(d) = derivations.remove(&current_key) {
+                let next_key = d.parent_key.clone();
+                trace.push(TraceStep {
+                    expr: d.expr,
+                    rule_name: d.rule_name,
+                    rule_display: d.rule_display,
+                });
+                match next_key {
+                    Some(pk) => current_key = pk,
+                    None => break,
+                }
+            } else {
+                break;
+            }
+        }
+        trace.reverse();
+
+        let best = trace.last().map(|s| s.expr.clone()).unwrap_or_else(|| expr.clone());
         (best, trace)
     }
 }
