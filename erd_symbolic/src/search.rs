@@ -357,58 +357,6 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
     (current, trace)
 }
 
-/// Try to detect pi-fraction patterns like pi/2, pi/3, 2*pi, etc.
-fn try_fold_pi_fraction(left: &Expr, right: &Expr) -> Option<NamedConst> {
-    // Pattern: pi * (1/n) = pi/n or (1/n) * pi = pi/n
-    // Pattern: n * pi = n*pi or pi * n = n*pi
-    let (coeff, is_pi) = match (left, right) {
-        // pi / n pattern: Mul(Named(Pi), Inv(Const(n)))
-        (Expr::Named(NamedConst::Pi), Expr::Inv(inner)) => {
-            if let Expr::Const(n) = inner.as_ref() {
-                (1.0 / n, true)
-            } else {
-                return None;
-            }
-        }
-        // (1/n) * pi pattern
-        (Expr::Inv(inner), Expr::Named(NamedConst::Pi)) => {
-            if let Expr::Const(n) = inner.as_ref() {
-                (1.0 / n, true)
-            } else {
-                return None;
-            }
-        }
-        // n * pi pattern
-        (Expr::Const(n), Expr::Named(NamedConst::Pi)) => (*n, true),
-        // pi * n pattern
-        (Expr::Named(NamedConst::Pi), Expr::Const(n)) => (*n, true),
-        _ => return None,
-    };
-
-    if !is_pi {
-        return None;
-    }
-
-    const EPS: f64 = 1e-12;
-    let candidates = [
-        (0.5, NamedConst::FracPi2),           // pi/2
-        (1.0 / 3.0, NamedConst::FracPi3),     // pi/3
-        (0.25, NamedConst::FracPi4),          // pi/4
-        (1.0 / 6.0, NamedConst::FracPi6),     // pi/6
-        (2.0 / 3.0, NamedConst::Frac2Pi3),    // 2pi/3
-        (0.75, NamedConst::Frac3Pi4),         // 3pi/4
-        (5.0 / 6.0, NamedConst::Frac5Pi6),    // 5pi/6
-        (2.0, NamedConst::TwoPi),             // 2pi
-    ];
-
-    for (val, nc) in candidates {
-        if (coeff - val).abs() < EPS {
-            return Some(nc);
-        }
-    }
-    None
-}
-
 /// Try to evaluate a constant expression to a numeric value.
 /// Handles Const, Named, and operations on constants (Mul, Add, Neg, Inv, Pow).
 fn try_eval_const(expr: &Expr) -> Option<f64> {
@@ -553,14 +501,9 @@ fn fold_constants(expr: &Expr) -> Expr {
                 }
                 (Expr::Const(x), _) if (*x - 1.0).abs() < f64::EPSILON => right,
                 (_, Expr::Const(x)) if (*x - 1.0).abs() < f64::EPSILON => left,
-                // Detect pi fractions: pi / n or n * pi
                 _ => {
-                    if let Some(nc) = try_fold_pi_fraction(&left, &right) {
-                        Expr::Named(nc)
-                    } else {
-                        // Normalize factor order for canonical form
-                        normalize_mul(Expr::Mul(Box::new(left), Box::new(right)))
-                    }
+                    // Normalize factor order for canonical form
+                    normalize_mul(Expr::Mul(Box::new(left), Box::new(right)))
                 }
             }
         }

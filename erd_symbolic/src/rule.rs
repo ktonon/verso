@@ -638,6 +638,19 @@ impl RuleSet {
             p_clamp(x(), lo(), hi()),
         ));
 
+        // === Pi-fraction recognition ===
+        // After fold_constants, Inv(Const(n)) → Const(1/n), and normalize_mul sorts
+        // Const before Named(Pi), so all patterns are Mul(Const(coeff), Named(Pi)).
+        let pi = || p_named(NamedConst::Pi);
+        rs.add(rule("pi_half", p_mul(p_const(0.5), pi()), p_named(NamedConst::FracPi2)));
+        rs.add(rule("pi_third", p_mul(p_const(1.0 / 3.0), pi()), p_named(NamedConst::FracPi3)));
+        rs.add(rule("pi_quarter", p_mul(p_const(0.25), pi()), p_named(NamedConst::FracPi4)));
+        rs.add(rule("pi_sixth", p_mul(p_const(1.0 / 6.0), pi()), p_named(NamedConst::FracPi6)));
+        rs.add(rule("two_thirds_pi", p_mul(p_const(2.0 / 3.0), pi()), p_named(NamedConst::Frac2Pi3)));
+        rs.add(rule("three_quarters_pi", p_mul(p_const(0.75), pi()), p_named(NamedConst::Frac3Pi4)));
+        rs.add(rule("five_sixths_pi", p_mul(p_const(5.0 / 6.0), pi()), p_named(NamedConst::Frac5Pi6)));
+        rs.add(rule("two_pi", p_mul(p_const(2.0), pi()), p_named(NamedConst::TwoPi)));
+
         rs
     }
 
