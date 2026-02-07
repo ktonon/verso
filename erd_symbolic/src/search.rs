@@ -1,4 +1,4 @@
-use crate::expr::{add, classify_mul, integer, mul, neg, Expr, FnKind, MulKind, NamedConst};
+use crate::expr::{classify_mul, Expr, FnKind, MulKind};
 use crate::rational::Rational;
 use crate::rule::RuleSet;
 use rayon::prelude::*;
@@ -82,7 +82,6 @@ impl BeamSearch {
         // Recursively try rewrites in children (with reduced depth)
         match expr {
             Expr::Const(_)
-            | Expr::Integer(_, _)
             | Expr::Rational(_)
             | Expr::Named(_)
             | Expr::FracPi(_)
@@ -367,22 +366,19 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
 
 
 
-/// Convert a numeric constant to Const or Integer (non-negative integers become Integer).
+/// Extract the numeric value of a constant expression.
 fn is_numeric_const(expr: &Expr) -> Option<f64> {
     match expr {
         Expr::Const(n) => Some(*n),
-        Expr::Integer(hi, lo) => Some((hi * 10 + lo.value()) as f64),
         Expr::Rational(r) => Some(r.value()),
         _ => None,
     }
 }
 
-/// Convert a f64 result to Integer (if non-negative integer) or Const.
+/// Convert a f64 result to Rational (if integer-valued) or Const.
 fn float_to_expr(val: f64) -> Expr {
-    if val.fract() == 0.0 && val >= 0.0 && val < (i64::MAX / 10) as f64 {
-        integer(val as i64)
-    } else if val.fract() == 0.0 && val < 0.0 && val > (i64::MIN / 10) as f64 {
-        neg(integer((-val) as i64))
+    if val.fract() == 0.0 && val.abs() < (i64::MAX / 2) as f64 {
+        Expr::Rational(Rational::from_i64(val as i64))
     } else {
         Expr::Const(val)
     }
@@ -420,33 +416,14 @@ fn eval_constants(expr: &Expr) -> Expr {
         Expr::Const(_)
         | Expr::Rational(_)
         | Expr::FracPi(_)
+        | Expr::Named(_)
         | Expr::Var { .. } => expr.clone(),
-        // Convert Integer to Rational
-        Expr::Integer(hi, lo) => Expr::Rational(Rational::from_i64(hi * 10 + lo.value())),
-        // Convert Pi-related NamedConst to FracPi
-        Expr::Named(nc) => match nc {
-            NamedConst::Pi => Expr::FracPi(Rational::ONE),
-            NamedConst::FracPi2 => Expr::FracPi(Rational::new(1, 2)),
-            NamedConst::FracPi3 => Expr::FracPi(Rational::new(1, 3)),
-            NamedConst::FracPi4 => Expr::FracPi(Rational::new(1, 4)),
-            NamedConst::FracPi6 => Expr::FracPi(Rational::new(1, 6)),
-            NamedConst::Frac2Pi3 => Expr::FracPi(Rational::new(2, 3)),
-            NamedConst::Frac3Pi4 => Expr::FracPi(Rational::new(3, 4)),
-            NamedConst::Frac5Pi6 => Expr::FracPi(Rational::new(5, 6)),
-            NamedConst::Frac5Pi4 => Expr::FracPi(Rational::new(5, 4)),
-            NamedConst::Frac7Pi6 => Expr::FracPi(Rational::new(7, 6)),
-            NamedConst::Frac3Pi2 => Expr::FracPi(Rational::new(3, 2)),
-            NamedConst::TwoPi => Expr::FracPi(Rational::TWO),
-            _ => expr.clone(),
-        },
         Expr::Neg(a) => {
             let inner = eval_constants(a);
             match &inner {
                 Expr::Const(n) => Expr::Const(-n),
                 Expr::Rational(r) => Expr::Rational(-*r),
                 Expr::FracPi(r) => Expr::FracPi(-*r),
-                // Keep Neg(Integer) as-is; negatives use Neg wrapping
-                Expr::Integer(_, _) => Expr::Neg(Box::new(inner)),
                 _ => Expr::Neg(Box::new(inner)),
             }
         }
@@ -624,10 +601,6 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
 
     match expr {
         Expr::Const(n) => format!("Const({})", n),
-        Expr::Integer(hi, lo) => {
-            // Same key format as equivalent Const for dedup
-            format!("Const({})", (hi * 10 + lo.value()) as f64)
-        }
         Expr::Rational(r) => format!("Rat({}/{})", r.num(), r.den()),
         Expr::Named(nc) => format!("Named({:?})", nc),
         Expr::FracPi(r) => format!("FracPi({}/{})", r.num(), r.den()),
@@ -707,7 +680,7 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
 
     for term in terms {
         if let Some((base, coeff)) = extract_term(&term) {
-            if matches!(base, Expr::Const(_) | Expr::Integer(_, _) | Expr::Rational(_)) {
+            if matches!(base, Expr::Const(_) | Expr::Rational(_)) {
                 const_sum += coeff;
                 continue;
             }
@@ -784,7 +757,6 @@ fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
 fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
     match expr {
         Expr::Const(c) => Some((Expr::Const(1.0), *c)),
-        Expr::Integer(hi, lo) => Some((Expr::Const(1.0), (hi * 10 + lo.value()) as f64)),
         Expr::Rational(r) => Some((Expr::Const(1.0), r.value())),
         Expr::Neg(inner) => {
             if let Some((base, coeff)) = extract_term(inner) {
@@ -795,9 +767,6 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
         }
         Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
             (Expr::Const(c), other) | (other, Expr::Const(c)) => Some((other.clone(), *c)),
-            (Expr::Integer(hi, lo), other) | (other, Expr::Integer(hi, lo)) => {
-                Some((other.clone(), (hi * 10 + lo.value()) as f64))
-            }
             (Expr::Rational(r), other) | (other, Expr::Rational(r)) => {
                 Some((other.clone(), r.value()))
             }
@@ -859,9 +828,10 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
 mod tests {
     use super::*;
     use crate::expr::{
-        add, constant, cos, div, integer, inv, mul, named, neg, pow, scalar, sin, tensor, upper,
+        add, constant, cos, div, frac_pi, inv, mul, named, neg, pow, scalar, sin, tensor, upper,
         NamedConst,
     };
+    use crate::rational::Rational;
 
     #[test]
     fn simplify_add_zero() {
@@ -1060,7 +1030,7 @@ mod tests {
     #[test]
     fn simplify_trig_sin_pi_4() {
         let rules = RuleSet::trigonometric();
-        let expr = sin(named(NamedConst::FracPi4));
+        let expr = sin(frac_pi(1, 4));
         let result = simplify(&expr, &rules);
         assert_eq!(result, named(NamedConst::Frac1Sqrt2)); // √2/2
     }
@@ -1068,7 +1038,7 @@ mod tests {
     #[test]
     fn simplify_trig_cos_pi_4() {
         let rules = RuleSet::trigonometric();
-        let expr = cos(named(NamedConst::FracPi4));
+        let expr = cos(frac_pi(1, 4));
         let result = simplify(&expr, &rules);
         assert_eq!(result, named(NamedConst::Frac1Sqrt2)); // √2/2
     }
@@ -1076,7 +1046,7 @@ mod tests {
     #[test]
     fn simplify_trig_sin_pi_3() {
         let rules = RuleSet::trigonometric();
-        let expr = sin(named(NamedConst::FracPi3));
+        let expr = sin(frac_pi(1, 3));
         let result = simplify(&expr, &rules);
         assert_eq!(result, named(NamedConst::FracSqrt3By2)); // √3/2
     }
@@ -1084,7 +1054,7 @@ mod tests {
     #[test]
     fn simplify_trig_cos_pi_3() {
         let rules = RuleSet::trigonometric();
-        let expr = cos(named(NamedConst::FracPi3));
+        let expr = cos(frac_pi(1, 3));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.5)); // 1/2
     }
@@ -1092,7 +1062,7 @@ mod tests {
     #[test]
     fn simplify_trig_sin_pi_6() {
         let rules = RuleSet::trigonometric();
-        let expr = sin(named(NamedConst::FracPi6));
+        let expr = sin(frac_pi(1, 6));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.5)); // 1/2
     }
@@ -1100,7 +1070,7 @@ mod tests {
     #[test]
     fn simplify_trig_cos_pi_6() {
         let rules = RuleSet::trigonometric();
-        let expr = cos(named(NamedConst::FracPi6));
+        let expr = cos(frac_pi(1, 6));
         let result = simplify(&expr, &rules);
         assert_eq!(result, named(NamedConst::FracSqrt3By2)); // √3/2
     }
@@ -1108,7 +1078,7 @@ mod tests {
     #[test]
     fn simplify_trig_sin_2pi() {
         let rules = RuleSet::trigonometric();
-        let expr = sin(named(NamedConst::TwoPi));
+        let expr = sin(frac_pi(2, 1));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
     }
@@ -1116,7 +1086,7 @@ mod tests {
     #[test]
     fn simplify_trig_cos_2pi() {
         let rules = RuleSet::trigonometric();
-        let expr = cos(named(NamedConst::TwoPi));
+        let expr = cos(frac_pi(2, 1));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -1154,7 +1124,7 @@ mod tests {
     fn simplify_sin_complementary() {
         // sin(π/2 - x) = cos(x)
         let rules = RuleSet::trigonometric();
-        let expr = sin(add(named(NamedConst::FracPi2), neg(scalar("x"))));
+        let expr = sin(add(frac_pi(1, 2), neg(scalar("x"))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, cos(scalar("x")));
     }
@@ -1163,7 +1133,7 @@ mod tests {
     fn simplify_cos_complementary() {
         // cos(π/2 - x) = sin(x)
         let rules = RuleSet::trigonometric();
-        let expr = cos(add(named(NamedConst::FracPi2), neg(scalar("x"))));
+        let expr = cos(add(frac_pi(1, 2), neg(scalar("x"))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, sin(scalar("x")));
     }
@@ -1172,7 +1142,7 @@ mod tests {
     fn simplify_sin_supplementary() {
         // sin(π - x) = sin(x)
         let rules = RuleSet::trigonometric();
-        let expr = sin(add(named(NamedConst::Pi), neg(scalar("x"))));
+        let expr = sin(add(frac_pi(1, 1), neg(scalar("x"))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, sin(scalar("x")));
     }
@@ -1181,7 +1151,7 @@ mod tests {
     fn simplify_cos_supplementary() {
         // cos(π - x) = -cos(x)
         let rules = RuleSet::trigonometric();
-        let expr = cos(add(named(NamedConst::Pi), neg(scalar("x"))));
+        let expr = cos(add(frac_pi(1, 1), neg(scalar("x"))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, neg(cos(scalar("x"))));
     }
@@ -1190,7 +1160,7 @@ mod tests {
     fn simplify_sin_period() {
         // sin(x + 2π) = sin(x)
         let rules = RuleSet::trigonometric();
-        let expr = sin(add(scalar("x"), named(NamedConst::TwoPi)));
+        let expr = sin(add(scalar("x"), frac_pi(2, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, sin(scalar("x")));
     }
@@ -1199,7 +1169,7 @@ mod tests {
     fn simplify_cos_period() {
         // cos(x + 2π) = cos(x)
         let rules = RuleSet::trigonometric();
-        let expr = cos(add(scalar("x"), named(NamedConst::TwoPi)));
+        let expr = cos(add(scalar("x"), frac_pi(2, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, cos(scalar("x")));
     }
@@ -2053,8 +2023,8 @@ mod tests {
         // sin(π) = 0, cos(π) = -1
         let rules = RuleSet::trigonometric();
 
-        let sin_pi = sin(named(NamedConst::Pi));
-        let cos_pi = cos(named(NamedConst::Pi));
+        let sin_pi = sin(frac_pi(1, 1));
+        let cos_pi = cos(frac_pi(1, 1));
 
         assert_eq!(simplify(&sin_pi, &rules), constant(0.0));
         assert_eq!(simplify(&cos_pi, &rules), constant(-1.0));
@@ -2065,8 +2035,8 @@ mod tests {
         // sin(π/2) = 1, cos(π/2) = 0
         let rules = RuleSet::trigonometric();
 
-        let sin_pi_2 = sin(named(NamedConst::FracPi2));
-        let cos_pi_2 = cos(named(NamedConst::FracPi2));
+        let sin_pi_2 = sin(frac_pi(1, 2));
+        let cos_pi_2 = cos(frac_pi(1, 2));
 
         assert_eq!(simplify(&sin_pi_2, &rules), constant(1.0));
         assert_eq!(simplify(&cos_pi_2, &rules), constant(0.0));
@@ -2076,7 +2046,7 @@ mod tests {
     fn simplify_trig_at_pi_over_2_from_division() {
         // cos(π * (1/2)) should simplify via pi-fraction rules + trig evaluation
         let rules = RuleSet::full();
-        let expr = cos(mul(named(NamedConst::Pi), inv(integer(2))));
+        let expr = cos(mul(frac_pi(1, 1), inv(Expr::Rational(Rational::from_i64(2)))));
         assert_eq!(simplify(&expr, &rules), constant(0.0));
     }
 
@@ -2893,7 +2863,7 @@ mod tests {
     fn simplify_trig_sin_4pi() {
         // sin(4π) = 0 (4 is even, sin(even * π) = 0)
         let rules = RuleSet::trigonometric();
-        let expr = sin(mul(integer(4), named(NamedConst::Pi)));
+        let expr = sin(mul(Expr::Rational(Rational::from_i64(4)), frac_pi(1, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
     }
@@ -2902,7 +2872,7 @@ mod tests {
     fn simplify_trig_cos_6pi() {
         // cos(6π) = 1 (6 is even, cos(even * π) = 1)
         let rules = RuleSet::trigonometric();
-        let expr = cos(mul(integer(6), named(NamedConst::Pi)));
+        let expr = cos(mul(Expr::Rational(Rational::from_i64(6)), frac_pi(1, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -2951,7 +2921,7 @@ mod tests {
     fn simplify_trig_sin_negative_2pi() {
         // sin(-2π) = 0
         let rules = RuleSet::trigonometric();
-        let expr = sin(neg(named(NamedConst::TwoPi)));
+        let expr = sin(neg(frac_pi(2, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
     }
@@ -2960,7 +2930,7 @@ mod tests {
     fn simplify_trig_cos_negative_4pi() {
         // cos(-4π) = 1
         let rules = RuleSet::trigonometric();
-        let expr = cos(neg(mul(integer(4), named(NamedConst::Pi))));
+        let expr = cos(neg(mul(Expr::Rational(Rational::from_i64(4)), frac_pi(1, 1))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -2969,7 +2939,7 @@ mod tests {
     fn simplify_trig_sin_100pi() {
         // sin(100π) = 0 (integer * π)
         let rules = RuleSet::trigonometric();
-        let expr = sin(mul(integer(100), named(NamedConst::Pi)));
+        let expr = sin(mul(Expr::Rational(Rational::from_i64(100)), frac_pi(1, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
     }
@@ -2978,7 +2948,7 @@ mod tests {
     fn simplify_trig_cos_100pi() {
         // cos(100π) = 1 (even * π)
         let rules = RuleSet::trigonometric();
-        let expr = cos(mul(integer(100), named(NamedConst::Pi)));
+        let expr = cos(mul(Expr::Rational(Rational::from_i64(100)), frac_pi(1, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -2987,7 +2957,7 @@ mod tests {
     fn simplify_trig_cos_9pi_4() {
         // cos(9π/4) = cos(π/4 + 2π) = cos(π/4) = √2/2
         let rules = RuleSet::full();
-        let expr = cos(div(mul(integer(9), named(NamedConst::Pi)), integer(4)));
+        let expr = cos(div(mul(Expr::Rational(Rational::from_i64(9)), frac_pi(1, 1)), Expr::Rational(Rational::from_i64(4))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, named(NamedConst::Frac1Sqrt2));
     }
@@ -2996,7 +2966,7 @@ mod tests {
     fn simplify_trig_sin_9pi_4() {
         // sin(9π/4) = sin(π/4 + 2π) = sin(π/4) = √2/2
         let rules = RuleSet::full();
-        let expr = sin(div(mul(integer(9), named(NamedConst::Pi)), integer(4)));
+        let expr = sin(div(mul(Expr::Rational(Rational::from_i64(9)), frac_pi(1, 1)), Expr::Rational(Rational::from_i64(4))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, named(NamedConst::Frac1Sqrt2));
     }

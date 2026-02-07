@@ -1,73 +1,9 @@
-/// Least significant digit of a non-negative integer, enabling parity matching in rules.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum LeastSigDigit {
-    Zero,
-    One,
-    Two,
-    Three,
-    Four,
-    Five,
-    Six,
-    Seven,
-    Eight,
-    Nine,
-}
-
-impl LeastSigDigit {
-    pub fn value(self) -> i64 {
-        match self {
-            LeastSigDigit::Zero => 0,
-            LeastSigDigit::One => 1,
-            LeastSigDigit::Two => 2,
-            LeastSigDigit::Three => 3,
-            LeastSigDigit::Four => 4,
-            LeastSigDigit::Five => 5,
-            LeastSigDigit::Six => 6,
-            LeastSigDigit::Seven => 7,
-            LeastSigDigit::Eight => 8,
-            LeastSigDigit::Nine => 9,
-        }
-    }
-
-    pub fn from_i64(n: i64) -> Self {
-        match (n.unsigned_abs()) % 10 {
-            0 => LeastSigDigit::Zero,
-            1 => LeastSigDigit::One,
-            2 => LeastSigDigit::Two,
-            3 => LeastSigDigit::Three,
-            4 => LeastSigDigit::Four,
-            5 => LeastSigDigit::Five,
-            6 => LeastSigDigit::Six,
-            7 => LeastSigDigit::Seven,
-            8 => LeastSigDigit::Eight,
-            9 => LeastSigDigit::Nine,
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn is_even(self) -> bool {
-        matches!(
-            self,
-            LeastSigDigit::Zero
-                | LeastSigDigit::Two
-                | LeastSigDigit::Four
-                | LeastSigDigit::Six
-                | LeastSigDigit::Eight
-        )
-    }
-
-    pub fn is_odd(self) -> bool {
-        !self.is_even()
-    }
-}
-
 use crate::rational::Rational;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
     // Atoms
     Const(f64),
-    Integer(i64, LeastSigDigit), // value = hi * 10 + digit.value(), non-negative
     Rational(Rational),          // Exact rational number
     Named(NamedConst),           // Named mathematical constant (e, √2, etc.)
     FracPi(Rational),            // Rational multiple of π (value = r * π)
@@ -89,7 +25,6 @@ impl PartialEq for Expr {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Expr::Const(a), Expr::Const(b)) => a == b,
-            (Expr::Integer(hi_a, lo_a), Expr::Integer(hi_b, lo_b)) => hi_a == hi_b && lo_a == lo_b,
             (Expr::Named(a), Expr::Named(b)) => a == b,
             (
                 Expr::Var {
@@ -109,19 +44,9 @@ impl PartialEq for Expr {
             (Expr::FnN(k1, a), Expr::FnN(k2, b)) => k1 == k2 && a == b,
             (Expr::Rational(a), Expr::Rational(b)) => a == b,
             (Expr::FracPi(a), Expr::FracPi(b)) => a == b,
-            // Cross-type: Const <-> Integer by value
-            (Expr::Const(f), Expr::Integer(hi, lo)) | (Expr::Integer(hi, lo), Expr::Const(f)) => {
-                let int_val = hi * 10 + lo.value();
-                (*f - int_val as f64).abs() < f64::EPSILON
-            }
             // Cross-type: Const <-> Rational by value
             (Expr::Const(f), Expr::Rational(r)) | (Expr::Rational(r), Expr::Const(f)) => {
                 (*f - r.value()).abs() < 1e-12
-            }
-            // Cross-type: Integer <-> Rational by value
-            (Expr::Integer(hi, lo), Expr::Rational(r))
-            | (Expr::Rational(r), Expr::Integer(hi, lo)) => {
-                r.is_integer() && r.num() == hi * 10 + lo.value()
             }
             _ => false,
         }
@@ -166,20 +91,6 @@ pub enum FnKind {
 /// Named mathematical constants with exact symbolic representation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum NamedConst {
-    // Pi-related
-    Pi,       // π
-    FracPi2,  // π/2
-    FracPi3,  // π/3
-    FracPi4,  // π/4
-    FracPi6,  // π/6
-    Frac2Pi3, // 2π/3
-    Frac3Pi4, // 3π/4
-    Frac5Pi4,  // 5π/4
-    Frac5Pi6,  // 5π/6
-    Frac7Pi6,  // 7π/6
-    Frac3Pi2,  // 3π/2
-    TwoPi,     // 2π
-    // Other constants
     E,            // e (Euler's number)
     Sqrt2,        // √2
     Sqrt3,        // √3
@@ -192,18 +103,6 @@ impl NamedConst {
     pub fn value(&self) -> f64 {
         use std::f64::consts::*;
         match self {
-            NamedConst::Pi => PI,
-            NamedConst::FracPi2 => FRAC_PI_2,
-            NamedConst::FracPi3 => FRAC_PI_3,
-            NamedConst::FracPi4 => FRAC_PI_4,
-            NamedConst::FracPi6 => FRAC_PI_6,
-            NamedConst::Frac2Pi3 => 2.0 * FRAC_PI_3,
-            NamedConst::Frac3Pi4 => 3.0 * FRAC_PI_4,
-            NamedConst::Frac5Pi4 => 5.0 * FRAC_PI_4,
-            NamedConst::Frac5Pi6 => 5.0 * FRAC_PI_6,
-            NamedConst::Frac7Pi6 => 7.0 * FRAC_PI_6,
-            NamedConst::Frac3Pi2 => 3.0 * FRAC_PI_2,
-            NamedConst::TwoPi => TAU,
             NamedConst::E => E,
             NamedConst::Sqrt2 => SQRT_2,
             NamedConst::Sqrt3 => 3.0_f64.sqrt(),
@@ -219,18 +118,6 @@ impl NamedConst {
 
         let sqrt_3 = 3.0_f64.sqrt();
         let candidates = [
-            (3.0 * FRAC_PI_2, NamedConst::Frac3Pi2),
-            (7.0 * FRAC_PI_6, NamedConst::Frac7Pi6),
-            (5.0 * FRAC_PI_6, NamedConst::Frac5Pi6),
-            (5.0 * FRAC_PI_4, NamedConst::Frac5Pi4),
-            (3.0 * FRAC_PI_4, NamedConst::Frac3Pi4),
-            (2.0 * FRAC_PI_3, NamedConst::Frac2Pi3),
-            (PI, NamedConst::Pi),
-            (FRAC_PI_2, NamedConst::FracPi2),
-            (FRAC_PI_3, NamedConst::FracPi3),
-            (FRAC_PI_4, NamedConst::FracPi4),
-            (FRAC_PI_6, NamedConst::FracPi6),
-            (TAU, NamedConst::TwoPi),
             (E, NamedConst::E),
             (SQRT_2, NamedConst::Sqrt2),
             (sqrt_3, NamedConst::Sqrt3),
@@ -251,7 +138,6 @@ impl Expr {
     pub fn complexity(&self) -> usize {
         match self {
             Expr::Const(_)
-            | Expr::Integer(_, _)
             | Expr::Rational(_)
             | Expr::Named(_)
             | Expr::FracPi(_)
@@ -267,7 +153,6 @@ impl Expr {
     pub fn precedence(&self) -> u8 {
         match self {
             Expr::Const(_)
-            | Expr::Integer(_, _)
             | Expr::Rational(_)
             | Expr::Named(_)
             | Expr::FracPi(_)
@@ -314,16 +199,6 @@ pub fn constant(n: f64) -> Expr {
     Expr::Const(n)
 }
 
-/// Construct an Integer expression from a non-negative i64.
-/// For negative values, use `neg(integer(n.abs()))`.
-pub fn integer(n: i64) -> Expr {
-    assert!(
-        n >= 0,
-        "Integer must be non-negative; use neg(integer(..)) for negatives"
-    );
-    Expr::Integer(n / 10, LeastSigDigit::from_i64(n))
-}
-
 pub fn rational(n: i64, d: i64) -> Expr {
     Expr::Rational(Rational::new(n, d))
 }
@@ -337,7 +212,7 @@ pub fn named(nc: NamedConst) -> Expr {
 }
 
 pub fn pi() -> Expr {
-    Expr::Named(NamedConst::Pi)
+    Expr::FracPi(Rational::ONE)
 }
 
 pub fn e_const() -> Expr {

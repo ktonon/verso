@@ -261,28 +261,21 @@ impl Pattern {
             // Wildcard matches any expression
             (Pattern::Wildcard(name), _) => bind_expr(name, expr.clone(), bindings),
 
-            // ConstWild matches constants, named constants, integers, and rationals
+            // ConstWild matches constants, named constants, and rationals
             (Pattern::ConstWild(name), Expr::Const(_))
-            | (Pattern::ConstWild(name), Expr::Integer(_, _))
             | (Pattern::ConstWild(name), Expr::Rational(_))
             | (Pattern::ConstWild(name), Expr::Named(_)) => {
                 bind_expr(name, expr.clone(), bindings)
             }
             (Pattern::ConstWild(_), _) => false,
 
-            // IntWild matches Integer or Rational integer
-            (Pattern::IntWild(name), Expr::Integer(_, _)) => {
-                bind_expr(name, expr.clone(), bindings)
-            }
+            // IntWild matches Rational integer
             (Pattern::IntWild(name), Expr::Rational(r)) if r.is_integer() => {
                 bind_expr(name, expr.clone(), bindings)
             }
             (Pattern::IntWild(_), _) => false,
 
-            // IntEvenWild matches Integer/Rational with even value
-            (Pattern::IntEvenWild(name), Expr::Integer(_, lo)) if lo.is_even() => {
-                bind_expr(name, expr.clone(), bindings)
-            }
+            // IntEvenWild matches Rational with even value
             (Pattern::IntEvenWild(name), Expr::Rational(r))
                 if r.is_integer() && r.is_even() =>
             {
@@ -290,10 +283,7 @@ impl Pattern {
             }
             (Pattern::IntEvenWild(_), _) => false,
 
-            // IntOddWild matches Integer/Rational with odd value
-            (Pattern::IntOddWild(name), Expr::Integer(_, lo)) if lo.is_odd() => {
-                bind_expr(name, expr.clone(), bindings)
-            }
+            // IntOddWild matches Rational with odd value
             (Pattern::IntOddWild(name), Expr::Rational(r))
                 if r.is_integer() && r.is_odd() =>
             {
@@ -301,40 +291,24 @@ impl Pattern {
             }
             (Pattern::IntOddWild(_), _) => false,
 
-            // Const matches by value against Const, Integer, Rational, Named
+            // Const matches by value against Const, Rational, Named
             (Pattern::Const(n), Expr::Const(m)) => (n - m).abs() < f64::EPSILON,
-            (Pattern::Const(n), Expr::Integer(hi, lo)) => {
-                let int_val = (hi * 10 + lo.value()) as f64;
-                (n - int_val).abs() < f64::EPSILON
-            }
             (Pattern::Const(n), Expr::Rational(r)) => (n - r.value()).abs() < 1e-12,
             (Pattern::Const(n), Expr::Named(nc)) => (n - nc.value()).abs() < f64::EPSILON,
             (Pattern::Const(_), _) => false,
 
-            // Rational matches exact Rational, or by value against Const/Integer
+            // Rational matches exact Rational, or by value against Const
             (Pattern::Rational(pr), Expr::Rational(er)) => pr == er,
             (Pattern::Rational(pr), Expr::Const(n)) => (pr.value() - n).abs() < 1e-12,
-            (Pattern::Rational(pr), Expr::Integer(hi, lo)) => {
-                let int_val = (hi * 10 + lo.value()) as f64;
-                (pr.value() - int_val).abs() < 1e-12
-            }
             (Pattern::Rational(_), _) => false,
 
-            // Named matches named constants exactly, or by value against Const/Integer
+            // Named matches named constants exactly, or by value against Const
             (Pattern::Named(pnc), Expr::Named(enc)) => pnc == enc,
             (Pattern::Named(pnc), Expr::Const(n)) => (pnc.value() - n).abs() < 1e-12,
-            (Pattern::Named(pnc), Expr::Integer(hi, lo)) => {
-                let int_val = (hi * 10 + lo.value()) as f64;
-                (pnc.value() - int_val).abs() < 1e-12
-            }
             (Pattern::Named(_), _) => false,
 
-            // FracPi matches exact FracPi, or by value against Named Pi-variants
+            // FracPi matches exact FracPi
             (Pattern::FracPi(pr), Expr::FracPi(er)) => pr == er,
-            (Pattern::FracPi(pr), Expr::Named(nc)) => {
-                use std::f64::consts::PI;
-                (pr.value() * PI - nc.value()).abs() < 1e-12
-            }
             (Pattern::FracPi(_), _) => false,
 
             // Structural matching for binary operators
@@ -1795,7 +1769,7 @@ mod tests {
     use super::*;
     use crate::expr::{
         acos, add, asin, atan, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
-        min, mul, named, neg, round, scalar, sign, sin, sinh, tan, tanh,
+        min, mul, neg, round, scalar, sign, sin, sinh, tan, tanh,
     };
     use crate::pow;
 

@@ -29,18 +29,6 @@ impl ToTex for Index {
 impl ToTex for NamedConst {
     fn to_tex(&self) -> String {
         match self {
-            NamedConst::Pi => "\\pi".to_string(),
-            NamedConst::FracPi2 => "\\frac{\\pi}{2}".to_string(),
-            NamedConst::FracPi3 => "\\frac{\\pi}{3}".to_string(),
-            NamedConst::FracPi4 => "\\frac{\\pi}{4}".to_string(),
-            NamedConst::FracPi6 => "\\frac{\\pi}{6}".to_string(),
-            NamedConst::Frac2Pi3 => "\\frac{2\\pi}{3}".to_string(),
-            NamedConst::Frac3Pi4 => "\\frac{3\\pi}{4}".to_string(),
-            NamedConst::Frac5Pi4 => "\\frac{5\\pi}{4}".to_string(),
-            NamedConst::Frac5Pi6 => "\\frac{5\\pi}{6}".to_string(),
-            NamedConst::Frac7Pi6 => "\\frac{7\\pi}{6}".to_string(),
-            NamedConst::Frac3Pi2 => "\\frac{3\\pi}{2}".to_string(),
-            NamedConst::TwoPi => "2\\pi".to_string(),
             NamedConst::E => "e".to_string(),
             NamedConst::Sqrt2 => "\\sqrt{2}".to_string(),
             NamedConst::Sqrt3 => "\\sqrt{3}".to_string(),
@@ -85,7 +73,6 @@ impl ToTex for Expr {
                     format!("{}", n)
                 }
             }
-            Expr::Integer(hi, lo) => format!("{}", hi * 10 + lo.value()),
             Expr::Rational(r) => {
                 if r.is_integer() {
                     format!("{}", r.num())
@@ -199,7 +186,7 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
 fn is_sqrt_exp(exp: &Expr) -> bool {
     match exp {
         Expr::Const(n) => *n == 0.5,
-        Expr::Integer(_, _) | Expr::Rational(_) | Expr::FracPi(_) => false,
+        Expr::Rational(_) | Expr::FracPi(_) => false,
         Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
         _ => false,
     }

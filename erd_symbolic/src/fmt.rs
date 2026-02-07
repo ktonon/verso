@@ -48,9 +48,6 @@ pub fn fmt_colored(expr: &Expr) -> String {
             };
             format!("{}{}{}", color::CYAN, s, color::RESET)
         }
-        Expr::Integer(hi, lo) => {
-            format!("{}{}{}", color::CYAN, hi * 10 + lo.value(), color::RESET)
-        }
         Expr::Rational(r) => {
             format!("{}{}{}", color::CYAN, r, color::RESET)
         }
@@ -169,15 +166,6 @@ pub fn fmt_colored(expr: &Expr) -> String {
                                 maybe_paren_colored(b, expr)
                             );
                         }
-                        if let Expr::Integer(hi, lo) = a.as_ref() {
-                            return format!(
-                                "{}{}{}{}",
-                                color::CYAN,
-                                hi * 10 + lo.value(),
-                                color::RESET,
-                                maybe_paren_colored(b, expr)
-                            );
-                        }
                         if let Expr::Rational(r) = a.as_ref() {
                             return format!(
                                 "{}{}{}{}",
@@ -270,7 +258,7 @@ fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
 
 fn fmt_log_base_colored(base: &Expr) -> String {
     match base {
-        Expr::Const(_) | Expr::Integer(_, _) | Expr::Rational(_) | Expr::Var { .. } => {
+        Expr::Const(_) | Expr::Rational(_) | Expr::Var { .. } => {
             fmt_colored(base)
         }
         _ => format!(
@@ -286,18 +274,6 @@ fn fmt_log_base_colored(base: &Expr) -> String {
 impl Display for NamedConst {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NamedConst::Pi => write!(f, "π"),
-            NamedConst::FracPi2 => write!(f, "π/2"),
-            NamedConst::FracPi3 => write!(f, "π/3"),
-            NamedConst::FracPi4 => write!(f, "π/4"),
-            NamedConst::FracPi6 => write!(f, "π/6"),
-            NamedConst::Frac2Pi3 => write!(f, "2π/3"),
-            NamedConst::Frac3Pi4 => write!(f, "3π/4"),
-            NamedConst::Frac5Pi4 => write!(f, "5π/4"),
-            NamedConst::Frac5Pi6 => write!(f, "5π/6"),
-            NamedConst::Frac7Pi6 => write!(f, "7π/6"),
-            NamedConst::Frac3Pi2 => write!(f, "3π/2"),
-            NamedConst::TwoPi => write!(f, "2π"),
             NamedConst::E => write!(f, "e"),
             NamedConst::Sqrt2 => write!(f, "√2"),
             NamedConst::Sqrt3 => write!(f, "√3"),
@@ -348,7 +324,6 @@ impl std::fmt::Display for Expr {
                     write!(f, "{}", n)
                 }
             }
-            Expr::Integer(hi, lo) => write!(f, "{}", hi * 10 + lo.value()),
             Expr::Rational(r) => write!(f, "{}", r),
             Expr::Named(nc) => write!(f, "{}", nc),
             Expr::FracPi(r) => write!(f, "{}", fmt_frac_pi(r)),
@@ -404,14 +379,6 @@ impl std::fmt::Display for Expr {
                             if let Expr::Const(n) = a.as_ref() {
                                 return write!(f, "{}{}", n, maybe_paren(b, self));
                             }
-                            if let Expr::Integer(hi, lo) = a.as_ref() {
-                                return write!(
-                                    f,
-                                    "{}{}",
-                                    hi * 10 + lo.value(),
-                                    maybe_paren(b, self)
-                                );
-                            }
                             if let Expr::Rational(r) = a.as_ref() {
                                 return write!(f, "{}{}", r, maybe_paren(b, self));
                             }
@@ -464,7 +431,7 @@ fn fmt_const(n: f64) -> String {
 fn is_sqrt_exp(exp: &Expr) -> bool {
     match exp {
         Expr::Const(n) => *n == 0.5,
-        Expr::Integer(_, _) | Expr::Rational(_) | Expr::FracPi(_) => false,
+        Expr::Rational(_) | Expr::FracPi(_) => false,
         Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
         _ => false,
     }
@@ -486,7 +453,7 @@ fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a 
 
 fn fmt_log_base(base: &Expr) -> String {
     match base {
-        Expr::Const(_) | Expr::Integer(_, _) | Expr::Rational(_) | Expr::Var { .. } => {
+        Expr::Const(_) | Expr::Rational(_) | Expr::Var { .. } => {
             format!("{}", base)
         }
         _ => format!("({})", base),
