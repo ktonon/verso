@@ -1,4 +1,4 @@
-use crate::expr::{classify_mul, Expr, FnKind, MulKind, NamedConst};
+use crate::expr::{classify_mul, integer, neg, Expr, FnKind, MulKind, NamedConst};
 use crate::rule::RuleSet;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -80,7 +80,7 @@ impl BeamSearch {
 
         // Recursively try rewrites in children (with reduced depth)
         match expr {
-            Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => {}
+            Expr::Const(_) | Expr::Integer(_, _) | Expr::Named(_) | Expr::Var { .. } => {}
 
             Expr::Add(a, b) => {
                 for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
@@ -364,6 +364,7 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<Expr>) {
 fn try_eval_const(expr: &Expr) -> Option<f64> {
     match expr {
         Expr::Const(n) => Some(*n),
+        Expr::Integer(hi, lo) => Some((hi * 10 + lo.value()) as f64),
         Expr::Named(nc) => Some(nc.value()),
         Expr::Neg(a) => try_eval_const(a).map(|v| -v),
         Expr::Inv(a) => try_eval_const(a).map(|v| 1.0 / v),
@@ -471,41 +472,69 @@ fn try_fold_trig(kind: &FnKind, arg: &Expr) -> Option<Expr> {
     None
 }
 
-/// Pure constant evaluation: arithmetic on Const values and trig at constant arguments.
+/// Convert a numeric constant to Const or Integer (non-negative integers become Integer).
+fn is_numeric_const(expr: &Expr) -> Option<f64> {
+    match expr {
+        Expr::Const(n) => Some(*n),
+        Expr::Integer(hi, lo) => Some((hi * 10 + lo.value()) as f64),
+        _ => None,
+    }
+}
+
+/// Convert a f64 result to Integer (if non-negative integer) or Const.
+fn float_to_expr(val: f64) -> Expr {
+    if val.fract() == 0.0 && val >= 0.0 && val < (i64::MAX / 10) as f64 {
+        integer(val as i64)
+    } else if val.fract() == 0.0 && val < 0.0 && val > (i64::MIN / 10) as f64 {
+        neg(integer((-val) as i64))
+    } else {
+        Expr::Const(val)
+    }
+}
+
+/// Pure constant evaluation: arithmetic on Const/Integer values and trig at constant arguments.
 /// No normalization (no factor sorting, no mul shortcuts). This is mathematical evaluation,
 /// not a search strategy choice.
 fn eval_constants(expr: &Expr) -> Expr {
     match expr {
-        Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
-        Expr::Neg(a) => match eval_constants(a) {
-            Expr::Const(n) => Expr::Const(-n),
-            other => Expr::Neg(Box::new(other)),
-        },
-        Expr::Inv(a) => match eval_constants(a) {
-            Expr::Const(n) => Expr::Const(1.0 / n),
-            other => Expr::Inv(Box::new(other)),
-        },
+        Expr::Const(_) | Expr::Integer(_, _) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
+        Expr::Neg(a) => {
+            let inner = eval_constants(a);
+            match &inner {
+                Expr::Const(n) => Expr::Const(-n),
+                // Keep Neg(Integer) as-is; negatives use Neg wrapping
+                Expr::Integer(_, _) => Expr::Neg(Box::new(inner)),
+                _ => Expr::Neg(Box::new(inner)),
+            }
+        }
+        Expr::Inv(a) => {
+            let inner = eval_constants(a);
+            match is_numeric_const(&inner) {
+                Some(n) => Expr::Const(1.0 / n),
+                None => Expr::Inv(Box::new(inner)),
+            }
+        }
         Expr::Add(a, b) => {
             let left = eval_constants(a);
             let right = eval_constants(b);
-            match (&left, &right) {
-                (Expr::Const(x), Expr::Const(y)) => Expr::Const(x + y),
+            match (is_numeric_const(&left), is_numeric_const(&right)) {
+                (Some(x), Some(y)) => float_to_expr(x + y),
                 _ => Expr::Add(Box::new(left), Box::new(right)),
             }
         }
         Expr::Mul(a, b) => {
             let left = eval_constants(a);
             let right = eval_constants(b);
-            match (&left, &right) {
-                (Expr::Const(x), Expr::Const(y)) => Expr::Const(x * y),
+            match (is_numeric_const(&left), is_numeric_const(&right)) {
+                (Some(x), Some(y)) => float_to_expr(x * y),
                 _ => Expr::Mul(Box::new(left), Box::new(right)),
             }
         }
         Expr::Pow(base, exp) => {
             let b = eval_constants(base);
             let e = eval_constants(exp);
-            match (&b, &e) {
-                (Expr::Const(x), Expr::Const(y)) => Expr::Const(x.powf(*y)),
+            match (is_numeric_const(&b), is_numeric_const(&e)) {
+                (Some(x), Some(y)) => float_to_expr(x.powf(y)),
                 _ => Expr::Pow(Box::new(b), Box::new(e)),
             }
         }
@@ -604,6 +633,10 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
 
     match expr {
         Expr::Const(n) => format!("Const({})", n),
+        Expr::Integer(hi, lo) => {
+            // Same key format as equivalent Const for dedup
+            format!("Const({})", (hi * 10 + lo.value()) as f64)
+        }
         Expr::Named(nc) => format!("Named({:?})", nc),
         Expr::Var { name, indices } => {
             if indices.is_empty() {
@@ -681,7 +714,7 @@ fn collect_linear_terms(expr: &Expr) -> Expr {
 
     for term in terms {
         if let Some((base, coeff)) = extract_term(&term) {
-            if matches!(base, Expr::Const(_)) {
+            if matches!(base, Expr::Const(_) | Expr::Integer(_, _)) {
                 const_sum += coeff;
                 continue;
             }
@@ -758,6 +791,7 @@ fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
 fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
     match expr {
         Expr::Const(c) => Some((Expr::Const(1.0), *c)),
+        Expr::Integer(hi, lo) => Some((Expr::Const(1.0), (hi * 10 + lo.value()) as f64)),
         Expr::Neg(inner) => {
             if let Some((base, coeff)) = extract_term(inner) {
                 Some((base, -coeff))
@@ -766,8 +800,10 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
             }
         }
         Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
-            (Expr::Const(c), other) => Some((other.clone(), *c)),
-            (other, Expr::Const(c)) => Some((other.clone(), *c)),
+            (Expr::Const(c), other) | (other, Expr::Const(c)) => Some((other.clone(), *c)),
+            (Expr::Integer(hi, lo), other) | (other, Expr::Integer(hi, lo)) => {
+                Some((other.clone(), (hi * 10 + lo.value()) as f64))
+            }
             // Handle nested Mul with leading constant: Mul(Mul(c, x), y) => c * Mul(x, y)
             (Expr::Mul(inner_a, inner_b), _) => {
                 if let Expr::Const(c) = inner_a.as_ref() {

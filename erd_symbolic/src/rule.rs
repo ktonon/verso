@@ -25,6 +25,9 @@ pub enum VarPattern {
 pub enum Pattern {
     Wildcard(String),
     ConstWild(String),
+    IntWild(String),     // Matches any Integer
+    IntEvenWild(String), // Matches Integer with even last digit
+    IntOddWild(String),  // Matches Integer with odd last digit
     Const(f64),
     Named(NamedConst),
     Add(Box<Pattern>, Box<Pattern>),
@@ -48,6 +51,18 @@ pub fn wildcard(name: &str) -> Pattern {
 
 pub fn const_wild(name: &str) -> Pattern {
     Pattern::ConstWild(name.to_string())
+}
+
+pub fn int_wild(name: &str) -> Pattern {
+    Pattern::IntWild(name.to_string())
+}
+
+pub fn int_even_wild(name: &str) -> Pattern {
+    Pattern::IntEvenWild(name.to_string())
+}
+
+pub fn int_odd_wild(name: &str) -> Pattern {
+    Pattern::IntOddWild(name.to_string())
 }
 
 pub fn p_const(n: f64) -> Pattern {
@@ -235,19 +250,48 @@ impl Pattern {
             // Wildcard matches any expression
             (Pattern::Wildcard(name), _) => bind_expr(name, expr.clone(), bindings),
 
-            // ConstWild matches constants and named constants
+            // ConstWild matches constants, named constants, and integers
             (Pattern::ConstWild(name), Expr::Const(_)) => bind_expr(name, expr.clone(), bindings),
+            (Pattern::ConstWild(name), Expr::Integer(_, _)) => {
+                bind_expr(name, expr.clone(), bindings)
+            }
             (Pattern::ConstWild(name), Expr::Named(_)) => bind_expr(name, expr.clone(), bindings),
             (Pattern::ConstWild(_), _) => false,
 
-            // Const matches equal constants (including named constants by value)
+            // IntWild matches any Integer
+            (Pattern::IntWild(name), Expr::Integer(_, _)) => {
+                bind_expr(name, expr.clone(), bindings)
+            }
+            (Pattern::IntWild(_), _) => false,
+
+            // IntEvenWild matches Integer with even last digit
+            (Pattern::IntEvenWild(name), Expr::Integer(_, lo)) if lo.is_even() => {
+                bind_expr(name, expr.clone(), bindings)
+            }
+            (Pattern::IntEvenWild(_), _) => false,
+
+            // IntOddWild matches Integer with odd last digit
+            (Pattern::IntOddWild(name), Expr::Integer(_, lo)) if lo.is_odd() => {
+                bind_expr(name, expr.clone(), bindings)
+            }
+            (Pattern::IntOddWild(_), _) => false,
+
+            // Const matches equal constants (including named constants and integers by value)
             (Pattern::Const(n), Expr::Const(m)) => (n - m).abs() < f64::EPSILON,
+            (Pattern::Const(n), Expr::Integer(hi, lo)) => {
+                let int_val = (hi * 10 + lo.value()) as f64;
+                (n - int_val).abs() < f64::EPSILON
+            }
             (Pattern::Const(n), Expr::Named(nc)) => (n - nc.value()).abs() < f64::EPSILON,
             (Pattern::Const(_), _) => false,
 
-            // Named matches named constants exactly, or by value against Const
+            // Named matches named constants exactly, or by value against Const/Integer
             (Pattern::Named(pnc), Expr::Named(enc)) => pnc == enc,
             (Pattern::Named(pnc), Expr::Const(n)) => (pnc.value() - n).abs() < f64::EPSILON,
+            (Pattern::Named(pnc), Expr::Integer(hi, lo)) => {
+                let int_val = (hi * 10 + lo.value()) as f64;
+                (pnc.value() - int_val).abs() < f64::EPSILON
+            }
             (Pattern::Named(_), _) => false,
 
             // Structural matching for binary operators
@@ -341,7 +385,11 @@ impl Pattern {
     /// Panics if a wildcard is not found in bindings.
     pub fn substitute(&self, bindings: &Bindings) -> Expr {
         match self {
-            Pattern::Wildcard(name) | Pattern::ConstWild(name) => bindings
+            Pattern::Wildcard(name)
+            | Pattern::ConstWild(name)
+            | Pattern::IntWild(name)
+            | Pattern::IntEvenWild(name)
+            | Pattern::IntOddWild(name) => bindings
                 .exprs
                 .get(name)
                 .unwrap_or_else(|| panic!("Unbound wildcard: {}", name))
@@ -904,6 +952,38 @@ impl RuleSet {
             "tan_def",
             p_tan(x()),
             p_mul(p_sin(x()), p_inv(p_cos(x()))),
+        ));
+
+        // === Integer periodicity rules ===
+        // sin(n * π) = 0 for any integer n
+        rs.add(rule(
+            "sin_int_mul_pi",
+            p_sin(p_mul(int_wild("n"), pi())),
+            p_const(0.0),
+        ));
+        // cos(2k * π) = 1 for even integer 2k
+        rs.add(rule(
+            "cos_even_mul_pi",
+            p_cos(p_mul(int_even_wild("n"), pi())),
+            p_const(1.0),
+        ));
+        // cos((2k+1) * π) = -1 for odd integer
+        rs.add(rule(
+            "cos_odd_mul_pi",
+            p_cos(p_mul(int_odd_wild("n"), pi())),
+            p_neg(p_const(1.0)),
+        ));
+        // sin(x + 2k * π) = sin(x) — strip even multiples of π
+        rs.add(rule(
+            "sin_shift_even_pi",
+            p_sin(p_add(x(), p_mul(int_even_wild("n"), pi()))),
+            p_sin(x()),
+        ));
+        // cos(x + 2k * π) = cos(x) — strip even multiples of π
+        rs.add(rule(
+            "cos_shift_even_pi",
+            p_cos(p_add(x(), p_mul(int_even_wild("n"), pi()))),
+            p_cos(x()),
         ));
 
         // === Double angle formulas ===

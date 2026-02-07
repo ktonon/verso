@@ -1,8 +1,72 @@
-#[derive(Debug, Clone, PartialEq)]
+/// Least significant digit of a non-negative integer, enabling parity matching in rules.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LeastSigDigit {
+    Zero,
+    One,
+    Two,
+    Three,
+    Four,
+    Five,
+    Six,
+    Seven,
+    Eight,
+    Nine,
+}
+
+impl LeastSigDigit {
+    pub fn value(self) -> i64 {
+        match self {
+            LeastSigDigit::Zero => 0,
+            LeastSigDigit::One => 1,
+            LeastSigDigit::Two => 2,
+            LeastSigDigit::Three => 3,
+            LeastSigDigit::Four => 4,
+            LeastSigDigit::Five => 5,
+            LeastSigDigit::Six => 6,
+            LeastSigDigit::Seven => 7,
+            LeastSigDigit::Eight => 8,
+            LeastSigDigit::Nine => 9,
+        }
+    }
+
+    pub fn from_i64(n: i64) -> Self {
+        match (n.unsigned_abs()) % 10 {
+            0 => LeastSigDigit::Zero,
+            1 => LeastSigDigit::One,
+            2 => LeastSigDigit::Two,
+            3 => LeastSigDigit::Three,
+            4 => LeastSigDigit::Four,
+            5 => LeastSigDigit::Five,
+            6 => LeastSigDigit::Six,
+            7 => LeastSigDigit::Seven,
+            8 => LeastSigDigit::Eight,
+            9 => LeastSigDigit::Nine,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn is_even(self) -> bool {
+        matches!(
+            self,
+            LeastSigDigit::Zero
+                | LeastSigDigit::Two
+                | LeastSigDigit::Four
+                | LeastSigDigit::Six
+                | LeastSigDigit::Eight
+        )
+    }
+
+    pub fn is_odd(self) -> bool {
+        !self.is_even()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     // Atoms
     Const(f64),
-    Named(NamedConst), // Named mathematical constant (π, e, π/2, etc.)
+    Integer(i64, LeastSigDigit), // value = hi * 10 + digit.value(), non-negative
+    Named(NamedConst),           // Named mathematical constant (π, e, π/2, etc.)
     Var { name: String, indices: Vec<Index> },
 
     // Arithmetic
@@ -15,6 +79,34 @@ pub enum Expr {
     // Functions
     Fn(FnKind, Box<Expr>),
     FnN(FnKind, Vec<Expr>),
+}
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Expr::Const(a), Expr::Const(b)) => a == b,
+            (Expr::Integer(hi_a, lo_a), Expr::Integer(hi_b, lo_b)) => {
+                hi_a == hi_b && lo_a == lo_b
+            }
+            (Expr::Named(a), Expr::Named(b)) => a == b,
+            (Expr::Var { name: n1, indices: i1 }, Expr::Var { name: n2, indices: i2 }) => {
+                n1 == n2 && i1 == i2
+            }
+            (Expr::Add(a1, b1), Expr::Add(a2, b2))
+            | (Expr::Mul(a1, b1), Expr::Mul(a2, b2))
+            | (Expr::Pow(a1, b1), Expr::Pow(a2, b2)) => a1 == a2 && b1 == b2,
+            (Expr::Neg(a), Expr::Neg(b)) | (Expr::Inv(a), Expr::Inv(b)) => a == b,
+            (Expr::Fn(k1, a), Expr::Fn(k2, b)) => k1 == k2 && a == b,
+            (Expr::FnN(k1, a), Expr::FnN(k2, b)) => k1 == k2 && a == b,
+            // Cross-type: Const <-> Integer by value
+            (Expr::Const(f), Expr::Integer(hi, lo))
+            | (Expr::Integer(hi, lo), Expr::Const(f)) => {
+                let int_val = hi * 10 + lo.value();
+                (*f - int_val as f64).abs() < f64::EPSILON
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -130,7 +222,7 @@ impl NamedConst {
 impl Expr {
     pub fn complexity(&self) -> usize {
         match self {
-            Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } => 1,
+            Expr::Const(_) | Expr::Integer(_, _) | Expr::Named(_) | Expr::Var { .. } => 1,
             Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + a.complexity(),
             Expr::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
             Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
@@ -141,7 +233,7 @@ impl Expr {
 
     pub fn precedence(&self) -> u8 {
         match self {
-            Expr::Const(_) | Expr::Named(_) | Expr::Var { .. } | Expr::Fn(_, _) | Expr::FnN(_, _) => 100,
+            Expr::Const(_) | Expr::Integer(_, _) | Expr::Named(_) | Expr::Var { .. } | Expr::Fn(_, _) | Expr::FnN(_, _) => 100,
             Expr::Pow(_, _) => 80,
             Expr::Neg(_) | Expr::Inv(_) => 70,
             Expr::Mul(_, _) => 60,
@@ -180,6 +272,13 @@ pub fn lower(name: &str) -> Index {
 
 pub fn constant(n: f64) -> Expr {
     Expr::Const(n)
+}
+
+/// Construct an Integer expression from a non-negative i64.
+/// For negative values, use `neg(integer(n.abs()))`.
+pub fn integer(n: i64) -> Expr {
+    assert!(n >= 0, "Integer must be non-negative; use neg(integer(..)) for negatives");
+    Expr::Integer(n / 10, LeastSigDigit::from_i64(n))
 }
 
 pub fn named(nc: NamedConst) -> Expr {

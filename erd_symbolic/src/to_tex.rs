@@ -66,6 +66,7 @@ impl ToTex for Expr {
                     format!("{}", n)
                 }
             }
+            Expr::Integer(hi, lo) => format!("{}", hi * 10 + lo.value()),
             Expr::Named(nc) => nc.to_tex(),
             Expr::Var { name, indices } => {
                 if indices.is_empty() {
@@ -169,6 +170,7 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
 fn is_sqrt_exp(exp: &Expr) -> bool {
     match exp {
         Expr::Const(n) => *n == 0.5,
+        Expr::Integer(_, _) => false,
         Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
         _ => false,
     }

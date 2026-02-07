@@ -32,6 +32,9 @@ pub fn fmt_colored(expr: &Expr) -> String {
             };
             format!("{}{}{}", color::CYAN, s, color::RESET)
         }
+        Expr::Integer(hi, lo) => {
+            format!("{}{}{}", color::CYAN, hi * 10 + lo.value(), color::RESET)
+        }
         Expr::Named(nc) => {
             format!("{}{}{}", color::MAGENTA, nc, color::RESET)
         }
@@ -99,14 +102,18 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 _ => {
                     let mul_kind = classify_mul(a, b);
                     // Coefficient notation: 2x instead of 2 * x
-                    if let Expr::Const(n) = a.as_ref() {
-                        if mul_kind == MulKind::Scalar {
+                    if mul_kind == MulKind::Scalar {
+                        if let Expr::Const(n) = a.as_ref() {
                             let coeff = if n.fract() == 0.0 {
                                 format!("{}", *n as i64)
                             } else {
                                 format!("{}", n)
                             };
                             return format!("{}{}{}{}", color::CYAN, coeff, color::RESET,
+                                maybe_paren_colored(b, expr));
+                        }
+                        if let Expr::Integer(hi, lo) = a.as_ref() {
+                            return format!("{}{}{}{}", color::CYAN, hi * 10 + lo.value(), color::RESET,
                                 maybe_paren_colored(b, expr));
                         }
                     }
@@ -155,7 +162,7 @@ fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
 
 fn fmt_log_base_colored(base: &Expr) -> String {
     match base {
-        Expr::Const(_) | Expr::Var { .. } => fmt_colored(base),
+        Expr::Const(_) | Expr::Integer(_, _) | Expr::Var { .. } => fmt_colored(base),
         _ => format!("{}({}{}){}", color::DIM, color::RESET, fmt_colored(base), color::DIM),
     }
 }
@@ -222,6 +229,7 @@ impl std::fmt::Display for Expr {
                     write!(f, "{}", n)
                 }
             }
+            Expr::Integer(hi, lo) => write!(f, "{}", hi * 10 + lo.value()),
             Expr::Named(nc) => write!(f, "{}", nc),
             Expr::Var { name, indices } => {
                 if indices.is_empty() {
@@ -271,9 +279,12 @@ impl std::fmt::Display for Expr {
                     _ => {
                         let mul_kind = classify_mul(a, b);
                         // Coefficient notation: 2x instead of 2 * x
-                        if let Expr::Const(n) = a.as_ref() {
-                            if mul_kind == MulKind::Scalar {
+                        if mul_kind == MulKind::Scalar {
+                            if let Expr::Const(n) = a.as_ref() {
                                 return write!(f, "{}{}", n, maybe_paren(b, self));
+                            }
+                            if let Expr::Integer(hi, lo) = a.as_ref() {
+                                return write!(f, "{}{}", hi * 10 + lo.value(), maybe_paren(b, self));
                             }
                         }
                         // Choose operator based on multiplication kind (Einstein notation)
@@ -324,6 +335,7 @@ fn fmt_const(n: f64) -> String {
 fn is_sqrt_exp(exp: &Expr) -> bool {
     match exp {
         Expr::Const(n) => *n == 0.5,
+        Expr::Integer(_, _) => false,
         Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Const(n) if *n == 2.0),
         _ => false,
     }
@@ -345,7 +357,7 @@ fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a 
 
 fn fmt_log_base(base: &Expr) -> String {
     match base {
-        Expr::Const(_) | Expr::Var { .. } => format!("{}", base),
+        Expr::Const(_) | Expr::Integer(_, _) | Expr::Var { .. } => format!("{}", base),
         _ => format!("({})", base),
     }
 }

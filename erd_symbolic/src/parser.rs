@@ -1,7 +1,7 @@
 use crate::expr::{
-    acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, inv, ln, max, min, mul,
-    named, neg, pow, round, scalar, sign, sin, sinh, sqrt, tan, tanh, tensor, Index, IndexPosition,
-    NamedConst,
+    acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, integer, inv, ln, max,
+    min, mul, named, neg, pow, round, scalar, sign, sin, sinh, sqrt, tan, tanh, tensor, Index,
+    IndexPosition, NamedConst,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -271,6 +271,11 @@ impl Parser {
     fn parse_primary(&mut self) -> Result<crate::expr::Expr, ParseError> {
         match self.next() {
             Some(Token::Number(s)) => {
+                if !s.contains('.') {
+                    if let Ok(n) = s.parse::<i64>() {
+                        return Ok(integer(n));
+                    }
+                }
                 let n: f64 = s
                     .parse()
                     .map_err(|_| ParseError::InvalidNumber(s.clone()))?;
