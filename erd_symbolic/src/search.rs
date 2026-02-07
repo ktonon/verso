@@ -578,7 +578,8 @@ fn fold_constants(expr: &Expr) -> Expr {
                     if let Some(nc) = try_fold_pi_fraction(&left, &right) {
                         Expr::Named(nc)
                     } else {
-                        Expr::Mul(Box::new(left), Box::new(right))
+                        // Normalize factor order for canonical form
+                        normalize_mul(Expr::Mul(Box::new(left), Box::new(right)))
                     }
                 }
             }
@@ -805,6 +806,79 @@ fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
     }
 }
 
+fn flatten_mul(expr: &Expr, out: &mut Vec<Expr>) {
+    match expr {
+        Expr::Mul(a, b) => {
+            flatten_mul(a, out);
+            flatten_mul(b, out);
+        }
+        _ => out.push(expr.clone()),
+    }
+}
+
+/// Normalize a Mul expression by sorting factors and combining like terms into powers.
+/// Constants come first, then factors sorted by canonical key.
+/// Identical factors are combined: x * x -> x^2
+fn normalize_mul(expr: Expr) -> Expr {
+    if !matches!(expr, Expr::Mul(_, _)) {
+        return expr;
+    }
+
+    let mut factors = Vec::new();
+    flatten_mul(&expr, &mut factors);
+
+    // Sort: constants/named first (by value), then by canonical key
+    factors.sort_by(|a, b| {
+        let key_a = match a {
+            Expr::Const(n) => (0, format!("{:020.10}", n)),
+            Expr::Named(nc) => (0, format!("{:020.10}", nc.value())),
+            _ => (1, canonical_key(a)),
+        };
+        let key_b = match b {
+            Expr::Const(n) => (0, format!("{:020.10}", n)),
+            Expr::Named(nc) => (0, format!("{:020.10}", nc.value())),
+            _ => (1, canonical_key(b)),
+        };
+        key_a.cmp(&key_b)
+    });
+
+    // Combine identical factors into powers: x * x -> x^2
+    let mut combined: Vec<Expr> = Vec::new();
+    let mut i = 0;
+    while i < factors.len() {
+        let current = &factors[i];
+        let current_key = canonical_key(current);
+        let mut count = 1;
+
+        // Count consecutive identical factors
+        while i + count < factors.len() && canonical_key(&factors[i + count]) == current_key {
+            count += 1;
+        }
+
+        if count > 1 {
+            // Combine into power: x * x * x -> x^3
+            combined.push(Expr::Pow(
+                Box::new(current.clone()),
+                Box::new(Expr::Const(count as f64)),
+            ));
+        } else {
+            combined.push(current.clone());
+        }
+        i += count;
+    }
+
+    // Rebuild left-associative Mul tree
+    if combined.is_empty() {
+        return Expr::Const(1.0);
+    }
+    let mut iter = combined.into_iter();
+    let mut acc = iter.next().unwrap();
+    for factor in iter {
+        acc = Expr::Mul(Box::new(acc), Box::new(factor));
+    }
+    acc
+}
+
 fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
     match expr {
         Expr::Const(c) => Some((Expr::Const(1.0), *c)),
@@ -818,6 +892,24 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
         Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
             (Expr::Const(c), other) => Some((other.clone(), *c)),
             (other, Expr::Const(c)) => Some((other.clone(), *c)),
+            // Handle nested Mul with leading constant: Mul(Mul(c, x), y) => c * Mul(x, y)
+            (Expr::Mul(inner_a, inner_b), _) => {
+                if let Expr::Const(c) = inner_a.as_ref() {
+                    // Mul(Mul(c, x), y) => c * Mul(x, y)
+                    let rest = Expr::Mul(inner_b.clone(), b.clone());
+                    Some((rest, *c))
+                } else if let Some((inner_base, inner_coeff)) = extract_term(a) {
+                    // Recursively extract from nested Mul
+                    if (inner_coeff - 1.0).abs() > f64::EPSILON {
+                        let rest = Expr::Mul(Box::new(inner_base), b.clone());
+                        Some((rest, inner_coeff))
+                    } else {
+                        Some((expr.clone(), 1.0))
+                    }
+                } else {
+                    Some((expr.clone(), 1.0))
+                }
+            }
             // Handle Neg inside Mul: Mul(Neg(x), y) => -1 * Mul(x, y)
             (Expr::Neg(inner_a), _) => {
                 let new_mul = Expr::Mul(inner_a.clone(), b.clone());
@@ -919,11 +1011,11 @@ mod tests {
 
     #[test]
     fn simplify_inv_mul_reorder_to_div() {
-        // (1/x) * y = y / x
+        // (1/x) * y normalized to (1/x) * y (Inv before Var in canonical order)
         let rules = RuleSet::standard();
         let expr = mul(div(constant(1.0), scalar("x")), scalar("y"));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, div(scalar("y"), scalar("x")));
+        assert_eq!(result, mul(inv(scalar("x")), scalar("y")));
     }
 
     #[test]
@@ -938,8 +1030,9 @@ mod tests {
             neg(constant(1.0)),
         );
         let result = simplify(&expr, &rules);
+        // Normalized: (2 * (1/x)) * y - 1 (factors sorted: const, Inv, Var)
         let expected = add(
-            mul(constant(2.0), div(scalar("y"), scalar("x"))),
+            mul(mul(constant(2.0), inv(scalar("x"))), scalar("y")),
             constant(-1.0),
         );
         assert_eq!(result, expected);
@@ -1317,7 +1410,8 @@ mod tests {
         let rules = RuleSet::trigonometric();
         let expr = add(ln(scalar("a")), neg(ln(scalar("b"))));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, ln(mul(scalar("a"), inv(scalar("b")))));
+        // Normalized: ln((1/b) * a) since Inv comes before Var
+        assert_eq!(result, ln(mul(inv(scalar("b")), scalar("a"))));
     }
 
     #[test]
@@ -1328,8 +1422,8 @@ mod tests {
         let rules = RuleSet::trigonometric();
         let expr = mul(scalar("n"), ln(scalar("a")));
         let result = simplify(&expr, &rules);
-        // Current search keeps the multiplicative form as the preferred canonical representation.
-        assert_eq!(result, mul(scalar("n"), ln(scalar("a"))));
+        // Current search keeps the multiplicative form, normalized: ln(a) * n (Fn before Var)
+        assert_eq!(result, mul(ln(scalar("a")), scalar("n")));
     }
 
     #[test]
@@ -1731,13 +1825,14 @@ mod tests {
 
     #[test]
     fn simplify_preserves_structure_when_no_rules_match() {
-        // (x + y) * (a + b) should remain unchanged with standard rules
-        // (no distribution in standard ruleset)
+        // (x + y) * (a + b) should remain structurally similar with standard rules
+        // (no distribution in standard ruleset, but factors are normalized to canonical order)
         let rules = RuleSet::standard();
 
         let expr = mul(add(scalar("x"), scalar("y")), add(scalar("a"), scalar("b")));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, expr);
+        // Factors are normalized: (a + b) * (x + y) since "a" < "x" alphabetically
+        assert_eq!(result, mul(add(scalar("a"), scalar("b")), add(scalar("x"), scalar("y"))));
     }
 
     #[test]
@@ -1999,7 +2094,8 @@ mod tests {
             neg(mul(scalar("x"), scalar("b"))),
         );
         let result = simplify(&expr, &rules);
-        assert_eq!(result, mul(scalar("x"), scalar("a")));
+        // Factors normalized: a * x since "a" < "x"
+        assert_eq!(result, mul(scalar("a"), scalar("x")));
     }
 
     #[test]
@@ -2098,10 +2194,11 @@ mod tests {
         // x * (y + z) has complexity 5, x*y + x*z has complexity 7
         // Beam search explores the distributed form, but since no follow-up rules
         // reduce complexity below the original, the original is returned.
+        // Factors are normalized: (y + z) * x since Add comes before Var
         let rules = RuleSet::tensor();
         let expr = mul(scalar("x"), add(scalar("y"), scalar("z")));
         let result = simplify(&expr, &rules);
-        assert_eq!(result, expr);
+        assert_eq!(result, mul(add(scalar("y"), scalar("z")), scalar("x")));
     }
 
     #[test]
@@ -2196,8 +2293,11 @@ mod tests {
             tensor("v", vec![upper("sigma")]),
         );
         let result = simplify(&expr, &rules);
-        // No contraction, should remain unchanged
-        assert_eq!(result, expr);
+        // No contraction, factors normalized: v * δ (ASCII 'v' < Unicode 'δ')
+        assert_eq!(result, mul(
+            tensor("v", vec![upper("sigma")]),
+            tensor("δ", vec![upper("mu"), lower("nu")]),
+        ));
     }
 
     #[test]
