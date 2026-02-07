@@ -1109,6 +1109,247 @@ fn extract_term(expr: &Expr) -> Option<(Expr, f64)> {
     }
 }
 
+/// Try to factor a difference of squares: a² - b² = (a + b)(a - b)
+fn try_factor_difference_of_squares(terms: &[Expr]) -> Option<Expr> {
+    if terms.len() != 2 {
+        return None;
+    }
+
+    // Find the positive and negative square terms
+    let mut pos_base: Option<Expr> = None;
+    let mut neg_base: Option<Expr> = None;
+
+    for term in terms {
+        // Check for positive square
+        if let Some(base) = get_square_base(term) {
+            if pos_base.is_none() {
+                pos_base = Some(base);
+                continue;
+            }
+        }
+
+        // Check for negative square: -x² or Neg(x²)
+        if let Expr::Neg(inner) = term {
+            if let Some(base) = get_square_base(inner) {
+                neg_base = Some(base);
+                continue;
+            }
+        }
+
+        // Check for negative constant (e.g., -1, -4, -9)
+        if let Expr::Const(n) = term {
+            if *n < 0.0 {
+                let abs_n = n.abs();
+                let sqrt = abs_n.sqrt();
+                if (sqrt * sqrt - abs_n).abs() < f64::EPSILON {
+                    // Check if it's a perfect square (integer or close to it)
+                    if sqrt.fract() < f64::EPSILON || (1.0 - sqrt.fract()) < f64::EPSILON {
+                        neg_base = Some(Expr::Const(sqrt.round()));
+                        continue;
+                    }
+                }
+            }
+        }
+    }
+
+    // Need one positive and one negative square
+    if let (Some(a), Some(b)) = (pos_base, neg_base) {
+        // a² - b² = (a + b)(a - b)
+        let sum = Expr::Add(Box::new(a.clone()), Box::new(b.clone()));
+        let diff = Expr::Add(Box::new(a), Box::new(Expr::Neg(Box::new(b))));
+        return Some(Expr::Mul(Box::new(sum), Box::new(diff)));
+    }
+
+    None
+}
+
+/// Try to factor a perfect square trinomial: a² + 2ab + b² = (a + b)²
+/// Also handles: a² - 2ab + b² = (a - b)²
+fn try_factor_perfect_square(terms: &[Expr]) -> Option<Expr> {
+    if terms.len() != 3 {
+        return None;
+    }
+
+    // Find square terms and the middle term
+    let mut squares: Vec<(usize, Expr)> = Vec::new(); // (index, base of the square)
+    let mut middle_idx = None;
+
+    for (i, term) in terms.iter().enumerate() {
+        if let Some(base) = get_square_base(term) {
+            squares.push((i, base));
+        } else {
+            middle_idx = Some(i);
+        }
+    }
+
+    // Need exactly 2 squares and 1 middle term
+    if squares.len() != 2 || middle_idx.is_none() {
+        return None;
+    }
+
+    let middle_idx = middle_idx.unwrap();
+    let middle = &terms[middle_idx];
+    let (_, base_a) = &squares[0];
+    let (_, base_b) = &squares[1];
+
+    // Check if middle term is ±2ab
+    let expected_middle = Expr::Mul(
+        Box::new(Expr::Mul(
+            Box::new(Expr::Const(2.0)),
+            Box::new(base_a.clone()),
+        )),
+        Box::new(base_b.clone()),
+    );
+
+    let middle_key = canonical_key(middle);
+
+    // Check for +2ab (results in (a + b)²)
+    let expected_key = canonical_key(&expected_middle);
+    if middle_key == expected_key {
+        let sum = Expr::Add(Box::new(base_a.clone()), Box::new(base_b.clone()));
+        return Some(Expr::Pow(Box::new(sum), Box::new(Expr::Const(2.0))));
+    }
+
+    // Check for -2ab (results in (a - b)²)
+    let neg_expected = Expr::Neg(Box::new(expected_middle.clone()));
+    let neg_key = canonical_key(&neg_expected);
+    if middle_key == neg_key {
+        let diff = Expr::Add(
+            Box::new(base_a.clone()),
+            Box::new(Expr::Neg(Box::new(base_b.clone()))),
+        );
+        return Some(Expr::Pow(Box::new(diff), Box::new(Expr::Const(2.0))));
+    }
+
+    // Also check with coefficient extracted: middle might be Mul(Const(-2), Mul(a, b))
+    if let Some((base, coeff)) = extract_term(middle) {
+        let base_key = canonical_key(&base);
+        let a_key = canonical_key(base_a);
+        let b_key = canonical_key(base_b);
+
+        // Get numeric values of bases if they are constants
+        let a_val = match base_a {
+            Expr::Const(n) => Some(*n),
+            _ => None,
+        };
+        let b_val = match base_b {
+            Expr::Const(n) => Some(*n),
+            _ => None,
+        };
+
+        // For (a + b)², middle term should be 2ab
+        // If a or b is a constant, the coefficient might be 2*const instead of 2
+        let expected_coeff = match (a_val, b_val) {
+            (Some(a), None) => 2.0 * a, // e.g., 4 + 4x + x² → coeff should be 2*2=4
+            (None, Some(b)) => 2.0 * b,
+            _ => 2.0,
+        };
+
+        // Determine which base the middle term should match
+        let expected_base_key = match (a_val, b_val) {
+            (Some(_), None) => b_key.clone(),  // middle is 2*a * b, base is b
+            (None, Some(_)) => a_key.clone(),  // middle is 2 * a * b, base is a
+            _ => {
+                // Both variables: middle should be a*b
+                let ab = Expr::Mul(Box::new(base_a.clone()), Box::new(base_b.clone()));
+                canonical_key(&ab)
+            }
+        };
+
+        if (coeff - expected_coeff).abs() < f64::EPSILON && base_key == expected_base_key {
+            // +2ab → (a + b)²
+            let sum = Expr::Add(Box::new(base_a.clone()), Box::new(base_b.clone()));
+            return Some(Expr::Pow(Box::new(sum), Box::new(Expr::Const(2.0))));
+        } else if (coeff + expected_coeff).abs() < f64::EPSILON && base_key == expected_base_key {
+            // -2ab → (a - b)²
+            let diff = Expr::Add(
+                Box::new(base_a.clone()),
+                Box::new(Expr::Neg(Box::new(base_b.clone()))),
+            );
+            return Some(Expr::Pow(Box::new(diff), Box::new(Expr::Const(2.0))));
+        }
+    }
+
+    None
+}
+
+/// Get the base of a square term, if it is one.
+/// x² → Some(x), 4 → Some(2), a²b² → None (too complex)
+fn get_square_base(expr: &Expr) -> Option<Expr> {
+    match expr {
+        // x^2 → x
+        Expr::Pow(base, exp) => {
+            if let Expr::Const(n) = exp.as_ref() {
+                if (*n - 2.0).abs() < f64::EPSILON {
+                    return Some((**base).clone());
+                }
+            }
+            None
+        }
+        // Constant that's a perfect square
+        Expr::Const(n) => {
+            if *n > 0.0 {
+                let sqrt = n.sqrt();
+                if (sqrt * sqrt - n).abs() < f64::EPSILON && sqrt.fract() == 0.0 {
+                    return Some(Expr::Const(sqrt));
+                }
+            }
+            None
+        }
+        // x * x → x (for cases where it wasn't normalized to x^2)
+        Expr::Mul(a, b) => {
+            if canonical_key(a) == canonical_key(b) {
+                return Some((**a).clone());
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Try to find a perfect square subset within the terms and factor it.
+/// e.g., a² + 2ab + b² - 1 → (a+b)² - 1 → ((a+b)+1)((a+b)-1)
+fn try_factor_with_perfect_square_subset(terms: &[Expr]) -> Option<Expr> {
+    // For each combination of 3 terms, check if they form a perfect square
+    let n = terms.len();
+    if n < 4 {
+        return None;
+    }
+
+    for i in 0..n {
+        for j in (i + 1)..n {
+            for k in (j + 1)..n {
+                let subset = vec![terms[i].clone(), terms[j].clone(), terms[k].clone()];
+                if let Some(square) = try_factor_perfect_square(&subset) {
+                    // Found a perfect square! Now collect the remaining terms
+                    let mut remainder: Vec<Expr> = Vec::new();
+                    for (idx, term) in terms.iter().enumerate() {
+                        if idx != i && idx != j && idx != k {
+                            remainder.push(term.clone());
+                        }
+                    }
+
+                    // Build new_expr = square + remainder
+                    let mut new_terms = vec![square];
+                    new_terms.extend(remainder);
+                    let new_sum = build_sum(&new_terms);
+
+                    // Now try to factor this (might be difference of squares)
+                    let factored = try_factor_sum(&new_sum);
+                    if factored.complexity() < new_sum.complexity() {
+                        return Some(factored);
+                    }
+
+                    // Even if we can't factor further, the square form might be simpler
+                    return Some(new_sum);
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Try to factor a sum expression.
 /// For example: ab + ac → a(b + c), or ab + 2a + b + 2 → (a + 1)(b + 2)
 fn try_factor_sum(expr: &Expr) -> Expr {
@@ -1122,6 +1363,30 @@ fn try_factor_sum(expr: &Expr) -> Expr {
 
     if terms.len() < 2 {
         return expr.clone();
+    }
+
+    // First, try to recognize perfect square trinomials: a² + 2ab + b² = (a + b)²
+    if let Some(factored) = try_factor_perfect_square(&terms) {
+        if factored.complexity() < expr.complexity() {
+            return factored;
+        }
+    }
+
+    // Try difference of squares: a² - b² = (a + b)(a - b)
+    if let Some(factored) = try_factor_difference_of_squares(&terms) {
+        if factored.complexity() < expr.complexity() {
+            return factored;
+        }
+    }
+
+    // For 4+ terms, try to find a perfect square subset + remainder
+    // e.g., a² + 2ab + b² - 1 → (a+b)² - 1 → ((a+b)+1)((a+b)-1)
+    if terms.len() >= 4 {
+        if let Some(factored) = try_factor_with_perfect_square_subset(&terms) {
+            if factored.complexity() < expr.complexity() {
+                return factored;
+            }
+        }
     }
 
     // Extract factors from each term
@@ -3454,6 +3719,69 @@ mod tests {
             "Factored form should be simpler: {} vs {}",
             result.complexity(),
             expr.complexity()
+        );
+    }
+
+    #[test]
+    fn simplify_factor_perfect_square() {
+        // x² + 2x + 1 → (x + 1)²
+        let rules = RuleSet::full();
+        let expr = add(
+            add(pow(scalar("x"), constant(2.0)), mul(constant(2.0), scalar("x"))),
+            constant(1.0),
+        );
+        let result = simplify(&expr, &rules);
+
+        // Should be (x + 1)^2
+        assert!(
+            matches!(&result, Expr::Pow(base, exp)
+                if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON)
+                && matches!(base.as_ref(), Expr::Add(_, _))
+            ),
+            "Expected (x + 1)², got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn simplify_factor_perfect_square_minus() {
+        // x² - 2x + 1 → (x - 1)²
+        let rules = RuleSet::full();
+        let expr = add(
+            add(
+                pow(scalar("x"), constant(2.0)),
+                neg(mul(constant(2.0), scalar("x"))),
+            ),
+            constant(1.0),
+        );
+        let result = simplify(&expr, &rules);
+
+        // Should be (x - 1)^2
+        assert!(
+            matches!(&result, Expr::Pow(_, exp)
+                if matches!(exp.as_ref(), Expr::Const(n) if (*n - 2.0).abs() < f64::EPSILON)
+            ),
+            "Expected (x - 1)², got: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn simplify_factor_perfect_square_with_constant() {
+        // x² + 4x + 4 → (x + 2)²
+        let rules = RuleSet::full();
+        let expr = add(
+            add(pow(scalar("x"), constant(2.0)), mul(constant(4.0), scalar("x"))),
+            constant(4.0),
+        );
+        let result = simplify(&expr, &rules);
+
+        // Should be (x + 2)^2
+        let debug = format!("{}", result);
+        assert!(
+            debug.contains("(x + 2)**2"),
+            "Expected (x + 2)², got: {}",
+            debug
         );
     }
 }
