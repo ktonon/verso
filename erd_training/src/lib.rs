@@ -1,6 +1,7 @@
 pub mod config;
 pub mod dataset;
 pub mod evaluate;
+pub mod ml_simplify;
 pub mod model;
 pub mod rl_train;
 pub mod schedule;

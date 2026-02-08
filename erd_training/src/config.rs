@@ -54,6 +54,35 @@ pub struct TrainConfig {
     pub device: String,
 }
 
+impl TrainConfig {
+    /// Default model architecture config for inference (no training params needed).
+    pub fn default_for_inference() -> Self {
+        TrainConfig {
+            data_dir: String::new(),
+            val_fraction: 0.1,
+            max_actions: 50,
+            seed: 42,
+            d_model: 128,
+            n_encoder_layers: 4,
+            n_decoder_layers: 4,
+            n_heads: 4,
+            d_ff: 256,
+            dropout: 0.1,
+            max_enc_len: 64,
+            max_dec_len: 128,
+            batch_size: 64,
+            lr: 3e-4,
+            weight_decay: 0.01,
+            warmup_steps: 200,
+            max_epochs: 100,
+            patience: 10,
+            checkpoint_dir: String::new(),
+            log_every: 50,
+            device: "cpu".to_string(),
+        }
+    }
+}
+
 /// Configuration for evaluation.
 #[derive(Parser, Debug, Clone)]
 pub struct EvalConfig {

@@ -84,16 +84,27 @@ The search module orchestrates rule application—it should not contain transfor
 
 ## REPL Usage
 
+### ML REPL (with beam search fallback)
+
 ```bash
-cargo run --bin repl
+npm run repl
 ```
 
 Commands:
-- `:steps` - Toggle step-by-step simplification trace
+- `:trace` - Toggle step-by-step simplification trace
+- `:ml` - ML only mode (no beam search fallback)
+- `:beam` - Beam search only mode
+- `:hybrid` - ML with beam search fallback (default)
 - `:history` - Toggle between input/result history
 - `:q` - Quit
 
-Example inputs:
+### Beam Search REPL (no ML)
+
+```bash
+npm run repl:beam
+```
+
+### Example inputs
 - `pi / 2` → `π / 2`
 - `sin(pi / 4)` → `√2 / 2`
 - `(x + y + 1)(x + y + 1) - x**2 - y**2 - 1 - 2*x*y - 2*x - 2*y` → `0`

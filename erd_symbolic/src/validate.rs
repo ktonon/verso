@@ -1,6 +1,6 @@
 use crate::expr::Expr;
 use crate::random_search::{Direction, IndexedRuleSet, RuleDirectionId};
-use crate::search::eval_constants;
+use crate::search::{eval_constants, TraceStep};
 use crate::token::{position_to_path, replace_subexpr, subexpr_at, tokenize};
 
 /// A single predicted action to validate.
@@ -152,6 +152,137 @@ pub fn validate_action_sequence(
         input_complexity,
         step_details,
     }
+}
+
+/// Validate a sequence of predicted actions and build a trace with intermediate expressions.
+///
+/// Returns both the `ValidationResult` and a `Vec<TraceStep>` suitable for REPL display.
+/// The trace starts with the initial expression (no rule applied) and includes
+/// one entry per successful step.
+pub fn validate_with_trace(
+    initial_expr: &Expr,
+    actions: &[PredictedAction],
+    rules: &IndexedRuleSet,
+) -> (ValidationResult, Vec<TraceStep>) {
+    let input_complexity = initial_expr.complexity();
+    let mut current_expr = initial_expr.clone();
+    let mut valid_steps = 0;
+    let total_steps = actions.len();
+    let mut step_details = Vec::new();
+    let mut trace = vec![TraceStep {
+        expr: current_expr.clone(),
+        rule_name: None,
+        rule_display: None,
+    }];
+
+    for action in actions {
+        let dir_id = RuleDirectionId(action.rule_direction);
+        let (rule_index, direction) = match rules.lookup_direction(dir_id) {
+            Some(rd) => rd,
+            None => {
+                step_details.push(StepDetail {
+                    success: false,
+                    failure_reason: Some(format!(
+                        "invalid direction ID {}",
+                        action.rule_direction
+                    )),
+                });
+                break;
+            }
+        };
+
+        let (tokens, _db) = tokenize(&current_expr);
+        let paths = position_to_path(&tokens);
+
+        let path = match paths.get(action.position).and_then(|p| p.as_ref()) {
+            Some(p) => p.clone(),
+            None => {
+                step_details.push(StepDetail {
+                    success: false,
+                    failure_reason: Some(format!(
+                        "position {} has no AST path (token count {})",
+                        action.position,
+                        tokens.len()
+                    )),
+                });
+                break;
+            }
+        };
+
+        let sub = match subexpr_at(&current_expr, &path) {
+            Some(s) => s.clone(),
+            None => {
+                step_details.push(StepDetail {
+                    success: false,
+                    failure_reason: Some("path does not resolve to subexpression".to_string()),
+                });
+                break;
+            }
+        };
+
+        let rule = rules.rule(rule_index);
+        let rewritten = match direction {
+            Direction::Ltr => rule.apply_ltr(&sub),
+            Direction::Rtl => rule.apply_rtl(&sub),
+        };
+
+        let rewritten = match rewritten {
+            Some(r) => r,
+            None => {
+                step_details.push(StepDetail {
+                    success: false,
+                    failure_reason: Some(format!(
+                        "rule '{}' ({:?}) did not match",
+                        rule.name, direction
+                    )),
+                });
+                break;
+            }
+        };
+
+        let new_expr = if path.is_empty() {
+            eval_constants(&rewritten)
+        } else {
+            match replace_subexpr(&current_expr, &path, rewritten) {
+                Some(e) => eval_constants(&e),
+                None => {
+                    step_details.push(StepDetail {
+                        success: false,
+                        failure_reason: Some("replace_subexpr failed".to_string()),
+                    });
+                    break;
+                }
+            }
+        };
+
+        current_expr = new_expr;
+        valid_steps += 1;
+        step_details.push(StepDetail {
+            success: true,
+            failure_reason: None,
+        });
+
+        let dir_str = match direction {
+            Direction::Ltr => "→",
+            Direction::Rtl => "←",
+        };
+        trace.push(TraceStep {
+            expr: current_expr.clone(),
+            rule_name: Some(rule.name.clone()),
+            rule_display: Some(format!("{} {}", rule.name, dir_str)),
+        });
+    }
+
+    let final_complexity = current_expr.complexity();
+    let result = ValidationResult {
+        valid_steps,
+        total_steps,
+        final_expr: current_expr,
+        final_complexity,
+        input_complexity,
+        step_details,
+    };
+    (result, trace)
 }
 
 #[cfg(test)]

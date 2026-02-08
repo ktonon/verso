@@ -573,4 +573,4 @@ RL training automatically resumes from `rl_best.mpk` if it exists, restoring epo
 | **M5** | Sequence validation harness | Rust: apply predicted action sequences, compute reward via direct function calls | **Done** — `validate.rs`, `erd_training/src/evaluate.rs` |
 | **M6** | Self-play training | Rust: REINFORCE with Burn autograd and direct validation | **Done** — `erd_training/src/rl_train.rs` |
 | **M7** | ~~ONNX inference~~ | Native Rust inference — free with Burn (no export needed) | **Done** |
-| **M8** | Production integration | Rust: ML simplify with beam search fallback |
+| **M8** | Production integration | Rust: ML simplify with beam search fallback | **Done** — `erd_training/src/ml_simplify.rs`, `bin/ml_repl.rs` |

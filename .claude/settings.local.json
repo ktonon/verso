@@ -20,7 +20,8 @@
       "WebFetch(domain:deepwiki.com)",
       "WebFetch(domain:lib.rs)",
       "Bash(cargo doc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(/Users/ktonon/repos/erd/target/release/ml_repl:*)"
     ]
   }
 }
