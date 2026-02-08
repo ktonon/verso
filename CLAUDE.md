@@ -16,6 +16,17 @@ erd/
 │   │   ├── to_tex.rs    # LaTeX output
 │   │   └── bin/repl.rs  # Interactive REPL
 │   └── Cargo.toml
+├── erd_training/     # ML training pipeline (Rust + Burn)
+│   ├── src/
+│   │   ├── model.rs     # Transformer encoder-decoder (Burn Module)
+│   │   ├── train.rs     # Supervised training loop
+│   │   ├── rl_train.rs  # REINFORCE training loop
+│   │   ├── evaluate.rs  # Model evaluation with direct validation
+│   │   ├── vocab.rs     # Encoder/Decoder vocabularies
+│   │   ├── dataset.rs   # JSONL data loading + Burn Batcher
+│   │   ├── config.rs    # CLI configs (TrainConfig, RLConfig, EvalConfig)
+│   │   └── schedule.rs  # Cosine LR schedule with warmup
+│   └── Cargo.toml
 ├── erd_model/        # Model definitions
 ├── erd_viewer/       # Viewer component
 └── erd_app/          # Application layer
@@ -144,6 +155,18 @@ This is the most invasive change. The Rust compiler will catch most missing matc
 8. `gen_expr.rs` — random expression generation (if the variant should appear in training data)
 9. `training_data.rs` — `token_to_string`, `parse_token_string` (for ML token serialization)
 
+### ML Training Pipeline
+The training pipeline is pure Rust using the Burn framework. Key commands:
+
+```bash
+npm run build:data  # regenerate training data (randomized beam search traces)
+npm run train       # supervised training (saves checkpoints/best.mpk)
+npm run evaluate    # evaluate model on validation set
+npm run rl-train    # REINFORCE fine-tuning (saves checkpoints/rl_best.mpk)
+```
+
+RL training auto-resumes from `rl_best.mpk` if it exists. Use `--device ndarray` for CPU (recommended for long RL runs on laptops).
+
 ### Invalidating ML Artifacts
 Any change to `Expr` variants, `FnKind`, `NamedConst`, rule definitions, or tokenization logic invalidates all training data and checkpoints. To rebuild:
 
@@ -152,4 +175,5 @@ npm run ml:reset    # removes data_training/ and checkpoints/
 npm run build:data  # regenerate training data
 npm run train       # retrain from scratch
 npm run evaluate    # validate the new model
+npm run rl-train    # REINFORCE fine-tuning
 ```

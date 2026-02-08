@@ -10,12 +10,6 @@
       "Bash(grep:*)",
       "Bash(cargo check:*)",
       "Bash(printf:*)",
-      "Bash(python3:*)",
-      "Bash(pip install:*)",
-      "Bash(pip --version:*)",
-      "Bash(PYTHONPATH=/Users/ktonon/repos/erd/erd_training python3:*)",
-      "Bash(PYTHONPATH=erd_training python3:*)",
-      "Bash(/Users/ktonon/repos/erd/target/release/validate:*)",
       "Bash(find:*)",
       "Bash(npm run rl-train:*)",
       "Bash(gh api:*)",
@@ -25,7 +19,8 @@
       "WebFetch(domain:docs.rs)",
       "WebFetch(domain:deepwiki.com)",
       "WebFetch(domain:lib.rs)",
-      "Bash(cargo doc:*)"
+      "Bash(cargo doc:*)",
+      "Bash(ls:*)"
     ]
   }
 }

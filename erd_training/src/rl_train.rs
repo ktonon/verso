@@ -18,7 +18,38 @@ use crate::evaluate::{
     compute_reward, decode_action_sequence, evaluate, print_metrics, tokens_to_expr,
 };
 use crate::model::SimplificationModel;
-use crate::train::{load_model, save_checkpoint_named};
+use crate::train::load_model;
+
+/// Save RL checkpoint with extended metadata (baseline, best_eval_reward).
+fn save_rl_checkpoint<B: AutodiffBackend>(
+    model: &SimplificationModel<B>,
+    epoch: usize,
+    baseline: f64,
+    best_eval_reward: f64,
+    checkpoint_dir: &str,
+    name: &str,
+) {
+    use burn::record::{FullPrecisionSettings, NamedMpkFileRecorder, Recorder};
+    use std::path::PathBuf;
+
+    std::fs::create_dir_all(checkpoint_dir).unwrap();
+
+    let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::default();
+    let path = PathBuf::from(checkpoint_dir).join(name);
+    recorder
+        .record(model.clone().into_record(), path)
+        .expect("Failed to save model checkpoint");
+
+    let metadata = serde_json::json!({
+        "epoch": epoch,
+        "baseline": baseline,
+        "best_eval_reward": best_eval_reward,
+    });
+    let meta_path = PathBuf::from(checkpoint_dir).join(format!("{}_metadata.json", name));
+    std::fs::write(meta_path, serde_json::to_string_pretty(&metadata).unwrap()).unwrap();
+
+    println!("  Checkpoint saved: {}/{}.mpk", checkpoint_dir, name);
+}
 use crate::vocab::{DecoderVocab, EncoderVocab};
 
 /// Encode a batch of expressions into padded tensors.
@@ -251,26 +282,61 @@ pub fn rl_train<B: AutodiffBackend>(config: RLConfig, device: B::Device) {
         dec_vocab.size()
     );
 
-    // Load supervised checkpoint
-    println!("Loading model from {}...", config.checkpoint);
+    // Try to resume from RL checkpoint, fall back to supervised checkpoint
     let train_config = config.to_train_config();
-    let model: SimplificationModel<B> = load_model(
-        &train_config,
-        enc_vocab.size(),
-        dec_vocab.size(),
-        &device,
-        &config.checkpoint,
-    );
+    let rl_best_path = format!("{}/rl_best", config.checkpoint_dir);
+    let rl_meta_path = format!("{}/rl_best_metadata.json", config.checkpoint_dir);
+
+    let (model, start_epoch, mut baseline, mut best_eval_reward) =
+        if std::path::Path::new(&format!("{}.mpk", rl_best_path)).exists() {
+            println!("Resuming from RL checkpoint: {}", rl_best_path);
+            let model: SimplificationModel<B> = load_model(
+                &train_config,
+                enc_vocab.size(),
+                dec_vocab.size(),
+                &device,
+                &rl_best_path,
+            );
+            // Restore metadata
+            let (epoch, bl, best_reward) = if let Ok(data) = std::fs::read_to_string(&rl_meta_path)
+            {
+                let meta: serde_json::Value = serde_json::from_str(&data).unwrap();
+                let epoch = meta["epoch"].as_u64().unwrap_or(0) as usize;
+                let bl = meta.get("baseline").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let best_reward = meta
+                    .get("best_eval_reward")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(f64::NEG_INFINITY);
+                (epoch, bl, best_reward)
+            } else {
+                (0, 0.0, f64::NEG_INFINITY)
+            };
+            println!(
+                "  Resumed at epoch {}, baseline={:.3}, best_reward={:+.3}",
+                epoch + 1,
+                bl,
+                best_reward
+            );
+            (model, epoch + 1, bl, best_reward)
+        } else {
+            println!("Loading supervised checkpoint: {}", config.checkpoint);
+            let model: SimplificationModel<B> = load_model(
+                &train_config,
+                enc_vocab.size(),
+                dec_vocab.size(),
+                &device,
+                &config.checkpoint,
+            );
+            (model, 0, 0.0f64, f64::NEG_INFINITY)
+        };
     println!("Model parameters: {}", model.num_params());
 
-    // Optimizer (lower LR than supervised to prevent catastrophic forgetting)
+    // Optimizer
     let optimizer = AdamWConfig::new()
         .with_weight_decay(0.01_f32)
         .with_grad_clipping(Some(GradientClippingConfig::Norm(1.0)))
         .init::<B, SimplificationModel<B>>();
 
-    let mut baseline = 0.0f64;
-    let mut best_eval_reward = f64::NEG_INFINITY;
     let mut rng = StdRng::seed_from_u64(config.seed);
 
     println!(
@@ -289,7 +355,7 @@ pub fn rl_train<B: AutodiffBackend>(config: RLConfig, device: B::Device) {
     let mut model = model;
     let mut optimizer = optimizer;
 
-    for epoch in 0..config.max_epochs {
+    for epoch in start_epoch..config.max_epochs {
         let t0 = std::time::Instant::now();
         train_examples.shuffle(&mut rng);
 
@@ -366,17 +432,18 @@ pub fn rl_train<B: AutodiffBackend>(config: RLConfig, device: B::Device) {
 
             if metrics.mean_reward > best_eval_reward {
                 best_eval_reward = metrics.mean_reward;
-                save_checkpoint_named(&model, epoch, -metrics.mean_reward, &config.checkpoint_dir, "rl_best");
+                save_rl_checkpoint(&model, epoch, baseline, best_eval_reward, &config.checkpoint_dir, "rl_best");
             }
             println!();
         }
     }
 
     // Save final checkpoint
-    save_checkpoint_named(
+    save_rl_checkpoint(
         &model,
         config.max_epochs - 1,
-        -baseline,
+        baseline,
+        best_eval_reward,
         &config.checkpoint_dir,
         "rl_latest",
     );

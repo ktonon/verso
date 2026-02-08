@@ -8,7 +8,7 @@ Migrate from Python/PyTorch to pure Rust with [Burn](https://burn.dev) (v0.20). 
 
 ```
 erd_symbolic/     Rust   Rule engine, tokenization, validation, data generation
-erd_training/     Python PyTorch model, supervised training, REINFORCE training
+erd_training/     Rust   Burn model, supervised training, REINFORCE training
 ```
 
 ## Target State
@@ -491,4 +491,4 @@ If any phase fails verification, we can debug against the Python implementation 
 | 3 | Supervised Training | Done |
 | 4 | Evaluation | Done |
 | 5 | REINFORCE Training | Done |
-| 6 | Cleanup | |
+| 6 | Cleanup | Done |

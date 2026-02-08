@@ -339,38 +339,18 @@ The curriculum is applied to both Phase 1 and Phase 2: train supervised on simpl
 
 ### Rust Runtime
 
-Use ONNX Runtime via the `ort` crate to run the trained model in Rust:
+Since training and inference use the same Burn model in Rust, no export step (ONNX, etc.) is needed. The trained model checkpoint is loaded directly:
 
 ```rust
-fn ml_simplify(expr: &Expr, model: &OrtSession, rules: &[Rule]) -> (Expr, Vec<TraceStep>) {
+fn ml_simplify(expr: &Expr, model: &SimplificationModel<B>, rules: &IndexedRuleSet,
+               enc_vocab: &EncoderVocab, dec_vocab: &DecoderVocab) -> (Expr, Vec<TraceStep>) {
     let tokens = tokenize(expr);
-    let action_sequence = model.generate(&tokens);  // decoder outputs full sequence
+    let enc_ids = encode(&tokens, enc_vocab);
+    let action_ids = model.generate(enc_ids, max_len, None, STOP_TOKEN);
+    let actions = decode_action_sequence(&action_ids, dec_vocab);
 
-    let mut current = expr.clone();
-    let mut trace = vec![TraceStep { expr: current.clone(), rule_name: None, rule_display: None }];
-
-    for action in &action_sequence {
-        if action.is_stop() { break; }
-        let rule = &rules[action.rule_index()];
-        let subexpr = subexpr_at(&current, action.position());
-        let result = if action.is_ltr() {
-            rule.apply_ltr(&subexpr)
-        } else {
-            rule.apply_rtl(&subexpr)
-        };
-        match result {
-            Some(new_subexpr) => {
-                current = replace_subexpr(&current, action.position(), new_subexpr);
-                trace.push(TraceStep {
-                    expr: current.clone(),
-                    rule_name: Some(rule.name.clone()),
-                    rule_display: Some(format!("{}", rule)),
-                });
-            }
-            None => break,  // invalid action, stop applying
-        }
-    }
-    (current, trace)
+    let result = validate_action_sequence(expr, &actions, rules);
+    // ... build trace from result
 }
 ```
 
@@ -379,8 +359,8 @@ fn ml_simplify(expr: &Expr, model: &OrtSession, rules: &[Rule]) -> (Expr, Vec<Tr
 For production use, run the ML model first (fast, usually correct), then fall back to beam search if the ML result has higher complexity than the input:
 
 ```rust
-fn simplify(expr: &Expr, model: &OrtSession, rules: &RuleSet) -> Expr {
-    let (ml_result, _trace) = ml_simplify(expr, model, &rules.all_rules());
+fn simplify(expr: &Expr, model: &SimplificationModel<B>, rules: &RuleSet) -> Expr {
+    let (ml_result, _trace) = ml_simplify(expr, model, &rules);
     if ml_result.complexity() <= expr.complexity() {
         return ml_result;
     }
@@ -412,46 +392,40 @@ fn simplify(expr: &Expr, model: &OrtSession, rules: &RuleSet) -> Expr {
 
 ### Training
 
-- Python + PyTorch for model development
-- Custom data loader that reads trace files (JSON or binary)
-- Single GPU sufficient for the model size (~1-2M parameters)
+- Rust + Burn framework for model development and training
+- Custom data loader that reads trace files (JSONL)
+- Single GPU sufficient for the model size (~1-2M parameters), CPU (ndarray) also viable
 - Training time: hours, not days
 
 ### Data Pipeline
 
 ```
-┌────────────┐     ┌──────────────────┐     ┌─────────────┐     ┌──────────┐
-│ Random AST │────▶│ Randomized Beam  │────▶│ Trace Export │────▶│ Training │
-│ Generator  │     │ Search (×N runs) │     │ (JSON/bin)   │     │ (Python) │
-└────────────┘     └──────────────────┘     └─────────────┘     └──────────┘
-       │                                                              │
-       │                  ┌───────────┐                               │
-       └─────────────────▶│ ONNX      │◀──────────────────────────────┘
-                          │ Export    │
-                          └─────┬─────┘
-                                │
-                          ┌─────▼─────┐
-                          │ Rust      │
-                          │ Inference │
-                          └───────────┘
+┌────────────┐     ┌──────────────────┐     ┌─────────────┐     ┌───────────────┐
+│ Random AST │────▶│ Randomized Beam  │────▶│ Trace Export │────▶│ Training      │
+│ Generator  │     │ Search (×N runs) │     │ (JSONL)      │     │ (Rust + Burn) │
+└────────────┘     └──────────────────┘     └─────────────┘     └───────┬───────┘
+                                                                        │
+                                                                  ┌─────▼─────┐
+                                                                  │ Rust      │
+                                                                  │ Inference │
+                                                                  └───────────┘
 ```
 
-### New Rust Components
+### Rust Components
 
+**erd_symbolic** (rule engine):
 1. **Tokenizer**: `Expr → Vec<Token>` and reverse, with De Bruijn variable canonicalization
 2. **Position mapper**: pre-order index ↔ AST path, `subexpr_at()` and `replace_subexpr()`
 3. **Random expression generator**: for training data, with configurable depth/type distributions
 4. **Randomized beam search**: shuffled rule order, stochastic beam selection, multi-run
-5. **Trace exporter**: serialize traces with position annotations to JSON/binary
-6. **ONNX inference wrapper**: load model, run encoder+decoder, decode action sequence
+5. **Trace exporter**: serialize traces with position annotations to JSONL
 
-### New Python Components
-
-1. **Data loader**: read trace files, create batches with padding
-2. **Model definition**: transformer encoder-decoder
-3. **Training loop**: supervised (Phase 1) + REINFORCE/PPO (Phase 2)
-4. **Validation harness**: call Rust rule engine to validate predicted sequences
-5. **ONNX export**: save trained model for Rust consumption
+**erd_training** (ML pipeline):
+1. **Data loader**: read JSONL files, create Burn Dataset + Batcher with padding
+2. **Model definition**: transformer encoder-decoder (Burn Module)
+3. **Supervised training loop**: cross-entropy with cosine LR schedule
+4. **REINFORCE training loop**: policy gradient with direct validation calls
+5. **Evaluation**: metrics computation via direct `validate_action_sequence()` calls
 
 ## 9. M4 Results & Observations
 
@@ -518,7 +492,7 @@ npm run train
 
 2. **No worsened expressions.** When the model's sequence is valid, it always reduces or maintains complexity. This suggests the model learned the direction of simplification well, even when it makes invalid moves partway through.
 
-3. **Subprocess-based validation works well.** Python writes predictions as temp JSONL, calls the Rust `validate` binary once, and reads results. Processing 1469 examples in 0.1s avoids PyO3 complexity while being fast enough for the eval loop.
+3. **Direct validation via function call.** `validate_action_sequence()` is called directly in Rust, eliminating the subprocess overhead entirely.
 
 4. **65.6% validity exceeds the threshold for Phase 2.** The design doc target for proceeding to RL was >50% validity. The model has learned enough structure that REINFORCE/PPO can refine it.
 
@@ -553,9 +527,9 @@ The lower sampling validity (49-53%) vs greedy validity (65.6%) is expected — 
 
 2. **Log-prob normalization by sequence length is important.** Without it, the REINFORCE loss magnitude scales with sequence length (longer trajectories have more negative log-probs), causing the loss to grow unboundedly and dominate the gradient signal.
 
-3. **MPS (Apple Silicon GPU) is slower than CPU for this model.** The model is small (1.4M params) and the bottleneck is subprocess calls to the Rust validation binary. MPS adds data-transfer overhead without enough compute to amortize it. CPU is ~2x faster per epoch. The `enable_nested_tensor=False` flag is required for MPS compatibility with PyTorch's TransformerEncoder.
+3. **GPU vs CPU for RL training.** With the subprocess bottleneck eliminated, the main bottleneck is the validation loop (CPU-bound Rust code). GPU (wgpu) and CPU (ndarray) perform similarly for RL training. GPU may cause thermal issues on laptops during long runs; ndarray is recommended for stability.
 
-4. **Auto-device detection** (`detect_device()`) selects cuda > mps > cpu automatically. Override with `--device cpu` when speed matters more than GPU utilization.
+4. **Device selection** via `--device wgpu` (GPU) or `--device ndarray` (CPU). Use ndarray for long RL training runs on laptops.
 
 5. **Reward structure works well.** The formula `delta / max(valid_steps, 1) - invalid_steps * 0.5` provides a clear learning signal: the model first learns to stop generating invalid actions (reducing penalty), then learns to generate sequences that actually simplify (increasing delta).
 
@@ -563,10 +537,12 @@ The lower sampling validity (49-53%) vs greedy validity (65.6%) is expected — 
 
 ```bash
 # Full pipeline: supervised warm start → RL fine-tuning
-npm run train          # Phase 1: supervised (saves checkpoints/best.pt)
-npm run rl-train       # Phase 2: REINFORCE (saves checkpoints/rl_best.pt, rl_latest.pt)
-npm run evaluate -- --checkpoint checkpoints/rl_best.pt  # Evaluate RL model
+npm run train          # Phase 1: supervised (saves checkpoints/best.mpk)
+npm run rl-train       # Phase 2: REINFORCE (saves checkpoints/rl_best.mpk, rl_latest.mpk)
+npm run evaluate -- --checkpoint checkpoints/rl_best  # Evaluate RL model
 ```
+
+RL training automatically resumes from `rl_best.mpk` if it exists, restoring epoch, baseline, and best reward. To start RL from scratch, delete `checkpoints/rl_best.mpk` and `rl_best_metadata.json`.
 
 ## 12. Open Questions (updated)
 
@@ -593,8 +569,8 @@ npm run evaluate -- --checkpoint checkpoints/rl_best.pt  # Evaluate RL model
 | **M1** | Tokenizer + position mapper | Rust: `Expr ↔ tokens`, AST path ↔ pre-order index, De Bruijn canonicalization | **Done** — `token.rs` |
 | **M2** | Randomized beam search | Rust: shuffled rule order, stochastic selection, multi-run traces | **Done** — `random_search.rs` |
 | **M3** | Training data generator | Rust: random AST + trace export to JSON with position annotations | **Done** — `gen_expr.rs`, `training_data.rs`, `bin/gen_data.rs` |
-| **M4** | Supervised baseline model | Python: transformer encoder-decoder trained on beam search traces | **Done** — `erd_training/` |
-| **M5** | Sequence validation harness | Rust/Python: apply predicted action sequences, compute reward | **Done** — `validate.rs`, `bin/validate.rs`, `evaluate.py` |
-| **M6** | Self-play training | Python: REINFORCE/PPO with trajectory reward | **Done** — `rl_train.py`, `model.py:sample()` |
-| **M7** | ONNX inference in Rust | Rust: load model, generate action sequences, apply and validate |
+| **M4** | Supervised baseline model | Rust: Burn transformer encoder-decoder trained on beam search traces | **Done** — `erd_training/src/model.rs`, `train.rs` |
+| **M5** | Sequence validation harness | Rust: apply predicted action sequences, compute reward via direct function calls | **Done** — `validate.rs`, `erd_training/src/evaluate.rs` |
+| **M6** | Self-play training | Rust: REINFORCE with Burn autograd and direct validation | **Done** — `erd_training/src/rl_train.rs` |
+| **M7** | ~~ONNX inference~~ | Native Rust inference — free with Burn (no export needed) | **Done** |
 | **M8** | Production integration | Rust: ML simplify with beam search fallback |
