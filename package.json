@@ -13,12 +13,12 @@
 		"build:data:round3": "cargo run --release --bin gen_data -- --count 10000 --seed 44",
 		"build:data": "npm run build:data:round1 && npm run build:data:round2 && npm run build:data:round3",
 		"lint": "eslint .",
-		"repl": "cargo run --release -p erd_training --bin ml_repl -- --checkpoint checkpoints/rl_best --device ndarray",
+		"repl": "cargo run --release -p erd_training --bin ml_repl -- --device ndarray",
 		"repl:beam": "cargo run -p erd_symbolic --release --bin repl",
 		"ml:reset": "rm -rf data_training checkpoints",
-		"train": "cargo run --release -p erd_training --bin train -- --device wgpu",
-		"evaluate": "cargo run --release -p erd_training --bin evaluate -- --device wgpu",
-		"rl-train": "cargo run --release -p erd_training --bin rl_train -- --device ndarray",
+		"train": "cargo run --release -p erd_training --bin policy_train -- --device wgpu",
+		"evaluate": "cargo run --release -p erd_training --bin policy_evaluate -- --device ndarray",
+		"rl-train": "cargo run --release -p erd_training --bin policy_rl_train -- --device ndarray",
 		"start": "./scripts/build-app.js --server"
 	},
 	"devDependencies": {

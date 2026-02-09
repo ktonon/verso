@@ -11,7 +11,7 @@ use erd_training::ml_simplify::MLSimplifier;
 
 #[derive(Parser)]
 struct Args {
-    #[arg(long, default_value = "checkpoints/rl_best")]
+    #[arg(long, default_value = "checkpoints/policy_rl_best")]
     checkpoint: String,
     #[arg(long, default_value = "ndarray")]
     device: String,
@@ -226,6 +226,16 @@ fn print_trace(trace: &[TraceStep]) {
                     display,
                     padding = padding,
                     width = max_name_width,
+                );
+            }
+            (Some(name), None) => {
+                println!(
+                    "{}: {}{:padding$}  \x1b[90m{}\x1b[0m",
+                    i,
+                    expr_str,
+                    "",
+                    name,
+                    padding = padding,
                 );
             }
             _ => println!("{}: {}", i, expr_str),
