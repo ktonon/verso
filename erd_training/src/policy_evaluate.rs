@@ -4,7 +4,7 @@ use erd_symbolic::random_search::{Direction, IndexedRuleSet, RuleDirectionId};
 use erd_symbolic::token::tokenize;
 use erd_symbolic::training_data::token_to_string;
 use erd_symbolic::validate::{validate_action_sequence, PredictedAction, ValidationResult};
-use erd_symbolic::{Expr, TraceStep};
+use erd_symbolic::{eval_constants, Expr, TraceStep};
 
 use crate::config::PolicyConfig;
 use crate::evaluate::{compute_metrics, tokens_to_expr, EvalMetrics};
@@ -25,6 +25,10 @@ pub fn policy_inference_loop<B: Backend>(
     max_steps: usize,
     device: &B::Device,
 ) -> (ValidationResult, Vec<TraceStep>) {
+    // Normalize the initial expression to match training distribution.
+    // eval_constants handles FracPi arithmetic and constant folding.
+    // (validate_action_sequence already runs eval_constants after each step.)
+    let expr = eval_constants(expr);
     let input_complexity = expr.complexity();
     let mut current_expr = expr.clone();
     let mut best_expr = expr.clone();

@@ -8,6 +8,8 @@ use erd_symbolic::token::tokenize;
 use erd_symbolic::training_data::token_to_string;
 use erd_symbolic::validate::{validate_action_sequence, PredictedAction};
 
+use erd_symbolic::eval_constants;
+
 use crate::evaluate::tokens_to_expr;
 use crate::vocab::EncoderVocab;
 
@@ -33,9 +35,11 @@ fn expand_to_policy_items(
 ) -> Vec<PolicyItem> {
     let mut items = Vec::new();
 
-    // Reconstruct the initial expression from tokens
+    // Reconstruct the initial expression from tokens, then normalize.
+    // eval_constants is also applied at inference time (policy_inference_loop)
+    // and after each action (validate_action_sequence), so training data must match.
     let mut current_expr = match tokens_to_expr(&example.input_tokens) {
-        Ok(expr) => expr,
+        Ok(expr) => eval_constants(&expr),
         Err(_) => return items,
     };
 
