@@ -1,0 +1,8 @@
+[package]
+name = "erd_doc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+erd_symbolic = { path = "../erd_symbolic" }
+clap = { version = "4", features = ["derive"] }

@@ -7,6 +7,8 @@ export default tseslint.config(
 		ignores: [
 			'dist/**',
 			'erd_viewer/pkg/**',
+			'infrastructure/**',
+			'target/**',
 			'**/*.d.ts',
 		],
 	},

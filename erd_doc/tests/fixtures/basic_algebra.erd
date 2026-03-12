@@ -1,0 +1,18 @@
+# Basic Algebraic Identities
+
+These are fundamental properties of arithmetic.
+
+:claim add_zero
+  x + 0 = x
+
+:claim mul_one
+  x * 1 = x
+
+:claim mul_zero
+  x * 0 = 0
+
+:claim double
+  x + x = 2x
+
+:claim square_expansion
+  (x + y)(x + y) = x**2 + 2x*y + y**2
