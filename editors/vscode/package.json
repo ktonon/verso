@@ -1,0 +1,44 @@
+{
+  "name": "erd-lang",
+  "displayName": "ERD Language Support",
+  "description": "Language support for .erd documents — verified math papers",
+  "version": "0.1.0",
+  "publisher": "erd",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "erd",
+        "extensions": [".erd"],
+        "aliases": ["ERD", "erd"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configuration": {
+      "title": "ERD",
+      "properties": {
+        "erd.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the erd_lsp binary. If empty, searches PATH and workspace target/release/."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}

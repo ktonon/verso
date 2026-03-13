@@ -17,7 +17,7 @@ Six milestones:
 | 3 | Numerical spot-checks (random-point evaluation) | **completed** |
 | 4 | Dimensional analysis (`:dim` declarations, unit checking) | **completed** |
 | 5 | Watch mode (`erd watch` re-verifies on save) | **completed** |
-| 6 | VSCode integration (inline diagnostics via LSP) | planned |
+| 6 | VSCode integration (inline diagnostics via LSP) | **completed** |
 
 ### Source format (`.erd`)
 
@@ -86,6 +86,12 @@ Raw LaTeX via tex`\vec{v}`.
 - **Watch binary**: `erd_watch` uses `notify` + `notify-debouncer-mini` for cross-platform file watching with 300ms debounce.
 - **Workflow**: Clears terminal and re-verifies all files on each save. Green "Watching..." when all pass, red when failures exist.
 - npm script: `npm run watch -- file.erd`
+
+### M6 (completed)
+
+- **LSP server**: `erd_lsp` binary implements Language Server Protocol via `tower-lsp`. Publishes diagnostics on open/change/save: errors for failed claims/proof steps/dim mismatches, warnings for numerical-only passes.
+- **VSCode extension**: Minimal `editors/vscode/` extension registers `.erd` language, launches `erd_lsp`, and receives inline diagnostics.
+- **Setup**: `cargo build --release -p erd_doc --bin erd_lsp`, then open the extension in VSCode (F5 to debug, or package with `vsce`).
 
 ## Verification
 
