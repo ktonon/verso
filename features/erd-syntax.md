@@ -12,7 +12,7 @@ conventions align, but is its own language, not a superset.
 |---|---------|--------|
 | 1 | Inline formatting: bold, italic | **completed** |
 | 2 | Lists: bullet and numbered | **completed** |
-| 3 | Multiline math blocks | planned |
+| 3 | Multiline math blocks | **completed** |
 | 4 | Citations and bibliography | planned |
 | 5 | Theorem-like environments | planned |
 | 6 | Block quotes and footnotes | planned |
@@ -372,6 +372,15 @@ The `ToTex` trait handles conversion to proper LaTeX notation.
 - Items support full inline formatting (bold, italic, math, etc.)
 - LaTeX: `\begin{itemize}` / `\begin{enumerate}` with recursive `write_list`
 - 6 new tests (bullet, numbered, nested, inline math, termination by blank/directive)
+
+### Phase 3: Multiline math blocks (completed)
+
+- Added `MathBlock { exprs, span }` to AST
+- Parser detects ` ```math ` opening fence, collects lines until closing ` ``` `, parses each non-empty line as an expression
+- Unclosed blocks produce a parse error
+- Single-expression blocks compile to `\[ ... \]`, multi-expression to `\begin{gather*}`
+- Math blocks are not verified — they're display-only (verifier skips `MathBlock`)
+- 7 new tests (5 parse, 2 compile)
 
 ## Plan
 

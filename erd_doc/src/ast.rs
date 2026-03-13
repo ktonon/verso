@@ -22,6 +22,15 @@ pub enum Block {
     Dim(DimDecl),
     /// A list (bullet or numbered).
     List(List),
+    /// A displayed math block (not verified).
+    MathBlock(MathBlock),
+}
+
+/// A fenced math block: ```math ... ```
+#[derive(Debug)]
+pub struct MathBlock {
+    pub exprs: Vec<Expr>,
+    pub span: Span,
 }
 
 /// A list block (ordered or unordered).

@@ -1,4 +1,4 @@
-use crate::ast::{Block, Claim, Document, List, Proof, ProseFragment};
+use crate::ast::{Block, Claim, Document, List, MathBlock, Proof, ProseFragment};
 use erd_symbolic::ToTex;
 use std::fmt::Write;
 
@@ -29,6 +29,9 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Dim(_) => {} // metadata, no LaTeX output
             Block::List(list) => {
                 write_list(&mut out, list);
+            }
+            Block::MathBlock(mb) => {
+                write_math_block(&mut out, mb);
             }
         }
     }
@@ -127,6 +130,24 @@ fn write_list(out: &mut String, list: &List) {
     writeln!(out, "\\end{{{}}}", env).unwrap();
 }
 
+fn write_math_block(out: &mut String, mb: &MathBlock) {
+    if mb.exprs.len() == 1 {
+        writeln!(out, "\\[").unwrap();
+        writeln!(out, "  {}", mb.exprs[0].to_tex()).unwrap();
+        writeln!(out, "\\]").unwrap();
+    } else {
+        writeln!(out, "\\begin{{gather*}}").unwrap();
+        for (i, expr) in mb.exprs.iter().enumerate() {
+            if i < mb.exprs.len() - 1 {
+                writeln!(out, "  {} \\\\", expr.to_tex()).unwrap();
+            } else {
+                writeln!(out, "  {}", expr.to_tex()).unwrap();
+            }
+        }
+        writeln!(out, "\\end{{gather*}}").unwrap();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,5 +226,24 @@ mod tests {
         let doc = parse_document("This is ***emphasized*** text.").unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textbf{\\textit{emphasized}}"));
+    }
+
+    #[test]
+    fn compile_math_block_single() {
+        let doc = parse_document("```math\nx + 1\n```").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\["));
+        assert!(tex.contains("x + 1"));
+        assert!(tex.contains("\\]"));
+    }
+
+    #[test]
+    fn compile_math_block_multi() {
+        let doc = parse_document("```math\nx + 1\ny + 2\n```").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\begin{gather*}"));
+        assert!(tex.contains("x + 1 \\\\"));
+        assert!(tex.contains("y + 2"));
+        assert!(tex.contains("\\end{gather*}"));
     }
 }

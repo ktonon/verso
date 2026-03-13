@@ -1,5 +1,6 @@
 use crate::ast::{
-    Block, Claim, DimDecl, Document, List, ListItem, Proof, ProofStep, ProseFragment, Span,
+    Block, Claim, DimDecl, Document, List, ListItem, MathBlock, Proof, ProofStep, ProseFragment,
+    Span,
 };
 use crate::dim::Dimension;
 use erd_symbolic::parse_expr;
@@ -31,6 +32,13 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
 
         if trimmed.is_empty() {
             i += 1;
+            continue;
+        }
+
+        // Fenced math block
+        if trimmed == "```math" {
+            let mb = parse_math_block(&lines, &mut i)?;
+            blocks.push(Block::MathBlock(mb));
             continue;
         }
 
@@ -300,6 +308,34 @@ fn parse_list(lines: &[&str], i: &mut usize) -> Result<List, ParseDocError> {
         ordered,
         items,
         span,
+    })
+}
+
+/// Parse a fenced math block: ```math ... ```. Advances *i past the closing fence.
+fn parse_math_block(lines: &[&str], i: &mut usize) -> Result<MathBlock, ParseDocError> {
+    let span = Span { line: *i + 1 };
+    *i += 1; // skip opening ```math
+
+    let mut exprs = Vec::new();
+    while *i < lines.len() {
+        let trimmed = lines[*i].trim();
+        if trimmed == "```" {
+            *i += 1;
+            return Ok(MathBlock { exprs, span });
+        }
+        if !trimmed.is_empty() {
+            let expr = parse_expr(trimmed).map_err(|e| ParseDocError {
+                line: *i + 1,
+                message: format!("math block: {:?}", e),
+            })?;
+            exprs.push(expr);
+        }
+        *i += 1;
+    }
+
+    Err(ParseDocError {
+        line: span.line,
+        message: "unclosed ```math block".into(),
     })
 }
 
@@ -977,6 +1013,60 @@ More prose here.
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::List(_)));
+        assert!(matches!(&doc.blocks[1], Block::Claim(_)));
+    }
+
+    #[test]
+    fn parse_math_block_single() {
+        let src = "```math\nx + 1\n```";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::MathBlock(mb) => {
+                assert_eq!(mb.exprs.len(), 1);
+            }
+            other => panic!("expected MathBlock, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_math_block_multi() {
+        let src = "```math\nx + 1\ny + 2\nz + 3\n```";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::MathBlock(mb) => {
+                assert_eq!(mb.exprs.len(), 3);
+            }
+            other => panic!("expected MathBlock, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_math_block_skips_blank_lines() {
+        let src = "```math\nx + 1\n\ny + 2\n```";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::MathBlock(mb) => {
+                assert_eq!(mb.exprs.len(), 2);
+            }
+            other => panic!("expected MathBlock, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_math_block_unclosed() {
+        let src = "```math\nx + 1";
+        let err = parse_document(src).unwrap_err();
+        assert!(err.message.contains("unclosed"));
+    }
+
+    #[test]
+    fn parse_math_block_not_verified() {
+        // Math blocks should appear in the document but not in verification
+        let src = "```math\nx + 1\n```\n\n:claim foo\n  x + 0 = x";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::MathBlock(_)));
         assert!(matches!(&doc.blocks[1], Block::Claim(_)));
     }
 }
