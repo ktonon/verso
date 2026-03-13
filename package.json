@@ -23,6 +23,7 @@
 		"check": "cargo run --release -p erd_doc --bin erd_check --",
 		"compile": "cargo run --release -p erd_doc --bin erd_compile --",
 		"watch": "cargo run --release -p erd_doc --bin erd_watch --",
+		"vscode:install": "cargo build --release -p erd_doc --bin erd_lsp && cd editors/vscode && npx tsc -p ./ && npx @vscode/vsce package --allow-missing-repository && code --install-extension erd-lang-0.1.0.vsix --force",
 		"test": "cargo test --workspace && npm run lint",
 		"start": "./scripts/build-app.js --server"
 	},

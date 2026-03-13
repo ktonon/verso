@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import * as path from "path";
 import { workspace, ExtensionContext } from "vscode";
 import {
@@ -16,18 +17,21 @@ function findServerPath(): string {
     return configPath;
   }
 
-  // Default: look in workspace target/release/
+  // Check workspace target/release/ only if it exists
   const workspaceFolders = workspace.workspaceFolders;
   if (workspaceFolders && workspaceFolders.length > 0) {
-    return path.join(
+    const candidate = path.join(
       workspaceFolders[0].uri.fsPath,
       "target",
       "release",
       "erd_lsp"
     );
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
   }
 
-  // Fallback: assume it's in PATH
+  // Default: assume it's in PATH
   return "erd_lsp";
 }
 
