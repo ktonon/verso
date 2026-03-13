@@ -50,5 +50,28 @@ fn write_result(f: &mut fmt::Formatter<'_>, result: &VerificationResult) -> fmt:
             )?;
             writeln!(f, "    residual: {}", residual)
         }
+        Outcome::ProofPass { steps } => {
+            writeln!(
+                f,
+                "  \x1b[32m\u{2713}\x1b[0m {} ({} steps, line {})",
+                result.name, steps, result.span.line
+            )
+        }
+        Outcome::ProofStepFail {
+            step_index,
+            from,
+            to,
+            residual,
+            step_span,
+        } => {
+            writeln!(
+                f,
+                "  \x1b[31m\u{2717}\x1b[0m {} (step {}, line {})",
+                result.name, step_index, step_span.line
+            )?;
+            writeln!(f, "    from: {}", from)?;
+            writeln!(f, "      to: {}", to)?;
+            writeln!(f, "    residual: {}", residual)
+        }
     }
 }

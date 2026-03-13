@@ -1,4 +1,4 @@
-use crate::ast::{Block, Claim, Document, Span};
+use crate::ast::{Block, Claim, Document, Proof, Span};
 use erd_symbolic::{Expr, RuleSet, simplify};
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ pub struct VerificationResult {
 
 impl VerificationResult {
     pub fn passed(&self) -> bool {
-        matches!(self.outcome, Outcome::Pass)
+        matches!(self.outcome, Outcome::Pass | Outcome::ProofPass { .. })
     }
 }
 
@@ -37,16 +37,30 @@ impl VerificationResult {
 pub enum Outcome {
     Pass,
     Fail { residual: Expr },
+    ProofPass { steps: usize },
+    ProofStepFail {
+        step_index: usize,
+        from: Expr,
+        to: Expr,
+        residual: Expr,
+        step_span: Span,
+    },
 }
 
-/// Verify all claims in a document.
+/// Verify all claims and proofs in a document.
 pub fn verify_document(doc: &Document) -> VerificationReport {
     let rules = RuleSet::full();
     let mut results = Vec::new();
 
     for block in &doc.blocks {
-        if let Block::Claim(claim) = block {
-            results.push(verify_claim(claim, &rules));
+        match block {
+            Block::Claim(claim) => {
+                results.push(verify_claim(claim, &rules));
+            }
+            Block::Proof(proof) => {
+                results.push(verify_proof(proof, &rules));
+            }
+            _ => {}
         }
     }
 
@@ -55,24 +69,117 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
 
 /// Verify a single claim by checking that `lhs - rhs` simplifies to 0.
 fn verify_claim(claim: &Claim, rules: &RuleSet) -> VerificationResult {
-    let diff = Expr::Add(
-        Box::new(claim.lhs.clone()),
-        Box::new(Expr::Neg(Box::new(claim.rhs.clone()))),
-    );
-
-    let result = simplify(&diff, rules);
-
-    let outcome = if is_zero(&result) {
-        Outcome::Pass
-    } else {
-        Outcome::Fail { residual: result }
-    };
-
+    let outcome = check_equal(&claim.lhs, &claim.rhs, rules);
     VerificationResult {
         name: claim.name.clone(),
         span: claim.span,
         outcome,
     }
+}
+
+/// Verify a proof chain: each adjacent pair of steps must be equivalent.
+fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
+    for i in 0..proof.steps.len() - 1 {
+        let from = &proof.steps[i];
+        let to = &proof.steps[i + 1];
+
+        // If justification names a specific rule, try it first
+        if let Some(ref rule_name) = to.justification {
+            if let Some(rule) = rules.find_rule(rule_name) {
+                // Try applying the named rule at any subexpression of `from`
+                if try_rule_produces(&from.expr, rule, &to.expr, rules) {
+                    continue;
+                }
+            }
+            // If the named rule didn't work, fall through to general simplification
+        }
+
+        // General check: simplify(from - to) == 0
+        let diff = Expr::Add(
+            Box::new(from.expr.clone()),
+            Box::new(Expr::Neg(Box::new(to.expr.clone()))),
+        );
+        let result = simplify(&diff, rules);
+
+        if !is_zero(&result) {
+            return VerificationResult {
+                name: format!("proof:{}", proof.claim_name),
+                span: proof.span,
+                outcome: Outcome::ProofStepFail {
+                    step_index: i + 1,
+                    from: from.expr.clone(),
+                    to: to.expr.clone(),
+                    residual: result,
+                    step_span: to.span,
+                },
+            };
+        }
+    }
+
+    VerificationResult {
+        name: format!("proof:{}", proof.claim_name),
+        span: proof.span,
+        outcome: Outcome::ProofPass {
+            steps: proof.steps.len(),
+        },
+    }
+}
+
+/// Check if two expressions are equivalent (simplify their difference to 0).
+fn check_equal(lhs: &Expr, rhs: &Expr, rules: &RuleSet) -> Outcome {
+    let diff = Expr::Add(
+        Box::new(lhs.clone()),
+        Box::new(Expr::Neg(Box::new(rhs.clone()))),
+    );
+    let result = simplify(&diff, rules);
+
+    if is_zero(&result) {
+        Outcome::Pass
+    } else {
+        Outcome::Fail { residual: result }
+    }
+}
+
+/// Try applying a named rule at every subexpression of `from` (both LTR and RTL)
+/// and check if any result equals `to`.
+fn try_rule_produces(from: &Expr, rule: &erd_symbolic::Rule, to: &Expr, rules: &RuleSet) -> bool {
+    // Try at root
+    if let Some(result) = rule.apply_ltr(from) {
+        if exprs_equivalent(&result, to, rules) {
+            return true;
+        }
+    }
+    if rule.reversible {
+        if let Some(result) = rule.apply_rtl(from) {
+            if exprs_equivalent(&result, to, rules) {
+                return true;
+            }
+        }
+    }
+
+    // Try at subexpressions
+    match from {
+        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+            try_rule_produces(a, rule, to, rules) || try_rule_produces(b, rule, to, rules)
+        }
+        Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => {
+            try_rule_produces(inner, rule, to, rules)
+        }
+        Expr::FnN(_, args) => args.iter().any(|a| try_rule_produces(a, rule, to, rules)),
+        _ => false,
+    }
+}
+
+/// Check if two expressions are equivalent via simplification.
+fn exprs_equivalent(a: &Expr, b: &Expr, rules: &RuleSet) -> bool {
+    if a == b {
+        return true;
+    }
+    let diff = Expr::Add(
+        Box::new(a.clone()),
+        Box::new(Expr::Neg(Box::new(b.clone()))),
+    );
+    is_zero(&simplify(&diff, rules))
 }
 
 fn is_zero(expr: &Expr) -> bool {
@@ -134,5 +241,54 @@ mod tests {
         let report = verify_document(&doc);
         assert_eq!(report.pass_count(), 2);
         assert_eq!(report.fail_count(), 1);
+    }
+
+    #[test]
+    fn verify_simple_proof() {
+        let src = "\
+:proof identity
+  x + 0
+  = x
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(report.all_passed());
+        match &report.results[0].outcome {
+            Outcome::ProofPass { steps } => assert_eq!(*steps, 2),
+            other => panic!("expected ProofPass, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn verify_multi_step_proof() {
+        let src = "\
+:proof expand
+  (x + 1)(x + 1)
+  = x**2 + x + x + 1
+  = x**2 + 2x + 1
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(
+            report.all_passed(),
+            "multi-step proof should pass: {:?}",
+            report.results
+        );
+    }
+
+    #[test]
+    fn verify_proof_with_bad_step() {
+        let src = "\
+:proof bad
+  x
+  = x + 1
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.fail_count(), 1);
+        match &report.results[0].outcome {
+            Outcome::ProofStepFail { step_index, .. } => assert_eq!(*step_index, 1),
+            other => panic!("expected ProofStepFail, got {:?}", other),
+        }
     }
 }

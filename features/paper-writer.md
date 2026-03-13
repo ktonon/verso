@@ -13,7 +13,7 @@ Six milestones:
 | M | Feature | Status |
 |---|---------|--------|
 | 1 | Red/green loop: `erd check file.erd` verifies claims | **completed** |
-| 2 | Proof chains + LaTeX compilation | planned |
+| 2 | Proof chains + LaTeX compilation | **completed** |
 | 3 | Numerical spot-checks (random-point evaluation) | planned |
 | 4 | Dimensional analysis (`:dim` declarations, unit checking) | planned |
 | 5 | Watch mode (`erd watch` re-verifies on save) | planned |
@@ -24,7 +24,8 @@ Six milestones:
 ```
 # Section Heading
 
-Prose paragraphs become LaTeX body text.
+Prose with inline math`sin(x)` and claim references claim`name`.
+Raw LaTeX via tex`\vec{v}`.
 
 :claim name
   lhs = rhs
@@ -54,10 +55,20 @@ Prose paragraphs become LaTeX body text.
 - Integration tests with fixtures: `basic_algebra.erd`, `trig_identities.erd`, `should_fail.erd`
 - npm scripts: `npm run check -- file.erd`, `npm test` (full workspace tests + lint)
 
+### M2 (completed)
+
+- **Proof chains**: `:proof name` blocks with `= expr ; justification` steps. Each adjacent pair verified via `simplify(from - to) == 0`. Named rules tried first via `RuleSet::find_rule`.
+- **Tagged inline expressions**: `math`expr`` (parsed + ToTex), `tex`raw`` (passthrough), `claim`name`` (eqref).
+- **LaTeX compiler**: `compile_tex.rs` generates full `\documentclass{article}` with `amsmath`, sections, equations with `\label`, proofs as `align*`, inline math, and `\eqref` for claim references.
+- **CLI binary**: `erd_compile` outputs LaTeX to stdout or `-o file.tex`.
+- New fixtures: `proof_chain.erd`, `full_document.erd`
+- npm script: `npm run compile -- file.erd`
+
 ## Verification
 
 ```bash
 cargo test --package erd_doc        # unit + integration tests
 npm run check -- file.erd           # verify a document
+npm run compile -- file.erd         # compile to LaTeX
 npm test                            # full workspace tests + lint
 ```

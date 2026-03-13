@@ -1921,6 +1921,11 @@ impl RuleSet {
         self.rules.iter()
     }
 
+    /// Find a rule by name.
+    pub fn find_rule(&self, name: &str) -> Option<&Rule> {
+        self.rules.iter().find(|r| r.name == name)
+    }
+
     /// Consume this RuleSet into its underlying Vec<Rule>.
     pub fn into_rules(self) -> Vec<Rule> {
         self.rules
