@@ -1,4 +1,4 @@
-use crate::ast::{Block, Claim, Document, Proof, ProseFragment};
+use crate::ast::{Block, Claim, Document, List, Proof, ProseFragment};
 use erd_symbolic::ToTex;
 use std::fmt::Write;
 
@@ -27,6 +27,9 @@ pub fn compile_to_tex(doc: &Document) -> String {
                 write_proof(&mut out, proof);
             }
             Block::Dim(_) => {} // metadata, no LaTeX output
+            Block::List(list) => {
+                write_list(&mut out, list);
+            }
         }
     }
 
@@ -108,6 +111,20 @@ fn write_proof(out: &mut String, proof: &Proof) {
         }
     }
     writeln!(out, "\\end{{align*}}").unwrap();
+}
+
+fn write_list(out: &mut String, list: &List) {
+    let env = if list.ordered { "enumerate" } else { "itemize" };
+    writeln!(out, "\\begin{{{}}}", env).unwrap();
+    for item in &list.items {
+        write!(out, "  \\item ").unwrap();
+        write_prose_fragments(out, &item.fragments);
+        writeln!(out).unwrap();
+        if let Some(ref children) = item.children {
+            write_list(out, children);
+        }
+    }
+    writeln!(out, "\\end{{{}}}", env).unwrap();
 }
 
 #[cfg(test)]

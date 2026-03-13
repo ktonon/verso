@@ -1,4 +1,6 @@
-use crate::ast::{Block, Claim, DimDecl, Document, Proof, ProofStep, ProseFragment, Span};
+use crate::ast::{
+    Block, Claim, DimDecl, Document, List, ListItem, Proof, ProofStep, ProseFragment, Span,
+};
 use crate::dim::Dimension;
 use erd_symbolic::parse_expr;
 use std::fmt;
@@ -160,11 +162,22 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // List block
+        if is_list_marker(trimmed) {
+            let list = parse_list(&lines, &mut i)?;
+            blocks.push(Block::List(list));
+            continue;
+        }
+
         // Prose line — collect consecutive non-special lines into a paragraph
         let mut prose_text = String::new();
         while i < lines.len() {
             let l = lines[i].trim();
-            if l.is_empty() || l.starts_with('#') || l.starts_with(':') {
+            if l.is_empty()
+                || l.starts_with('#')
+                || l.starts_with(':')
+                || is_list_marker(l)
+            {
                 break;
             }
             if !prose_text.is_empty() {
@@ -188,6 +201,106 @@ fn is_continuation(line: &str) -> bool {
         return false;
     }
     line.starts_with(' ') || line.starts_with('\t')
+}
+
+/// Check if a trimmed line starts with a list marker (`- ` or `N. `).
+fn is_list_marker(trimmed: &str) -> bool {
+    if trimmed.starts_with("- ") {
+        return true;
+    }
+    is_ordered_marker(trimmed)
+}
+
+/// Check if a trimmed line starts with an ordered list marker (`N. `).
+fn is_ordered_marker(trimmed: &str) -> bool {
+    let mut chars = trimmed.chars();
+    // Must start with a digit
+    match chars.next() {
+        Some(c) if c.is_ascii_digit() => {}
+        _ => return false,
+    }
+    // Consume remaining digits
+    loop {
+        match chars.next() {
+            Some(c) if c.is_ascii_digit() => continue,
+            Some('.') => break,
+            _ => return false,
+        }
+    }
+    // Must be followed by a space
+    matches!(chars.next(), Some(' '))
+}
+
+/// Strip a list marker from a line, returning the content after the marker.
+fn strip_marker(trimmed: &str) -> &str {
+    if trimmed.starts_with("- ") {
+        return &trimmed[2..];
+    }
+    // Ordered: skip digits, dot, space
+    if let Some(dot_pos) = trimmed.find(". ") {
+        if trimmed[..dot_pos].chars().all(|c| c.is_ascii_digit()) {
+            return &trimmed[dot_pos + 2..];
+        }
+    }
+    trimmed
+}
+
+/// Compute the indentation level of a raw line (number of leading spaces).
+fn indent_level(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+/// Parse a list starting at lines[*i]. Advances *i past the list.
+fn parse_list(lines: &[&str], i: &mut usize) -> Result<List, ParseDocError> {
+    let span = Span { line: *i + 1 };
+    let base_indent = indent_level(lines[*i]);
+    let first_trimmed = lines[*i].trim();
+    let ordered = is_ordered_marker(first_trimmed);
+
+    let mut items: Vec<ListItem> = Vec::new();
+
+    while *i < lines.len() {
+        let line = lines[*i];
+        let trimmed = line.trim();
+
+        // Stop on blank line, heading, directive, or outdented line
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(':') {
+            break;
+        }
+
+        let line_indent = indent_level(line);
+
+        // If indented deeper than base, this is a nested list
+        if line_indent > base_indent && is_list_marker(trimmed) {
+            // Attach as children to the last item
+            if let Some(last) = items.last_mut() {
+                let child_list = parse_list(lines, i)?;
+                last.children = Some(child_list);
+                continue;
+            }
+        }
+
+        // If at our indent level with a marker, it's a new item
+        if line_indent == base_indent && is_list_marker(trimmed) {
+            let content = strip_marker(trimmed);
+            let fragments = parse_prose_fragments(content)?;
+            items.push(ListItem {
+                fragments,
+                children: None,
+            });
+            *i += 1;
+            continue;
+        }
+
+        // Otherwise (outdented or not a list marker at base level), stop
+        break;
+    }
+
+    Ok(List {
+        ordered,
+        items,
+        span,
+    })
 }
 
 /// Parse `lhs = rhs` from a claim body string.
@@ -783,5 +896,87 @@ More prose here.
             }
             _ => panic!("expected Prose"),
         }
+    }
+
+    #[test]
+    fn parse_bullet_list() {
+        let src = "- First\n- Second\n- Third";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::List(list) => {
+                assert!(!list.ordered);
+                assert_eq!(list.items.len(), 3);
+                assert!(matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "First"));
+                assert!(matches!(&list.items[1].fragments[0], ProseFragment::Text(t) if t == "Second"));
+                assert!(matches!(&list.items[2].fragments[0], ProseFragment::Text(t) if t == "Third"));
+            }
+            other => panic!("expected List, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_numbered_list() {
+        let src = "1. Alpha\n2. Beta\n3. Gamma";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::List(list) => {
+                assert!(list.ordered);
+                assert_eq!(list.items.len(), 3);
+                assert!(matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Alpha"));
+            }
+            other => panic!("expected List, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_nested_bullet_list() {
+        let src = "- Outer\n  - Inner A\n  - Inner B\n- Back";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::List(list) => {
+                assert_eq!(list.items.len(), 2);
+                assert!(matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Outer"));
+                let children = list.items[0].children.as_ref().expect("expected nested list");
+                assert_eq!(children.items.len(), 2);
+                assert!(matches!(&children.items[0].fragments[0], ProseFragment::Text(t) if t == "Inner A"));
+                assert!(matches!(&list.items[1].fragments[0], ProseFragment::Text(t) if t == "Back"));
+            }
+            other => panic!("expected List, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_list_with_inline_math() {
+        let src = "- Energy: math`mc**2`\n- Momentum: math`m * v`";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::List(list) => {
+                assert_eq!(list.items.len(), 2);
+                assert_eq!(list.items[0].fragments.len(), 2);
+                assert!(matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Energy: "), "got {:?}", list.items[0].fragments[0]);
+                assert!(matches!(&list.items[0].fragments[1], ProseFragment::Math(_)));
+            }
+            other => panic!("expected List, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_list_terminated_by_blank_line() {
+        let src = "- Item one\n- Item two\n\nProse after list.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::List(_)));
+        assert!(matches!(&doc.blocks[1], Block::Prose(_)));
+    }
+
+    #[test]
+    fn parse_list_terminated_by_directive() {
+        let src = "- Item one\n:claim foo\n  x = x";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::List(_)));
+        assert!(matches!(&doc.blocks[1], Block::Claim(_)));
     }
 }

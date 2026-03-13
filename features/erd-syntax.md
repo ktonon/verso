@@ -11,7 +11,7 @@ conventions align, but is its own language, not a superset.
 | M | Feature | Status |
 |---|---------|--------|
 | 1 | Inline formatting: bold, italic | **completed** |
-| 2 | Lists: bullet and numbered | planned |
+| 2 | Lists: bullet and numbered | **completed** |
 | 3 | Multiline math blocks | planned |
 | 4 | Citations and bibliography | planned |
 | 5 | Theorem-like environments | planned |
@@ -362,6 +362,16 @@ The `ToTex` trait handles conversion to proper LaTeX notation.
 - `find_emphasis` handles `**` before `*` to avoid false matches; skips lone `*` that are part of `**`
 - `compile_tex.rs` refactored: extracted `write_prose_fragments` for recursive rendering of `\textbf{}` / `\textit{}` nesting
 - 7 new tests (5 parse, 2 compile)
+
+### Phase 2: Lists (completed)
+
+- Added `List { ordered, items, span }` and `ListItem { fragments, children }` to AST
+- Parser detects `- ` (bullet) and `N. ` (ordered) markers at block level
+- Nesting via indentation: deeper-indented markers become children of the previous item
+- List terminates on blank line, heading, directive, or outdented non-marker line
+- Items support full inline formatting (bold, italic, math, etc.)
+- LaTeX: `\begin{itemize}` / `\begin{enumerate}` with recursive `write_list`
+- 6 new tests (bullet, numbered, nested, inline math, termination by blank/directive)
 
 ## Plan
 

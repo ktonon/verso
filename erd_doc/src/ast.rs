@@ -20,6 +20,23 @@ pub enum Block {
     Proof(Proof),
     /// A dimension declaration for a variable.
     Dim(DimDecl),
+    /// A list (bullet or numbered).
+    List(List),
+}
+
+/// A list block (ordered or unordered).
+#[derive(Debug)]
+pub struct List {
+    pub ordered: bool,
+    pub items: Vec<ListItem>,
+    pub span: Span,
+}
+
+/// An item within a list.
+#[derive(Debug)]
+pub struct ListItem {
+    pub fragments: Vec<ProseFragment>,
+    pub children: Option<List>,
 }
 
 /// A fragment within a prose paragraph.
