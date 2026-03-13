@@ -26,6 +26,30 @@ pub enum Block {
     MathBlock(MathBlock),
     /// A bibliography declaration: `:bibliography refs.bib`
     Bibliography { path: String, span: Span },
+    /// A theorem-like environment: `:theorem`, `:definition`, etc.
+    Environment(Environment),
+    /// A block quote: lines starting with `> `.
+    BlockQuote(Vec<ProseFragment>),
+}
+
+/// A theorem-like environment block.
+#[derive(Debug)]
+pub struct Environment {
+    pub kind: EnvKind,
+    pub title: Option<String>,
+    pub body: Vec<ProseFragment>,
+    pub span: Span,
+}
+
+/// The kind of theorem-like environment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EnvKind {
+    Theorem,
+    Lemma,
+    Definition,
+    Corollary,
+    Remark,
+    Example,
 }
 
 /// A fenced math block: ```math ... ```
@@ -67,6 +91,8 @@ pub enum ProseFragment {
     Italic(Vec<ProseFragment>),
     /// Citation: cite`key` or cite`key1,key2` — rendered as \cite{keys}.
     Cite(Vec<String>),
+    /// Footnote: ^[text] — rendered as \footnote{text}.
+    Footnote(Vec<ProseFragment>),
 }
 
 /// An assertion that two expressions are equal.

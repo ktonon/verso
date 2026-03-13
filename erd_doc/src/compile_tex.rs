@@ -1,4 +1,5 @@
-use crate::ast::{Block, Claim, Document, List, MathBlock, Proof, ProseFragment};
+use crate::ast::{Block, Claim, Document, EnvKind, Environment, List, MathBlock, Proof, ProseFragment};
+use std::collections::HashSet;
 use erd_symbolic::ToTex;
 use std::fmt::Write;
 
@@ -8,6 +9,27 @@ pub fn compile_to_tex(doc: &Document) -> String {
 
     writeln!(out, "\\documentclass{{article}}").unwrap();
     writeln!(out, "\\usepackage{{amsmath}}").unwrap();
+    writeln!(out, "\\usepackage{{amsthm}}").unwrap();
+
+    // Collect used environment kinds for \newtheorem declarations
+    let mut env_kinds: Vec<EnvKind> = Vec::new();
+    let mut seen: HashSet<EnvKind> = HashSet::new();
+    for block in &doc.blocks {
+        if let Block::Environment(env) = block {
+            if seen.insert(env.kind) {
+                env_kinds.push(env.kind);
+            }
+        }
+    }
+    if !env_kinds.is_empty() {
+        writeln!(out).unwrap();
+        for kind in &env_kinds {
+            let name = env_kind_name(*kind);
+            let display = env_kind_display(*kind);
+            writeln!(out, "\\newtheorem{{{}}}{{{}}}",name, display).unwrap();
+        }
+    }
+
     writeln!(out).unwrap();
     writeln!(out, "\\begin{{document}}").unwrap();
 
@@ -34,6 +56,12 @@ pub fn compile_to_tex(doc: &Document) -> String {
                 write_math_block(&mut out, mb);
             }
             Block::Bibliography { .. } => {} // handled after loop
+            Block::Environment(env) => {
+                write_environment(&mut out, env);
+            }
+            Block::BlockQuote(fragments) => {
+                write_block_quote(&mut out, fragments);
+            }
         }
     }
 
@@ -92,6 +120,11 @@ fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment]) {
             }
             ProseFragment::Cite(keys) => {
                 write!(out, "\\cite{{{}}}", keys.join(",")).unwrap();
+            }
+            ProseFragment::Footnote(inner) => {
+                out.push_str("\\footnote{");
+                write_prose_fragments(out, inner);
+                out.push('}');
             }
         }
     }
@@ -159,6 +192,47 @@ fn write_math_block(out: &mut String, mb: &MathBlock) {
             }
         }
         writeln!(out, "\\end{{gather*}}").unwrap();
+    }
+}
+
+fn write_block_quote(out: &mut String, fragments: &[ProseFragment]) {
+    writeln!(out, "\\begin{{quote}}").unwrap();
+    write_prose_fragments(out, fragments);
+    writeln!(out).unwrap();
+    writeln!(out, "\\end{{quote}}").unwrap();
+}
+
+fn write_environment(out: &mut String, env: &Environment) {
+    let name = env_kind_name(env.kind);
+    if let Some(ref title) = env.title {
+        writeln!(out, "\\begin{{{}}}[{}]", name, title).unwrap();
+    } else {
+        writeln!(out, "\\begin{{{}}}", name).unwrap();
+    }
+    write_prose_fragments(out, &env.body);
+    writeln!(out).unwrap();
+    writeln!(out, "\\end{{{}}}", name).unwrap();
+}
+
+fn env_kind_name(kind: EnvKind) -> &'static str {
+    match kind {
+        EnvKind::Theorem => "theorem",
+        EnvKind::Lemma => "lemma",
+        EnvKind::Definition => "definition",
+        EnvKind::Corollary => "corollary",
+        EnvKind::Remark => "remark",
+        EnvKind::Example => "example",
+    }
+}
+
+fn env_kind_display(kind: EnvKind) -> &'static str {
+    match kind {
+        EnvKind::Theorem => "Theorem",
+        EnvKind::Lemma => "Lemma",
+        EnvKind::Definition => "Definition",
+        EnvKind::Corollary => "Corollary",
+        EnvKind::Remark => "Remark",
+        EnvKind::Example => "Example",
     }
 }
 
@@ -278,5 +352,81 @@ mod tests {
         let bib_pos = tex.find("\\bibliography{refs}").unwrap();
         let end_pos = tex.find("\\end{document}").unwrap();
         assert!(bib_pos < end_pos);
+    }
+
+    #[test]
+    fn compile_theorem_with_title() {
+        let src = ":theorem Pythagorean\n  For right triangles.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\newtheorem{theorem}{Theorem}"));
+        assert!(tex.contains("\\begin{theorem}[Pythagorean]"));
+        assert!(tex.contains("For right triangles."));
+        assert!(tex.contains("\\end{theorem}"));
+    }
+
+    #[test]
+    fn compile_definition_no_title() {
+        let src = ":definition\n  A group is a set.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\newtheorem{definition}{Definition}"));
+        assert!(tex.contains("\\begin{definition}"));
+        assert!(!tex.contains("\\begin{definition}["));
+        assert!(tex.contains("A group is a set."));
+        assert!(tex.contains("\\end{definition}"));
+    }
+
+    #[test]
+    fn compile_newtheorem_only_for_used_kinds() {
+        let src = ":lemma\n  Body A.\n\n:lemma Another\n  Body B.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        // Only one \newtheorem for lemma even though two lemmas exist
+        assert_eq!(tex.matches("\\newtheorem{lemma}{Lemma}").count(), 1);
+        // No theorem declaration since no theorems used
+        assert!(!tex.contains("\\newtheorem{theorem}"));
+    }
+
+    #[test]
+    fn compile_amsthm_included() {
+        let src = ":theorem\n  Body.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\usepackage{amsthm}"));
+    }
+
+    #[test]
+    fn compile_env_with_inline_math() {
+        let src = ":theorem\n  If math`x` is positive then result holds.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("$x$"));
+    }
+
+    // Phase 6: Block quotes, footnotes, comments
+
+    #[test]
+    fn compile_block_quote() {
+        let doc = parse_document("> A famous result.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\begin{quote}"));
+        assert!(tex.contains("A famous result."));
+        assert!(tex.contains("\\end{quote}"));
+    }
+
+    #[test]
+    fn compile_footnote() {
+        let doc = parse_document("Result^[First noted by Euler.] here.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\footnote{First noted by Euler.}"));
+    }
+
+    #[test]
+    fn compile_comment_produces_no_output() {
+        let doc = parse_document("% This is a comment\nVisible.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(!tex.contains("comment"));
+        assert!(tex.contains("Visible."));
     }
 }

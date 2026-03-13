@@ -1,6 +1,6 @@
 use crate::ast::{
-    Block, Claim, DimDecl, Document, List, ListItem, MathBlock, Proof, ProofStep, ProseFragment,
-    Span,
+    Block, Claim, DimDecl, Document, EnvKind, Environment, List, ListItem, MathBlock, Proof,
+    ProofStep, ProseFragment, Span,
 };
 use crate::dim::Dimension;
 use erd_symbolic::parse_expr;
@@ -31,6 +31,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         let trimmed = line.trim();
 
         if trimmed.is_empty() {
+            i += 1;
+            continue;
+        }
+
+        // Comment lines: skip entirely
+        if trimmed.starts_with('%') {
             i += 1;
             continue;
         }
@@ -187,6 +193,43 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // Theorem-like environments
+        if let Some(kind) = parse_env_kind(trimmed) {
+            let env = parse_environment(kind, trimmed, &lines, &mut i)?;
+            blocks.push(Block::Environment(env));
+            continue;
+        }
+
+        // Block quote
+        if trimmed.starts_with("> ") || trimmed == ">" {
+            let mut quote_text = String::new();
+            while i < lines.len() {
+                let l = lines[i].trim();
+                if l.starts_with("> ") {
+                    if !quote_text.is_empty() {
+                        quote_text.push(' ');
+                    }
+                    quote_text.push_str(&l[2..]);
+                    i += 1;
+                } else if l == ">" {
+                    // Empty quote line treated as space
+                    if !quote_text.is_empty() {
+                        quote_text.push(' ');
+                    }
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            let fragments = if quote_text.is_empty() {
+                Vec::new()
+            } else {
+                parse_prose_fragments(&quote_text)?
+            };
+            blocks.push(Block::BlockQuote(fragments));
+            continue;
+        }
+
         // List block
         if is_list_marker(trimmed) {
             let list = parse_list(&lines, &mut i)?;
@@ -201,6 +244,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if l.is_empty()
                 || l.starts_with('#')
                 || l.starts_with(':')
+                || l.starts_with('%')
+                || l.starts_with("> ")
+                || l == ">"
+                || l == "```math"
                 || is_list_marker(l)
             {
                 break;
@@ -356,6 +403,79 @@ fn parse_math_block(lines: &[&str], i: &mut usize) -> Result<MathBlock, ParseDoc
     })
 }
 
+/// Check if a trimmed line starts with a theorem-like directive.
+fn parse_env_kind(trimmed: &str) -> Option<EnvKind> {
+    let directives = [
+        (":theorem", EnvKind::Theorem),
+        (":lemma", EnvKind::Lemma),
+        (":definition", EnvKind::Definition),
+        (":corollary", EnvKind::Corollary),
+        (":remark", EnvKind::Remark),
+        (":example", EnvKind::Example),
+    ];
+    for (prefix, kind) in &directives {
+        if trimmed.starts_with(prefix) {
+            // Must be exactly the prefix or followed by whitespace
+            let rest = &trimmed[prefix.len()..];
+            if rest.is_empty() || rest.starts_with(' ') {
+                return Some(*kind);
+            }
+        }
+    }
+    None
+}
+
+/// Parse a theorem-like environment block. Advances *i past the block.
+fn parse_environment(
+    kind: EnvKind,
+    directive_line: &str,
+    lines: &[&str],
+    i: &mut usize,
+) -> Result<Environment, ParseDocError> {
+    let span = Span { line: *i + 1 };
+
+    // Extract title (rest of directive line after the kind keyword)
+    let prefix_len = match kind {
+        EnvKind::Theorem => ":theorem",
+        EnvKind::Lemma => ":lemma",
+        EnvKind::Definition => ":definition",
+        EnvKind::Corollary => ":corollary",
+        EnvKind::Remark => ":remark",
+        EnvKind::Example => ":example",
+    }
+    .len();
+    let title_str = directive_line[prefix_len..].trim();
+    let title = if title_str.is_empty() {
+        None
+    } else {
+        Some(title_str.to_string())
+    };
+
+    // Collect indented body lines
+    *i += 1;
+    let mut body_text = String::new();
+    while *i < lines.len() && is_continuation(&lines[*i]) {
+        if !body_text.is_empty() {
+            body_text.push(' ');
+        }
+        body_text.push_str(lines[*i].trim());
+        *i += 1;
+    }
+
+    let body = if body_text.is_empty() {
+        Vec::new()
+    } else {
+        parse_prose_fragments(&body_text)?
+    };
+
+    Ok(Environment {
+        kind,
+        title,
+        body,
+        span,
+    })
+}
+
 /// Parse `lhs = rhs` from a claim body string.
 fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseDocError> {
     let eq_pos = body.find('=').ok_or_else(|| ParseDocError {
@@ -411,6 +531,7 @@ enum InlineMatch<'a> {
     Tag(TagMatch<'a>),
     Bold { start: usize, end: usize, content: &'a str },
     Italic { start: usize, end: usize, content: &'a str },
+    Footnote { start: usize, end: usize, content: &'a str },
 }
 
 impl InlineMatch<'_> {
@@ -419,6 +540,7 @@ impl InlineMatch<'_> {
             InlineMatch::Tag(t) => t.start,
             InlineMatch::Bold { start, .. } => *start,
             InlineMatch::Italic { start, .. } => *start,
+            InlineMatch::Footnote { start, .. } => *start,
         }
     }
 }
@@ -506,23 +628,46 @@ fn find_emphasis(text: &str) -> Option<InlineMatch<'_>> {
     None
 }
 
-/// Find the earliest inline construct in the text (tag or emphasis).
+/// Find the next `^[...]` footnote in the text.
+fn find_footnote(text: &str) -> Option<InlineMatch<'_>> {
+    let open = text.find("^[")?;
+    // Find matching ], accounting for nesting
+    let mut depth = 0;
+    for (i, ch) in text[open + 2..].char_indices() {
+        match ch {
+            '[' => depth += 1,
+            ']' => {
+                if depth == 0 {
+                    let content = &text[open + 2..open + 2 + i];
+                    if !content.is_empty() {
+                        return Some(InlineMatch::Footnote {
+                            start: open,
+                            end: open + 2 + i + 1,
+                            content,
+                        });
+                    }
+                    return None;
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Find the earliest inline construct in the text (tag, emphasis, or footnote).
 fn find_next_inline(text: &str) -> Option<InlineMatch<'_>> {
     let tag = find_tagged_backtick(text).map(InlineMatch::Tag);
     let emph = find_emphasis(text);
+    let foot = find_footnote(text);
 
-    match (tag, emph) {
-        (Some(t), Some(e)) => {
-            if t.start() <= e.start() {
-                Some(t)
-            } else {
-                Some(e)
-            }
-        }
-        (Some(t), None) => Some(t),
-        (None, Some(e)) => Some(e),
-        (None, None) => None,
-    }
+    let candidates: Vec<InlineMatch<'_>> = [tag, emph, foot]
+        .into_iter()
+        .flatten()
+        .collect();
+
+    candidates.into_iter().min_by_key(|c| c.start())
 }
 
 /// Parse prose text into fragments, extracting tagged inline expressions.
@@ -589,6 +734,11 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                 InlineMatch::Italic { end, content, .. } => {
                     let inner = parse_prose_fragments(content)?;
                     fragments.push(ProseFragment::Italic(inner));
+                    rest = &rest[end..];
+                }
+                InlineMatch::Footnote { end, content, .. } => {
+                    let inner = parse_prose_fragments(content)?;
+                    fragments.push(ProseFragment::Footnote(inner));
                     rest = &rest[end..];
                 }
             }
@@ -668,6 +818,11 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
                 s.push_str("cite`");
                 s.push_str(&keys.join(","));
                 s.push('`');
+            }
+            ProseFragment::Footnote(inner) => {
+                s.push_str("^[");
+                s.push_str(&prose_to_string(inner));
+                s.push(']');
             }
         }
     }
@@ -1149,5 +1304,225 @@ More prose here.
     fn parse_bibliography_missing_path() {
         let err = parse_document(":bibliography").unwrap_err();
         assert!(err.message.contains("requires a file path"));
+    }
+
+    #[test]
+    fn parse_theorem_with_title() {
+        let src = ":theorem Pythagorean\n  For any right triangle, math`a**2 + b**2` is important.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Environment(env) => {
+                assert_eq!(env.kind, EnvKind::Theorem);
+                assert_eq!(env.title.as_deref(), Some("Pythagorean"));
+                assert!(!env.body.is_empty());
+            }
+            other => panic!("expected Environment, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_definition_no_title() {
+        let src = ":definition\n  A group is a set with a binary operation.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Environment(env) => {
+                assert_eq!(env.kind, EnvKind::Definition);
+                assert!(env.title.is_none());
+                assert_eq!(prose_to_string(&env.body), "A group is a set with a binary operation.");
+            }
+            other => panic!("expected Environment, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_all_env_kinds() {
+        for (directive, expected_kind) in &[
+            (":theorem", EnvKind::Theorem),
+            (":lemma", EnvKind::Lemma),
+            (":definition", EnvKind::Definition),
+            (":corollary", EnvKind::Corollary),
+            (":remark", EnvKind::Remark),
+            (":example", EnvKind::Example),
+        ] {
+            let src = format!("{}\n  Body text.", directive);
+            let doc = parse_document(&src).unwrap();
+            match &doc.blocks[0] {
+                Block::Environment(env) => {
+                    assert_eq!(env.kind, *expected_kind, "failed for {}", directive);
+                }
+                other => panic!("expected Environment for {}, got {:?}", directive, other),
+            }
+        }
+    }
+
+    #[test]
+    fn parse_env_body_with_inline_math() {
+        let src = ":lemma\n  If math`x` is positive then math`x**2` is positive.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Environment(env) => {
+                assert_eq!(env.kind, EnvKind::Lemma);
+                // Should have Text, Math, Text, Math, Text
+                assert_eq!(env.body.len(), 5);
+                assert!(matches!(&env.body[1], ProseFragment::Math(_)));
+                assert!(matches!(&env.body[3], ProseFragment::Math(_)));
+            }
+            other => panic!("expected Environment, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_env_multiline_body() {
+        let src = ":remark Important\n  First line.\n  Second line.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Environment(env) => {
+                assert_eq!(env.kind, EnvKind::Remark);
+                assert_eq!(env.title.as_deref(), Some("Important"));
+                assert_eq!(prose_to_string(&env.body), "First line. Second line.");
+            }
+            other => panic!("expected Environment, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_env_not_confused_with_claim() {
+        let src = ":theorem Test\n  Body.\n\n:claim foo\n  x = x";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::Environment(_)));
+        assert!(matches!(&doc.blocks[1], Block::Claim(_)));
+    }
+
+    // Phase 6: Block quotes, footnotes, comments
+
+    #[test]
+    fn parse_comment_skipped() {
+        let src = "% This is a comment\nVisible text.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(prose_to_string(fragments), "Visible text.");
+            }
+            other => panic!("expected Prose, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_comment_between_blocks() {
+        let src = "# Title\n% comment\nProse here.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::Section { .. }));
+        assert!(matches!(&doc.blocks[1], Block::Prose(_)));
+    }
+
+    #[test]
+    fn parse_comment_only_document() {
+        let src = "% just a comment\n% another comment";
+        let doc = parse_document(src).unwrap();
+        assert!(doc.blocks.is_empty());
+    }
+
+    #[test]
+    fn parse_block_quote() {
+        let src = "> This is a quoted passage.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::BlockQuote(fragments) => {
+                assert_eq!(prose_to_string(fragments), "This is a quoted passage.");
+            }
+            other => panic!("expected BlockQuote, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_block_quote_multiline() {
+        let src = "> First line of the quote.\n> Second line continues.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::BlockQuote(fragments) => {
+                assert_eq!(
+                    prose_to_string(fragments),
+                    "First line of the quote. Second line continues."
+                );
+            }
+            other => panic!("expected BlockQuote, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_block_quote_with_inline_formatting() {
+        let src = "> This has **bold** and math`x` in it.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::BlockQuote(fragments) => {
+                assert!(fragments.len() >= 3);
+                assert!(fragments.iter().any(|f| matches!(f, ProseFragment::Bold(_))));
+                assert!(fragments.iter().any(|f| matches!(f, ProseFragment::Math(_))));
+            }
+            other => panic!("expected BlockQuote, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_block_quote_terminated_by_non_quote() {
+        let src = "> Quoted text.\nProse after.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::BlockQuote(_)));
+        assert!(matches!(&doc.blocks[1], Block::Prose(_)));
+    }
+
+    #[test]
+    fn parse_footnote_inline() {
+        let src = "This is surprising^[First noted by Euler.].";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                assert!(matches!(&fragments[0], ProseFragment::Text(t) if t == "This is surprising"));
+                match &fragments[1] {
+                    ProseFragment::Footnote(inner) => {
+                        assert_eq!(prose_to_string(inner), "First noted by Euler.");
+                    }
+                    other => panic!("expected Footnote, got {:?}", other),
+                }
+                assert!(matches!(&fragments[2], ProseFragment::Text(t) if t == "."));
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_footnote_with_math() {
+        let src = "Result^[See math`x**2` for details.] here.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                match &fragments[1] {
+                    ProseFragment::Footnote(inner) => {
+                        assert!(inner.iter().any(|f| matches!(f, ProseFragment::Math(_))));
+                    }
+                    other => panic!("expected Footnote, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_footnote_roundtrip() {
+        let doc = parse_document("Text^[a note] more.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(prose_to_string(fragments), "Text^[a note] more.");
+            }
+            _ => panic!("expected Prose"),
+        }
     }
 }

@@ -14,8 +14,8 @@ conventions align, but is its own language, not a superset.
 | 2 | Lists: bullet and numbered | **completed** |
 | 3 | Multiline math blocks | **completed** |
 | 4 | Citations and bibliography | **completed** |
-| 5 | Theorem-like environments | planned |
-| 6 | Block quotes and footnotes | planned |
+| 5 | Theorem-like environments | **completed** |
+| 6 | Block quotes, footnotes, comments | **completed** |
 
 ## Syntax Reference
 
@@ -103,8 +103,7 @@ By claim`pythagorean`, we know that...
 
 Compiles to `\eqref{eq:pythagorean}`, producing a clickable "(1)" style reference.
 
-#### Citations **(planned)**
-
+#### Citations 
 Use `cite` backticks to cite a bibliography entry:
 
 ```
@@ -113,8 +112,7 @@ As shown by cite`einstein1905`, the energy is...
 
 Compiles to `\cite{einstein1905}`.
 
-#### Bold and italic **(planned)**
-
+#### Bold and italic 
 ```
 This is **bold** and this is *italic*.
 ```
@@ -182,8 +180,7 @@ sides of every claim have matching dimensions.
 
 ---
 
-### Multiline math blocks **(planned)**
-
+### Multiline math blocks 
 For displayed math that isn't a claim or proof — derivations, definitions, or
 sequences of related equations that don't need verification:
 
@@ -209,8 +206,7 @@ F &= ma
 
 ---
 
-### Lists **(planned)**
-
+### Lists 
 #### Bullet lists
 
 ```
@@ -244,8 +240,7 @@ Inline formatting (bold, italic, math, citations) works inside list items.
 
 ---
 
-### Citations and bibliography **(planned)**
-
+### Citations and bibliography 
 #### Declaring a bibliography
 
 ```
@@ -265,8 +260,7 @@ Compiles to `\cite{einstein1905}`. Multiple keys: `cite`einstein1905,dirac1928``
 
 ---
 
-### Theorem-like environments **(planned)**
-
+### Theorem-like environments 
 For theorems, lemmas, definitions, corollaries, and remarks:
 
 ```
@@ -291,8 +285,7 @@ appropriate `\newtheorem` declarations in the preamble.
 
 ---
 
-### Block quotes **(planned)**
-
+### Block quotes 
 ```
 > This is a block quote, useful for stating results from other sources
 > or providing extended remarks.
@@ -302,8 +295,7 @@ Compiles to `\begin{quote}` ... `\end{quote}`.
 
 ---
 
-### Footnotes **(planned)**
-
+### Footnotes 
 ```
 This result is surprising^[Though it was anticipated by Euler in 1748.].
 ```
@@ -390,6 +382,25 @@ The `ToTex` trait handles conversion to proper LaTeX notation.
 - Bibliography output placed at end of document (before `\end{document}`)
 - `.bib` extension stripped from path in `\bibliography{}` output
 - 6 new tests (4 parse, 2 compile)
+
+### Phase 5: Theorem-like environments (completed)
+
+- Added `Environment { kind, title, body, span }` and `EnvKind` enum (6 variants) to AST
+- Parser detects `:theorem`, `:lemma`, `:definition`, `:corollary`, `:remark`, `:example` directives
+- Title is optional text after the directive keyword; body is indented continuation lines parsed for inline fragments
+- `compile_tex.rs` collects used `EnvKind`s and emits `\newtheorem` declarations in the preamble (once per kind)
+- Environments compile to `\begin{theorem}[Title]` ... `\end{theorem}` (or without `[Title]` when none given)
+- `\usepackage{amsthm}` added to preamble
+- 7 new parse tests + 5 new compile tests
+
+### Phase 6: Block quotes, footnotes, comments (completed)
+
+- Added `Block::BlockQuote(Vec<ProseFragment>)` and `ProseFragment::Footnote(Vec<ProseFragment>)` to AST
+- Comments: lines starting with `%` are skipped early in the main parsing loop (before any block detection)
+- Block quotes: consecutive lines starting with `> ` are collected and parsed for inline fragments; compiles to `\begin{quote}` ... `\end{quote}`
+- Footnotes: `^[text]` inline construct detected by `find_footnote` with bracket nesting support; inner content recursively parsed for inline formatting; compiles to `\footnote{text}`
+- Prose termination updated to stop on `%`, `> `, and ` ```math ` lines
+- 10 new parse tests + 3 new compile tests
 
 ## Plan
 
