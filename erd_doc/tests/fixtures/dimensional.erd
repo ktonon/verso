@@ -1,0 +1,17 @@
+# Dimensional Analysis
+
+Algebraic identities with dimension annotations.
+
+:dim m [M]
+:dim v [L T^-1]
+:dim x [L]
+:dim t [T]
+
+:claim ke_commutative
+  (1/2) * m * v * v = (1/2) * m * v**2
+
+:claim vel_commutative
+  m * v = v * m
+
+:claim displacement_algebra
+  x / t * t = x

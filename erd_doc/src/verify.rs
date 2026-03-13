@@ -1,4 +1,5 @@
 use crate::ast::{Block, Claim, Document, Proof, Span};
+use crate::dim::{check_claim_dim, DimEnv, DimOutcome};
 use crate::eval::spot_check;
 use erd_symbolic::{Expr, RuleSet, simplify};
 
@@ -28,14 +29,21 @@ pub struct VerificationResult {
     pub name: String,
     pub span: Span,
     pub outcome: Outcome,
+    /// Result of dimensional analysis (None if no :dim declarations in document).
+    pub dim_outcome: Option<DimOutcome>,
 }
 
 impl VerificationResult {
     pub fn passed(&self) -> bool {
-        matches!(
+        let symbolic_pass = matches!(
             self.outcome,
             Outcome::Pass | Outcome::NumericalPass { .. } | Outcome::ProofPass { .. }
-        )
+        );
+        let dim_pass = self
+            .dim_outcome
+            .as_ref()
+            .map_or(true, |d| d.passed());
+        symbolic_pass && dim_pass
     }
 }
 
@@ -60,10 +68,19 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
     let rules = RuleSet::full();
     let mut results = Vec::new();
 
+    // Collect dimension declarations
+    let mut dim_env = DimEnv::new();
+    for block in &doc.blocks {
+        if let Block::Dim(decl) = block {
+            dim_env.insert(decl.var_name.clone(), decl.dimension.clone());
+        }
+    }
+    let has_dims = !dim_env.is_empty();
+
     for block in &doc.blocks {
         match block {
             Block::Claim(claim) => {
-                results.push(verify_claim(claim, &rules));
+                results.push(verify_claim(claim, &rules, has_dims.then_some(&dim_env)));
             }
             Block::Proof(proof) => {
                 results.push(verify_proof(proof, &rules));
@@ -76,12 +93,18 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
 }
 
 /// Verify a single claim by checking that `lhs - rhs` simplifies to 0.
-fn verify_claim(claim: &Claim, rules: &RuleSet) -> VerificationResult {
+fn verify_claim(
+    claim: &Claim,
+    rules: &RuleSet,
+    dim_env: Option<&DimEnv>,
+) -> VerificationResult {
     let outcome = check_equal(&claim.lhs, &claim.rhs, rules);
+    let dim_outcome = dim_env.map(|env| check_claim_dim(&claim.lhs, &claim.rhs, env));
     VerificationResult {
         name: claim.name.clone(),
         span: claim.span,
         outcome,
+        dim_outcome,
     }
 }
 
@@ -120,6 +143,7 @@ fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
                     residual: result,
                     step_span: to.span,
                 },
+                dim_outcome: None,
             };
         }
     }
@@ -130,6 +154,7 @@ fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
         outcome: Outcome::ProofPass {
             steps: proof.steps.len(),
         },
+        dim_outcome: None,
     }
 }
 

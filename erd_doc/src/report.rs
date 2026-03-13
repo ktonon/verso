@@ -1,3 +1,4 @@
+use crate::dim::DimOutcome;
 use crate::verify::{Outcome, VerificationReport, VerificationResult};
 use std::fmt;
 
@@ -12,6 +13,9 @@ impl<'a> fmt::Display for ReportFormatter<'a> {
 
         for result in &self.report.results {
             write_result(f, result)?;
+            if let Some(ref dim) = result.dim_outcome {
+                write_dim_outcome(f, dim)?;
+            }
         }
 
         let total = self.report.results.len();
@@ -79,6 +83,33 @@ fn write_result(f: &mut fmt::Formatter<'_>, result: &VerificationResult) -> fmt:
             writeln!(f, "    from: {}", from)?;
             writeln!(f, "      to: {}", to)?;
             writeln!(f, "    residual: {}", residual)
+        }
+    }
+}
+
+fn write_dim_outcome(f: &mut fmt::Formatter<'_>, dim: &DimOutcome) -> fmt::Result {
+    match dim {
+        DimOutcome::Pass => Ok(()), // no extra output needed
+        DimOutcome::Skipped { undeclared } => {
+            writeln!(
+                f,
+                "    \x1b[90mdim: skipped (undeclared: {})\x1b[0m",
+                undeclared.join(", ")
+            )
+        }
+        DimOutcome::LhsRhsMismatch { lhs, rhs } => {
+            writeln!(
+                f,
+                "    \x1b[31mdim: mismatch — lhs {}, rhs {}\x1b[0m",
+                lhs, rhs
+            )
+        }
+        DimOutcome::ExprError { side, error } => {
+            writeln!(
+                f,
+                "    \x1b[31mdim: error in {} — {}\x1b[0m",
+                side, error
+            )
         }
     }
 }

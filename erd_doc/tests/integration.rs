@@ -1,4 +1,5 @@
 use erd_doc::compile_tex::compile_to_tex;
+use erd_doc::dim::DimOutcome;
 use erd_doc::parse::parse_document;
 use erd_doc::verify::{verify_document, Outcome};
 
@@ -119,6 +120,61 @@ fn numerical_fallback_passes() {
             "'{}' should be NumericalPass, got {:?}",
             r.name,
             r.outcome
+        );
+    }
+}
+
+#[test]
+fn dimensional_analysis_passes() {
+    let src = load_fixture("dimensional.erd");
+    let doc = parse_document(&src).unwrap();
+    let report = verify_document(&doc);
+    assert_eq!(report.pass_count(), 3);
+    for r in &report.results {
+        assert!(
+            r.passed(),
+            "'{}' should pass but failed: {:?} dim: {:?}",
+            r.name,
+            r.outcome,
+            r.dim_outcome
+        );
+        // All claims should have dimension checking enabled and passing
+        assert!(
+            matches!(r.dim_outcome, Some(DimOutcome::Pass)),
+            "'{}' should have DimOutcome::Pass, got {:?}",
+            r.name,
+            r.dim_outcome
+        );
+    }
+}
+
+#[test]
+fn dimensional_mismatch_detected() {
+    let src = load_fixture("dim_fail.erd");
+    let doc = parse_document(&src).unwrap();
+    let report = verify_document(&doc);
+    // The claim x = t fails symbolically AND dimensionally
+    assert_eq!(report.fail_count(), 1);
+    let r = &report.results[0];
+    assert_eq!(r.name, "wrong_units");
+    assert!(
+        matches!(r.dim_outcome, Some(DimOutcome::LhsRhsMismatch { .. })),
+        "expected dimension mismatch, got {:?}",
+        r.dim_outcome
+    );
+}
+
+#[test]
+fn no_dim_declarations_skips_dim_check() {
+    // Documents without :dim blocks should have dim_outcome = None
+    let src = load_fixture("basic_algebra.erd");
+    let doc = parse_document(&src).unwrap();
+    let report = verify_document(&doc);
+    for r in &report.results {
+        assert!(
+            r.dim_outcome.is_none(),
+            "'{}' should have no dim_outcome without :dim declarations",
+            r.name
         );
     }
 }

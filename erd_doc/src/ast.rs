@@ -1,3 +1,4 @@
+use crate::dim::Dimension;
 use erd_symbolic::Expr;
 
 /// A parsed `.erd` document.
@@ -17,6 +18,8 @@ pub enum Block {
     Claim(Claim),
     /// A proof chain for a named claim.
     Proof(Proof),
+    /// A dimension declaration for a variable.
+    Dim(DimDecl),
 }
 
 /// A fragment within a prose paragraph.
@@ -55,6 +58,14 @@ pub struct ProofStep {
     pub expr: Expr,
     /// Optional justification (rule name) after `;`.
     pub justification: Option<String>,
+    pub span: Span,
+}
+
+/// A dimension declaration: `:dim varname [M L T^-2]`
+#[derive(Debug)]
+pub struct DimDecl {
+    pub var_name: String,
+    pub dimension: Dimension,
     pub span: Span,
 }
 

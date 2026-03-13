@@ -1,4 +1,5 @@
-use crate::ast::{Block, Claim, Document, Proof, ProofStep, ProseFragment, Span};
+use crate::ast::{Block, Claim, DimDecl, Document, Proof, ProofStep, ProseFragment, Span};
+use crate::dim::Dimension;
 use erd_symbolic::parse_expr;
 use std::fmt;
 
@@ -125,6 +126,37 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 steps,
                 span: Span { line: proof_line },
             }));
+            continue;
+        }
+
+        // Dimension declaration
+        if trimmed.starts_with(":dim") {
+            let rest = trimmed[":dim".len()..].trim();
+            // Parse: varname [dim spec]
+            let bracket_pos = rest.find('[').ok_or_else(|| ParseDocError {
+                line: i + 1,
+                message: ":dim requires a variable name and dimension, e.g. :dim x [L T^-1]"
+                    .into(),
+            })?;
+            let var_name = rest[..bracket_pos].trim().to_string();
+            if var_name.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":dim requires a variable name".into(),
+                });
+            }
+            let dim_str = rest[bracket_pos..].trim();
+            let dimension =
+                Dimension::parse(dim_str).map_err(|e| ParseDocError {
+                    line: i + 1,
+                    message: format!(":dim '{}': {}", var_name, e),
+                })?;
+            blocks.push(Block::Dim(DimDecl {
+                var_name,
+                dimension,
+                span: Span { line: i + 1 },
+            }));
+            i += 1;
             continue;
         }
 
@@ -450,6 +482,38 @@ mod tests {
         let src = ":proof\n  x\n  = y";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("requires a claim name"));
+    }
+
+    #[test]
+    fn parse_dim_declaration() {
+        let src = ":dim x [L]\n:dim v [L T^-1]";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        match &doc.blocks[0] {
+            Block::Dim(d) => {
+                assert_eq!(d.var_name, "x");
+                assert_eq!(d.dimension.to_string(), "[L]");
+            }
+            _ => panic!("expected Dim"),
+        }
+        match &doc.blocks[1] {
+            Block::Dim(d) => {
+                assert_eq!(d.var_name, "v");
+                assert_eq!(d.dimension.to_string(), "[L T^-1]");
+            }
+            _ => panic!("expected Dim"),
+        }
+    }
+
+    #[test]
+    fn parse_dim_missing_brackets() {
+        let src = ":dim x L";
+        let err = parse_document(src).unwrap_err();
+        assert!(
+            err.message.contains(":dim requires"),
+            "unexpected error: {}",
+            err.message
+        );
     }
 
     #[test]

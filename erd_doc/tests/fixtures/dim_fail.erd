@@ -1,0 +1,7 @@
+# Dimension Mismatch
+
+:dim x [L]
+:dim t [T]
+
+:claim wrong_units
+  x = t

@@ -15,7 +15,7 @@ Six milestones:
 | 1 | Red/green loop: `erd check file.erd` verifies claims | **completed** |
 | 2 | Proof chains + LaTeX compilation | **completed** |
 | 3 | Numerical spot-checks (random-point evaluation) | **completed** |
-| 4 | Dimensional analysis (`:dim` declarations, unit checking) | planned |
+| 4 | Dimensional analysis (`:dim` declarations, unit checking) | **completed** |
 | 5 | Watch mode (`erd watch` re-verifies on save) | planned |
 | 6 | VSCode integration (inline diagnostics via LSP) | planned |
 
@@ -70,6 +70,16 @@ Raw LaTeX via tex`\vec{v}`.
 - **Spot-check fallback**: When symbolic `simplify(lhs - rhs)` doesn't reach 0, `spot_check` evaluates both sides at 200 deterministic pseudo-random points and checks relative error < 1e-8.
 - **Three-tier outcomes**: Pass (green ✓, symbolic), NumericalPass (yellow ~, with sample count), Fail (red ✗, with residual).
 - **Test fixture**: `numerical_fallback.erd` with `sinh(x) = (exp(x) - exp(-x))/2` and `cosh(x) = (exp(x) + exp(-x))/2` — true identities the symbolic engine can't prove (no hyperbolic↔exponential rules).
+
+### M4 (completed)
+
+- **Dimension types**: `dim.rs` with `BaseDim` enum (L, M, T, Θ, I, N, J), `Dimension` type (BTreeMap of exponents), parsing from bracket notation `[M L T^-2]`.
+- **Dimension inference**: `infer_dim(expr, env)` propagates dimensions through all Expr variants — multiplication adds exponents, division subtracts, power multiplies, functions require dimensionless args.
+- **Claim checking**: `check_claim_dim(lhs, rhs, env)` with four outcomes: Pass, Skipped (undeclared vars), LhsRhsMismatch, ExprError (e.g., adding length to time).
+- **Integration into verifier**: `VerificationResult.dim_outcome` is `Some` when document has `:dim` blocks, `None` otherwise. A claim must pass both symbolic and dimensional checks.
+- **Parser**: `:dim varname [dim spec]` blocks parsed as `Block::Dim(DimDecl)`.
+- **Report**: dim errors shown in red, skipped in gray.
+- New fixtures: `dimensional.erd` (3 passing claims with dims), `dim_fail.erd` (dimension mismatch).
 
 ## Verification
 

@@ -26,6 +26,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Proof(proof) => {
                 write_proof(&mut out, proof);
             }
+            Block::Dim(_) => {} // metadata, no LaTeX output
         }
     }
 
