@@ -22,6 +22,7 @@
 		"rl-train": "cargo run --release -p erd_training --bin policy_rl_train -- --device ndarray",
 		"check": "cargo run --release -p erd_doc --bin erd_check --",
 		"compile": "cargo run --release -p erd_doc --bin erd_compile --",
+		"watch": "cargo run --release -p erd_doc --bin erd_watch --",
 		"test": "cargo test --workspace && npm run lint",
 		"start": "./scripts/build-app.js --server"
 	},

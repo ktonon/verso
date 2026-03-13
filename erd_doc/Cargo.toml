@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 erd_symbolic = { path = "../erd_symbolic" }
 clap = { version = "4", features = ["derive"] }
+notify = "7"
+notify-debouncer-mini = "0.5"

@@ -16,7 +16,7 @@ Six milestones:
 | 2 | Proof chains + LaTeX compilation | **completed** |
 | 3 | Numerical spot-checks (random-point evaluation) | **completed** |
 | 4 | Dimensional analysis (`:dim` declarations, unit checking) | **completed** |
-| 5 | Watch mode (`erd watch` re-verifies on save) | planned |
+| 5 | Watch mode (`erd watch` re-verifies on save) | **completed** |
 | 6 | VSCode integration (inline diagnostics via LSP) | planned |
 
 ### Source format (`.erd`)
@@ -81,11 +81,18 @@ Raw LaTeX via tex`\vec{v}`.
 - **Report**: dim errors shown in red, skipped in gray.
 - New fixtures: `dimensional.erd` (3 passing claims with dims), `dim_fail.erd` (dimension mismatch).
 
+### M5 (completed)
+
+- **Watch binary**: `erd_watch` uses `notify` + `notify-debouncer-mini` for cross-platform file watching with 300ms debounce.
+- **Workflow**: Clears terminal and re-verifies all files on each save. Green "Watching..." when all pass, red when failures exist.
+- npm script: `npm run watch -- file.erd`
+
 ## Verification
 
 ```bash
 cargo test --package erd_doc        # unit + integration tests
 npm run check -- file.erd           # verify a document
 npm run compile -- file.erd         # compile to LaTeX
+npm run watch -- file.erd           # watch mode
 npm test                            # full workspace tests + lint
 ```
