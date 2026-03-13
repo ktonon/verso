@@ -33,6 +33,10 @@ pub enum ProseFragment {
     Tex(String),
     /// Tagged claim reference: claim`name` — rendered as \eqref{eq:name}.
     ClaimRef(String),
+    /// Bold text: **text** — rendered as \textbf{text}.
+    Bold(Vec<ProseFragment>),
+    /// Italic text: *text* — rendered as \textit{text}.
+    Italic(Vec<ProseFragment>),
 }
 
 /// An assertion that two expressions are equal.

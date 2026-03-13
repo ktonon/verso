@@ -10,7 +10,7 @@ conventions align, but is its own language, not a superset.
 
 | M | Feature | Status |
 |---|---------|--------|
-| 1 | Inline formatting: bold, italic | planned |
+| 1 | Inline formatting: bold, italic | **completed** |
 | 2 | Lists: bullet and numbered | planned |
 | 3 | Multiline math blocks | planned |
 | 4 | Citations and bibliography | planned |
@@ -354,7 +354,14 @@ The `ToTex` trait handles conversion to proper LaTeX notation.
 
 ## Implementation Notes
 
-(To be filled in as milestones are completed.)
+### Phase 1: Inline formatting (completed)
+
+- Added `Bold(Vec<ProseFragment>)` and `Italic(Vec<ProseFragment>)` to `ProseFragment` enum
+- `parse_prose_fragments` now finds the earliest inline construct (tagged backtick or emphasis marker) and processes it, with recursive parsing for inner content
+- `***text***` produces `Bold([Italic([Text("text")])])` — bold wraps italic
+- `find_emphasis` handles `**` before `*` to avoid false matches; skips lone `*` that are part of `**`
+- `compile_tex.rs` refactored: extracted `write_prose_fragments` for recursive rendering of `\textbf{}` / `\textit{}` nesting
+- 7 new tests (5 parse, 2 compile)
 
 ## Plan
 

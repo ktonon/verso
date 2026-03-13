@@ -240,45 +240,185 @@ fn parse_proof_step(text: &str, line: usize) -> Result<ProofStep, ParseDocError>
     })
 }
 
+/// An inline match found in prose text.
+enum InlineMatch<'a> {
+    Tag(TagMatch<'a>),
+    Bold { start: usize, end: usize, content: &'a str },
+    Italic { start: usize, end: usize, content: &'a str },
+}
+
+impl InlineMatch<'_> {
+    fn start(&self) -> usize {
+        match self {
+            InlineMatch::Tag(t) => t.start,
+            InlineMatch::Bold { start, .. } => *start,
+            InlineMatch::Italic { start, .. } => *start,
+        }
+    }
+}
+
+/// Find the next bold `**...**` or italic `*...*` marker.
+/// Bold (`**`) is checked before italic (`*`) to avoid false matches.
+fn find_emphasis(text: &str) -> Option<InlineMatch<'_>> {
+    // Look for ** first (bold)
+    if let Some(open) = text.find("**") {
+        // Check for *** (bold+italic)
+        if text[open..].starts_with("***") {
+            // Find closing ***
+            if let Some(close_offset) = text[open + 3..].find("***") {
+                let content = &text[open + 3..open + 3 + close_offset];
+                if !content.is_empty() {
+                    return Some(InlineMatch::Bold {
+                        start: open,
+                        end: open + 3 + close_offset + 3,
+                        content,
+                    });
+                }
+            }
+        }
+        // Find closing **
+        if let Some(close_offset) = text[open + 2..].find("**") {
+            let content = &text[open + 2..open + 2 + close_offset];
+            if !content.is_empty() {
+                return Some(InlineMatch::Bold {
+                    start: open,
+                    end: open + 2 + close_offset + 2,
+                    content,
+                });
+            }
+        }
+    }
+
+    // Look for single * (italic)
+    let mut search_from = 0;
+    while search_from < text.len() {
+        if let Some(open) = text[search_from..].find('*') {
+            let open = search_from + open;
+            // Skip if this is part of a ** sequence
+            if open + 1 < text.len() && text.as_bytes()[open + 1] == b'*' {
+                search_from = open + 2;
+                continue;
+            }
+            // Also skip if preceded by * (we're at the second char of **)
+            if open > 0 && text.as_bytes()[open - 1] == b'*' {
+                search_from = open + 1;
+                continue;
+            }
+            // Find closing * (that isn't part of **)
+            let mut close_from = open + 1;
+            while close_from < text.len() {
+                if let Some(close_offset) = text[close_from..].find('*') {
+                    let close = close_from + close_offset;
+                    // Skip if part of **
+                    if close + 1 < text.len() && text.as_bytes()[close + 1] == b'*' {
+                        close_from = close + 2;
+                        continue;
+                    }
+                    if close > 0 && text.as_bytes()[close - 1] == b'*' {
+                        close_from = close + 1;
+                        continue;
+                    }
+                    let content = &text[open + 1..close];
+                    if !content.is_empty() {
+                        return Some(InlineMatch::Italic {
+                            start: open,
+                            end: close + 1,
+                            content,
+                        });
+                    }
+                    break;
+                } else {
+                    break;
+                }
+            }
+            search_from = open + 1;
+        } else {
+            break;
+        }
+    }
+
+    None
+}
+
+/// Find the earliest inline construct in the text (tag or emphasis).
+fn find_next_inline(text: &str) -> Option<InlineMatch<'_>> {
+    let tag = find_tagged_backtick(text).map(InlineMatch::Tag);
+    let emph = find_emphasis(text);
+
+    match (tag, emph) {
+        (Some(t), Some(e)) => {
+            if t.start() <= e.start() {
+                Some(t)
+            } else {
+                Some(e)
+            }
+        }
+        (Some(t), None) => Some(t),
+        (None, Some(e)) => Some(e),
+        (None, None) => None,
+    }
+}
+
 /// Parse prose text into fragments, extracting tagged inline expressions.
-/// Supports: math`expr`, tex`raw latex`, claim`name`
+/// Supports: math`expr`, tex`raw latex`, claim`name`, **bold**, *italic*
 fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError> {
     let mut fragments = Vec::new();
     let mut rest = text;
 
     while !rest.is_empty() {
-        // Look for the next tagged backtick expression
-        if let Some(tag_match) = find_tagged_backtick(rest) {
-            // Push any text before the tag
-            if tag_match.start > 0 {
-                fragments.push(ProseFragment::Text(rest[..tag_match.start].to_string()));
+        if let Some(inline) = find_next_inline(rest) {
+            let start = inline.start();
+            if start > 0 {
+                fragments.push(ProseFragment::Text(rest[..start].to_string()));
             }
 
-            match tag_match.tag {
-                "math" => {
-                    let expr = parse_expr(tag_match.content).map_err(|e| ParseDocError {
-                        line: 0,
-                        message: format!("inline math`{}`: {:?}", tag_match.content, e),
-                    })?;
-                    fragments.push(ProseFragment::Math(expr));
+            match inline {
+                InlineMatch::Tag(tag_match) => {
+                    match tag_match.tag {
+                        "math" => {
+                            let expr =
+                                parse_expr(tag_match.content).map_err(|e| ParseDocError {
+                                    line: 0,
+                                    message: format!(
+                                        "inline math`{}`: {:?}",
+                                        tag_match.content, e
+                                    ),
+                                })?;
+                            fragments.push(ProseFragment::Math(expr));
+                        }
+                        "tex" => {
+                            fragments.push(ProseFragment::Tex(tag_match.content.to_string()));
+                        }
+                        "claim" => {
+                            fragments
+                                .push(ProseFragment::ClaimRef(tag_match.content.to_string()));
+                        }
+                        _ => {
+                            fragments.push(ProseFragment::Text(
+                                rest[tag_match.start..tag_match.end].to_string(),
+                            ));
+                        }
+                    }
+                    rest = &rest[tag_match.end..];
                 }
-                "tex" => {
-                    fragments.push(ProseFragment::Tex(tag_match.content.to_string()));
+                InlineMatch::Bold { end, content, .. } => {
+                    // For ***, the inner content should be parsed as italic
+                    let inner = if rest[start..].starts_with("***") {
+                        let italic_inner = parse_prose_fragments(content)?;
+                        vec![ProseFragment::Italic(italic_inner)]
+                    } else {
+                        parse_prose_fragments(content)?
+                    };
+                    fragments.push(ProseFragment::Bold(inner));
+                    rest = &rest[end..];
                 }
-                "claim" => {
-                    fragments.push(ProseFragment::ClaimRef(tag_match.content.to_string()));
-                }
-                _ => {
-                    // Unknown tag — treat as plain text
-                    fragments.push(ProseFragment::Text(
-                        rest[tag_match.start..tag_match.end].to_string(),
-                    ));
+                InlineMatch::Italic { end, content, .. } => {
+                    let inner = parse_prose_fragments(content)?;
+                    fragments.push(ProseFragment::Italic(inner));
+                    rest = &rest[end..];
                 }
             }
-
-            rest = &rest[tag_match.end..];
         } else {
-            // No more tags — push remaining text
             fragments.push(ProseFragment::Text(rest.to_string()));
             break;
         }
@@ -339,6 +479,16 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
                 s.push_str("claim`");
                 s.push_str(name);
                 s.push('`');
+            }
+            ProseFragment::Bold(inner) => {
+                s.push_str("**");
+                s.push_str(&prose_to_string(inner));
+                s.push_str("**");
+            }
+            ProseFragment::Italic(inner) => {
+                s.push_str("*");
+                s.push_str(&prose_to_string(inner));
+                s.push_str("*");
             }
         }
     }
@@ -534,5 +684,104 @@ More prose here.
         assert!(matches!(&doc.blocks[1], Block::Prose(_)));
         assert!(matches!(&doc.blocks[2], Block::Claim(_)));
         assert!(matches!(&doc.blocks[3], Block::Prose(_)));
+    }
+
+    #[test]
+    fn parse_bold_text() {
+        let doc = parse_document("This is **bold** text.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                assert!(matches!(&fragments[0], ProseFragment::Text(t) if t == "This is "));
+                match &fragments[1] {
+                    ProseFragment::Bold(inner) => {
+                        assert_eq!(inner.len(), 1);
+                        assert!(matches!(&inner[0], ProseFragment::Text(t) if t == "bold"));
+                    }
+                    other => panic!("expected Bold, got {:?}", other),
+                }
+                assert!(matches!(&fragments[2], ProseFragment::Text(t) if t == " text."));
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_italic_text() {
+        let doc = parse_document("This is *italic* text.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                assert!(matches!(&fragments[0], ProseFragment::Text(t) if t == "This is "));
+                match &fragments[1] {
+                    ProseFragment::Italic(inner) => {
+                        assert_eq!(inner.len(), 1);
+                        assert!(matches!(&inner[0], ProseFragment::Text(t) if t == "italic"));
+                    }
+                    other => panic!("expected Italic, got {:?}", other),
+                }
+                assert!(matches!(&fragments[2], ProseFragment::Text(t) if t == " text."));
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_bold_with_inner_math() {
+        let doc = parse_document("See **the value math`x`** here.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                match &fragments[1] {
+                    ProseFragment::Bold(inner) => {
+                        assert_eq!(inner.len(), 2);
+                        assert!(matches!(&inner[0], ProseFragment::Text(t) if t == "the value "));
+                        assert!(matches!(&inner[1], ProseFragment::Math(_)));
+                    }
+                    other => panic!("expected Bold, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_bold_italic() {
+        let doc = parse_document("This is ***both*** here.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                match &fragments[1] {
+                    ProseFragment::Bold(inner) => {
+                        assert_eq!(inner.len(), 1);
+                        match &inner[0] {
+                            ProseFragment::Italic(inner2) => {
+                                assert_eq!(inner2.len(), 1);
+                                assert!(
+                                    matches!(&inner2[0], ProseFragment::Text(t) if t == "both")
+                                );
+                            }
+                            other => panic!("expected Italic inside Bold, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected Bold, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_prose_to_string_roundtrip_bold_italic() {
+        let doc = parse_document("Hello **world** and *emphasis*.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(
+                    prose_to_string(fragments),
+                    "Hello **world** and *emphasis*."
+                );
+            }
+            _ => panic!("expected Prose"),
+        }
     }
 }

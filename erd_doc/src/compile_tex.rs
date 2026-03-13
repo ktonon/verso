@@ -46,6 +46,11 @@ fn write_section(out: &mut String, level: u8, title: &str) {
 }
 
 fn write_prose(out: &mut String, fragments: &[ProseFragment]) {
+    write_prose_fragments(out, fragments);
+    writeln!(out).unwrap();
+}
+
+fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment]) {
     for fragment in fragments {
         match fragment {
             ProseFragment::Text(text) => out.push_str(text),
@@ -58,9 +63,18 @@ fn write_prose(out: &mut String, fragments: &[ProseFragment]) {
             ProseFragment::ClaimRef(name) => {
                 write!(out, "\\eqref{{eq:{}}}", name).unwrap();
             }
+            ProseFragment::Bold(inner) => {
+                out.push_str("\\textbf{");
+                write_prose_fragments(out, inner);
+                out.push('}');
+            }
+            ProseFragment::Italic(inner) => {
+                out.push_str("\\textit{");
+                write_prose_fragments(out, inner);
+                out.push('}');
+            }
         }
     }
-    writeln!(out).unwrap();
 }
 
 fn write_claim(out: &mut String, claim: &Claim) {
@@ -160,5 +174,19 @@ mod tests {
         assert!(tex.contains("\\begin{document}"));
         assert!(tex.contains("\\end{document}"));
         assert!(tex.contains("\\section{Algebra}"));
+    }
+
+    #[test]
+    fn compile_bold_and_italic() {
+        let doc = parse_document("This is **bold** and *italic* text.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("This is \\textbf{bold} and \\textit{italic} text."));
+    }
+
+    #[test]
+    fn compile_bold_italic_combined() {
+        let doc = parse_document("This is ***emphasized*** text.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\textbf{\\textit{emphasized}}"));
     }
 }
