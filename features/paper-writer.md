@@ -14,7 +14,7 @@ Six milestones:
 |---|---------|--------|
 | 1 | Red/green loop: `erd check file.erd` verifies claims | **completed** |
 | 2 | Proof chains + LaTeX compilation | **completed** |
-| 3 | Numerical spot-checks (random-point evaluation) | planned |
+| 3 | Numerical spot-checks (random-point evaluation) | **completed** |
 | 4 | Dimensional analysis (`:dim` declarations, unit checking) | planned |
 | 5 | Watch mode (`erd watch` re-verifies on save) | planned |
 | 6 | VSCode integration (inline diagnostics via LSP) | planned |
@@ -63,6 +63,13 @@ Raw LaTeX via tex`\vec{v}`.
 - **CLI binary**: `erd_compile` outputs LaTeX to stdout or `-o file.tex`.
 - New fixtures: `proof_chain.erd`, `full_document.erd`
 - npm script: `npm run compile -- file.erd`
+
+### M3 (completed)
+
+- **Numerical evaluator**: `eval.rs` with `eval_f64` supporting all Expr variants and `free_vars` extraction.
+- **Spot-check fallback**: When symbolic `simplify(lhs - rhs)` doesn't reach 0, `spot_check` evaluates both sides at 200 deterministic pseudo-random points and checks relative error < 1e-8.
+- **Three-tier outcomes**: Pass (green ✓, symbolic), NumericalPass (yellow ~, with sample count), Fail (red ✗, with residual).
+- **Test fixture**: `numerical_fallback.erd` with `sinh(x) = (exp(x) - exp(-x))/2` and `cosh(x) = (exp(x) + exp(-x))/2` — true identities the symbolic engine can't prove (no hyperbolic↔exponential rules).
 
 ## Verification
 

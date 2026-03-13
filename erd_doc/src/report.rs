@@ -42,6 +42,13 @@ fn write_result(f: &mut fmt::Formatter<'_>, result: &VerificationResult) -> fmt:
                 result.name, result.span.line
             )
         }
+        Outcome::NumericalPass { samples, .. } => {
+            writeln!(
+                f,
+                "  \x1b[33m~\x1b[0m {} (numerical, {} samples, line {})",
+                result.name, samples, result.span.line
+            )
+        }
         Outcome::Fail { residual } => {
             writeln!(
                 f,

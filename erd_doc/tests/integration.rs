@@ -1,6 +1,6 @@
 use erd_doc::compile_tex::compile_to_tex;
 use erd_doc::parse::parse_document;
-use erd_doc::verify::verify_document;
+use erd_doc::verify::{verify_document, Outcome};
 
 fn load_fixture(name: &str) -> String {
     let path = format!("{}/tests/fixtures/{}", env!("CARGO_MANIFEST_DIR"), name);
@@ -96,4 +96,29 @@ fn full_document_compiles_to_tex() {
     assert!(tex.contains("\\label{eq:double_angle_cos}"));
     assert!(tex.contains("\\begin{align*}"));
     assert!(tex.contains("\\end{document}"));
+}
+
+#[test]
+fn numerical_fallback_passes() {
+    let src = load_fixture("numerical_fallback.erd");
+    let doc = parse_document(&src).unwrap();
+    let report = verify_document(&doc);
+    for r in &report.results {
+        assert!(
+            r.passed(),
+            "'{}' should pass (at least numerically) but failed: {:?}",
+            r.name,
+            r.outcome
+        );
+    }
+    assert_eq!(report.pass_count(), 2);
+    // These should be NumericalPass since symbolic engine can't prove them
+    for r in &report.results {
+        assert!(
+            matches!(r.outcome, Outcome::NumericalPass { .. }),
+            "'{}' should be NumericalPass, got {:?}",
+            r.name,
+            r.outcome
+        );
+    }
 }

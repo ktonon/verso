@@ -1,5 +1,8 @@
 use crate::ast::{Block, Claim, Document, Proof, Span};
+use crate::eval::spot_check;
 use erd_symbolic::{Expr, RuleSet, simplify};
+
+const SPOT_CHECK_SAMPLES: usize = 200;
 
 #[derive(Debug)]
 pub struct VerificationReport {
@@ -29,13 +32,18 @@ pub struct VerificationResult {
 
 impl VerificationResult {
     pub fn passed(&self) -> bool {
-        matches!(self.outcome, Outcome::Pass | Outcome::ProofPass { .. })
+        matches!(
+            self.outcome,
+            Outcome::Pass | Outcome::NumericalPass { .. } | Outcome::ProofPass { .. }
+        )
     }
 }
 
 #[derive(Debug)]
 pub enum Outcome {
     Pass,
+    /// Symbolic simplification failed, but numerical spot-checks passed.
+    NumericalPass { samples: usize, residual: Expr },
     Fail { residual: Expr },
     ProofPass { steps: usize },
     ProofStepFail {
@@ -125,7 +133,8 @@ fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
     }
 }
 
-/// Check if two expressions are equivalent (simplify their difference to 0).
+/// Check if two expressions are equivalent.
+/// First tries symbolic simplification. If that fails, falls back to numerical spot-checks.
 fn check_equal(lhs: &Expr, rhs: &Expr, rules: &RuleSet) -> Outcome {
     let diff = Expr::Add(
         Box::new(lhs.clone()),
@@ -134,9 +143,16 @@ fn check_equal(lhs: &Expr, rhs: &Expr, rules: &RuleSet) -> Outcome {
     let result = simplify(&diff, rules);
 
     if is_zero(&result) {
-        Outcome::Pass
-    } else {
-        Outcome::Fail { residual: result }
+        return Outcome::Pass;
+    }
+
+    // Symbolic didn't reduce to 0 — try numerical spot-check
+    match spot_check(lhs, rhs, SPOT_CHECK_SAMPLES) {
+        Ok(()) => Outcome::NumericalPass {
+            samples: SPOT_CHECK_SAMPLES,
+            residual: result,
+        },
+        Err(_) => Outcome::Fail { residual: result },
     }
 }
 
