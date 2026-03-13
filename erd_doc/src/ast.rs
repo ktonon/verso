@@ -24,6 +24,8 @@ pub enum Block {
     List(List),
     /// A displayed math block (not verified).
     MathBlock(MathBlock),
+    /// A bibliography declaration: `:bibliography refs.bib`
+    Bibliography { path: String, span: Span },
 }
 
 /// A fenced math block: ```math ... ```
@@ -63,6 +65,8 @@ pub enum ProseFragment {
     Bold(Vec<ProseFragment>),
     /// Italic text: *text* — rendered as \textit{text}.
     Italic(Vec<ProseFragment>),
+    /// Citation: cite`key` or cite`key1,key2` — rendered as \cite{keys}.
+    Cite(Vec<String>),
 }
 
 /// An assertion that two expressions are equal.

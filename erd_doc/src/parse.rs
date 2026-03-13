@@ -170,6 +170,23 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // Bibliography declaration
+        if trimmed.starts_with(":bibliography") {
+            let path = trimmed[":bibliography".len()..].trim().to_string();
+            if path.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":bibliography requires a file path".into(),
+                });
+            }
+            blocks.push(Block::Bibliography {
+                path,
+                span: Span { line: i + 1 },
+            });
+            i += 1;
+            continue;
+        }
+
         // List block
         if is_list_marker(trimmed) {
             let list = parse_list(&lines, &mut i)?;
@@ -542,6 +559,14 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                             fragments
                                 .push(ProseFragment::ClaimRef(tag_match.content.to_string()));
                         }
+                        "cite" => {
+                            let keys: Vec<String> = tag_match
+                                .content
+                                .split(',')
+                                .map(|k| k.trim().to_string())
+                                .collect();
+                            fragments.push(ProseFragment::Cite(keys));
+                        }
                         _ => {
                             fragments.push(ProseFragment::Text(
                                 rest[tag_match.start..tag_match.end].to_string(),
@@ -585,7 +610,7 @@ struct TagMatch<'a> {
 
 /// Find the next `tag\`content\`` pattern in the text.
 fn find_tagged_backtick(text: &str) -> Option<TagMatch<'_>> {
-    let tags = ["math", "tex", "claim"];
+    let tags = ["math", "tex", "claim", "cite"];
 
     let mut best: Option<TagMatch<'_>> = None;
 
@@ -638,6 +663,11 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
                 s.push_str("*");
                 s.push_str(&prose_to_string(inner));
                 s.push_str("*");
+            }
+            ProseFragment::Cite(keys) => {
+                s.push_str("cite`");
+                s.push_str(&keys.join(","));
+                s.push('`');
             }
         }
     }
@@ -1068,5 +1098,56 @@ More prose here.
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::MathBlock(_)));
         assert!(matches!(&doc.blocks[1], Block::Claim(_)));
+    }
+
+    #[test]
+    fn parse_cite_single_key() {
+        let doc = parse_document("See cite`einstein1905` for details.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                match &fragments[1] {
+                    ProseFragment::Cite(keys) => {
+                        assert_eq!(keys, &["einstein1905"]);
+                    }
+                    other => panic!("expected Cite, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_cite_multiple_keys() {
+        let doc = parse_document("See cite`einstein1905,dirac1928` here.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                match &fragments[1] {
+                    ProseFragment::Cite(keys) => {
+                        assert_eq!(keys, &["einstein1905", "dirac1928"]);
+                    }
+                    other => panic!("expected Cite, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_bibliography() {
+        let doc = parse_document(":bibliography refs.bib").unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Bibliography { path, .. } => {
+                assert_eq!(path, "refs.bib");
+            }
+            other => panic!("expected Bibliography, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_bibliography_missing_path() {
+        let err = parse_document(":bibliography").unwrap_err();
+        assert!(err.message.contains("requires a file path"));
     }
 }

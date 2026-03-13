@@ -13,7 +13,7 @@ conventions align, but is its own language, not a superset.
 | 1 | Inline formatting: bold, italic | **completed** |
 | 2 | Lists: bullet and numbered | **completed** |
 | 3 | Multiline math blocks | **completed** |
-| 4 | Citations and bibliography | planned |
+| 4 | Citations and bibliography | **completed** |
 | 5 | Theorem-like environments | planned |
 | 6 | Block quotes and footnotes | planned |
 
@@ -381,6 +381,15 @@ The `ToTex` trait handles conversion to proper LaTeX notation.
 - Single-expression blocks compile to `\[ ... \]`, multi-expression to `\begin{gather*}`
 - Math blocks are not verified — they're display-only (verifier skips `MathBlock`)
 - 7 new tests (5 parse, 2 compile)
+
+### Phase 4: Citations and bibliography (completed)
+
+- Added `ProseFragment::Cite(Vec<String>)` and `Block::Bibliography { path, span }` to AST
+- `cite` added to `find_tagged_backtick` tag list; comma-separated keys parsed
+- `:bibliography path.bib` directive parsed at block level
+- Bibliography output placed at end of document (before `\end{document}`)
+- `.bib` extension stripped from path in `\bibliography{}` output
+- 6 new tests (4 parse, 2 compile)
 
 ## Plan
 

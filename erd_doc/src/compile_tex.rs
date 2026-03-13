@@ -33,6 +33,17 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::MathBlock(mb) => {
                 write_math_block(&mut out, mb);
             }
+            Block::Bibliography { .. } => {} // handled after loop
+        }
+    }
+
+    // Bibliography at end of document
+    for block in &doc.blocks {
+        if let Block::Bibliography { path, .. } = block {
+            writeln!(out).unwrap();
+            let bib_name = path.strip_suffix(".bib").unwrap_or(path);
+            writeln!(out, "\\bibliographystyle{{plain}}").unwrap();
+            writeln!(out, "\\bibliography{{{}}}", bib_name).unwrap();
         }
     }
 
@@ -78,6 +89,9 @@ fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment]) {
                 out.push_str("\\textit{");
                 write_prose_fragments(out, inner);
                 out.push('}');
+            }
+            ProseFragment::Cite(keys) => {
+                write!(out, "\\cite{{{}}}", keys.join(",")).unwrap();
             }
         }
     }
@@ -245,5 +259,24 @@ mod tests {
         assert!(tex.contains("x + 1 \\\\"));
         assert!(tex.contains("y + 2"));
         assert!(tex.contains("\\end{gather*}"));
+    }
+
+    #[test]
+    fn compile_cite() {
+        let doc = parse_document("See cite`einstein1905` here.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\cite{einstein1905}"));
+    }
+
+    #[test]
+    fn compile_bibliography() {
+        let doc = parse_document(":bibliography refs.bib").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\bibliographystyle{plain}"));
+        assert!(tex.contains("\\bibliography{refs}"));
+        // Should appear before \end{document}
+        let bib_pos = tex.find("\\bibliography{refs}").unwrap();
+        let end_pos = tex.find("\\end{document}").unwrap();
+        assert!(bib_pos < end_pos);
     }
 }
