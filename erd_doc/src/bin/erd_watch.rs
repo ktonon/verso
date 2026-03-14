@@ -1,9 +1,8 @@
 use clap::Parser;
-use erd_doc::parse::parse_document;
+use erd_doc::parse::parse_document_from_file;
 use erd_doc::report::ReportFormatter;
 use erd_doc::verify::verify_document;
 use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
-use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -22,20 +21,11 @@ fn check_files(files: &[String]) {
 
     let mut all_passed = true;
 
-    for path in files {
-        let src = match fs::read_to_string(path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("error: {}: {}", path, e);
-                all_passed = false;
-                continue;
-            }
-        };
-
-        let doc = match parse_document(&src) {
+    for file in files {
+        let doc = match parse_document_from_file(Path::new(file)) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("error: {}: {}", path, e);
+                eprintln!("error: {}: {}", file, e);
                 all_passed = false;
                 continue;
             }
@@ -44,7 +34,7 @@ fn check_files(files: &[String]) {
         let report = verify_document(&doc);
         let formatter = ReportFormatter {
             report: &report,
-            filename: path,
+            filename: file,
         };
         print!("{}", formatter);
 

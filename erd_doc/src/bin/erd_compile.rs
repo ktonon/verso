@@ -1,7 +1,8 @@
 use clap::Parser;
 use erd_doc::compile_tex::compile_to_tex;
-use erd_doc::parse::parse_document;
+use erd_doc::parse::parse_document_from_file;
 use std::fs;
+use std::path::Path;
 use std::process;
 
 #[derive(Parser)]
@@ -17,16 +18,9 @@ struct Cli {
 
 fn main() {
     let cli = Cli::parse();
+    let path = Path::new(&cli.file);
 
-    let src = match fs::read_to_string(&cli.file) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("error: {}: {}", cli.file, e);
-            process::exit(1);
-        }
-    };
-
-    let doc = match parse_document(&src) {
+    let doc = match parse_document_from_file(path) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("error: {}: {}", cli.file, e);

@@ -20,6 +20,67 @@ impl fmt::Display for ParseDocError {
 
 impl std::error::Error for ParseDocError {}
 
+/// Resolve `:include` directives by reading and inlining included files.
+/// Detects circular includes. Paths are relative to `base_dir`.
+pub fn resolve_includes(
+    src: &str,
+    base_dir: &std::path::Path,
+    seen: &mut Vec<std::path::PathBuf>,
+) -> Result<String, ParseDocError> {
+    let mut out = String::new();
+    for (i, line) in src.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(":include") {
+            let path_str = trimmed[":include".len()..].trim();
+            if path_str.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":include requires a file path".into(),
+                });
+            }
+            let path = base_dir.join(path_str);
+            let canonical = path.canonicalize().map_err(|e| ParseDocError {
+                line: i + 1,
+                message: format!(":include '{}': {}", path_str, e),
+            })?;
+            if seen.contains(&canonical) {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: format!(":include '{}': circular include detected", path_str),
+                });
+            }
+            seen.push(canonical.clone());
+            let content = std::fs::read_to_string(&canonical).map_err(|e| ParseDocError {
+                line: i + 1,
+                message: format!(":include '{}': {}", path_str, e),
+            })?;
+            let child_dir = canonical.parent().unwrap_or(base_dir);
+            let resolved = resolve_includes(&content, child_dir, seen)?;
+            out.push_str(&resolved);
+            out.push('\n');
+        } else {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    Ok(out)
+}
+
+/// Parse an `.erd` file, resolving `:include` directives.
+pub fn parse_document_from_file(path: &std::path::Path) -> Result<Document, ParseDocError> {
+    let src = std::fs::read_to_string(path).map_err(|e| ParseDocError {
+        line: 0,
+        message: format!("cannot read '{}': {}", path.display(), e),
+    })?;
+    let base_dir = path.parent().unwrap_or(std::path::Path::new("."));
+    let mut seen = vec![path.canonicalize().map_err(|e| ParseDocError {
+        line: 0,
+        message: format!("cannot resolve '{}': {}", path.display(), e),
+    })?];
+    let resolved = resolve_includes(&src, base_dir, &mut seen)?;
+    parse_document(&resolved)
+}
+
 /// Parse an `.erd` document from source text.
 pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
     let mut blocks = Vec::new();
@@ -1981,6 +2042,59 @@ More prose here.
     fn parse_usepackage_empty_error() {
         let err = parse_document(":usepackage").unwrap_err();
         assert!(err.message.contains(":usepackage requires"));
+    }
+
+    // Includes
+
+    #[test]
+    fn parse_include_basic() {
+        let dir = std::env::temp_dir().join("erd_test_include_basic");
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("main.erd"), "# Main\n\n:include sub.erd\n\nEnd.").unwrap();
+        std::fs::write(dir.join("sub.erd"), "Sub content.").unwrap();
+        let doc = parse_document_from_file(&dir.join("main.erd")).unwrap();
+        // Should have: Section, Prose("Sub content."), Prose("End.")
+        assert!(doc.blocks.len() >= 3);
+        assert!(matches!(&doc.blocks[0], Block::Section { .. }));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_include_circular_error() {
+        let dir = std::env::temp_dir().join("erd_test_include_circular");
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("a.erd"), ":include b.erd").unwrap();
+        std::fs::write(dir.join("b.erd"), ":include a.erd").unwrap();
+        let err = parse_document_from_file(&dir.join("a.erd")).unwrap_err();
+        assert!(err.message.contains("circular"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_include_missing_file_error() {
+        let dir = std::env::temp_dir().join("erd_test_include_missing");
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("main.erd"), ":include nonexistent.erd").unwrap();
+        let err = parse_document_from_file(&dir.join("main.erd")).unwrap_err();
+        assert!(err.message.contains("nonexistent.erd"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_include_nested() {
+        let dir = std::env::temp_dir().join("erd_test_include_nested");
+        let _ = std::fs::create_dir_all(dir.join("sub"));
+        std::fs::write(dir.join("main.erd"), ":include sub/a.erd").unwrap();
+        std::fs::write(dir.join("sub/a.erd"), ":include b.erd").unwrap();
+        std::fs::write(dir.join("sub/b.erd"), "Nested content.").unwrap();
+        let doc = parse_document_from_file(&dir.join("main.erd")).unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(prose_to_string(fragments), "Nested content.");
+            }
+            other => panic!("expected Prose, got {:?}", other),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // Tables

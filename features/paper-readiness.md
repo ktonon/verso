@@ -15,7 +15,7 @@ This feature tracks closing those gaps.
 | 2 | Figures with captions and labels | completed |
 | 3 | Tables (markdown-style) | completed |
 | 4 | Custom preamble / document class | completed |
-| 5 | Multi-file include | planned |
+| 5 | Multi-file include | completed |
 | 6 | Unresolved ref diagnostics | planned |
 | 7 | Page breaks | planned |
 
@@ -195,6 +195,16 @@ Compiles to `\newpage`.
 - `block_has_refs` updated to check figure captions
 - VSCode grammar: `directive-figure` with key-value highlighting
 - Tests: 4 parse tests + 3 compile tests
+
+### M5: Multi-file include (completed)
+
+- Added `resolve_includes()` function: recursively expands `:include path` lines, resolving paths relative to including file
+- Added `parse_document_from_file()` entry point that resolves includes then parses
+- Circular include detection via `seen` path set
+- Updated `erd_compile`, `erd_check`, `erd_watch` binaries to use `parse_document_from_file`
+- `erd_lsp` stays with `parse_document` (receives text from editor, not file path)
+- VSCode grammar: `directive-include` rule
+- Tests: 4 tests (basic, circular error, missing file error, nested includes)
 
 ### M4: Custom preamble / document class (completed)
 

@@ -350,6 +350,23 @@ Compiles to `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
 
 ---
 
+### Multi-file include
+
+Split a document across multiple `.erd` files:
+
+```
+:include chapters/introduction.erd
+:include chapters/methods.erd
+```
+
+- Included files are parsed and inlined at the include point.
+- Paths are relative to the including file's directory.
+- Nested includes are supported (included files can include other files).
+- Circular includes are detected and produce an error.
+- Labels and cross-references work across included files.
+
+---
+
 ### Document class and packages
 
 Override the default `article` document class or add custom LaTeX packages:

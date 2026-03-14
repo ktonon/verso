@@ -1,8 +1,8 @@
 use clap::Parser;
-use erd_doc::parse::parse_document;
+use erd_doc::parse::parse_document_from_file;
 use erd_doc::report::ReportFormatter;
 use erd_doc::verify::verify_document;
-use std::fs;
+use std::path::Path;
 use std::process;
 
 #[derive(Parser)]
@@ -17,20 +17,11 @@ fn main() {
     let cli = Cli::parse();
     let mut all_passed = true;
 
-    for path in &cli.files {
-        let src = match fs::read_to_string(path) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("error: {}: {}", path, e);
-                all_passed = false;
-                continue;
-            }
-        };
-
-        let doc = match parse_document(&src) {
+    for file in &cli.files {
+        let doc = match parse_document_from_file(Path::new(file)) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("error: {}: {}", path, e);
+                eprintln!("error: {}: {}", file, e);
                 all_passed = false;
                 continue;
             }
@@ -39,7 +30,7 @@ fn main() {
         let report = verify_document(&doc);
         let formatter = ReportFormatter {
             report: &report,
-            filename: path,
+            filename: file,
         };
         print!("{}", formatter);
 

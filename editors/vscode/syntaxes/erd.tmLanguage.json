@@ -12,6 +12,7 @@
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
     { "include": "#directive-table" },
+    { "include": "#directive-include" },
     { "include": "#directive-class" },
     { "include": "#directive-usepackage" },
     { "include": "#directive-metadata" },
@@ -189,6 +190,14 @@
           "name": "punctuation.separator.table.erd"
         }
       ]
+    },
+
+    "directive-include": {
+      "match": "^(:include)\\s+(.+)$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.include.erd" },
+        "2": { "name": "string.unquoted.path.erd" }
+      }
     },
 
     "directive-class": {
