@@ -134,7 +134,7 @@ fn write_section(out: &mut String, level: u8, title: &str) {
         _ => "paragraph",
     };
     let slug = slugify(title);
-    writeln!(out, "\\{}{{{}}}", cmd, title).unwrap();
+    writeln!(out, "\\{}{{{}}}", cmd, escape_prose(title)).unwrap();
     if !slug.is_empty() {
         writeln!(out, "\\label{{{}}}", slug).unwrap();
     }
@@ -602,6 +602,14 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textasciitilde{}200 million years and T\\textasciitilde{}5000K"));
+    }
+
+    #[test]
+    fn compile_quotes_in_heading() {
+        let src = r#"## The "Standard" Model"#;
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\subsection{The ``Standard'' Model}"));
     }
 
     #[test]
