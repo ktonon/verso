@@ -126,12 +126,16 @@ impl ToTex for Expr {
                     _ => {
                         let a_tex = maybe_paren(a, self);
                         let b_tex = maybe_paren(b, self);
-                        // Choose operator based on multiplication kind (Einstein notation)
-                        let op = match classify_mul(a, b) {
-                            MulKind::Scalar => " ",         // scalar multiplication (juxtaposition)
-                            MulKind::Outer => " \\otimes ", // outer/tensor product
-                            MulKind::Single => " \\cdot ",  // single contraction (dot product)
-                            MulKind::Double => " : ",       // double contraction
+                        // Use \times between numeric factors to avoid ambiguity (e.g. 2 \times 10^{10})
+                        let op = if is_numeric_like(a) && is_numeric_like(b) {
+                            " \\times "
+                        } else {
+                            match classify_mul(a, b) {
+                                MulKind::Scalar => " ",         // scalar multiplication (juxtaposition)
+                                MulKind::Outer => " \\otimes ", // outer/tensor product
+                                MulKind::Single => " \\cdot ",  // single contraction (dot product)
+                                MulKind::Double => " : ",       // double contraction
+                            }
                         };
                         format!("{}{}{}", a_tex, op, b_tex)
                     }
@@ -176,6 +180,18 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
         format!("\\left( {} \\right)", child.to_tex())
     } else {
         child.to_tex()
+    }
+}
+
+/// True when an expression is purely numeric (no variables), so that
+/// adjacent numeric factors should be separated with `\times` in LaTeX.
+fn is_numeric_like(expr: &Expr) -> bool {
+    match expr {
+        Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) => true,
+        Expr::Pow(base, _) => is_numeric_like(base),
+        Expr::Neg(inner) => is_numeric_like(inner),
+        Expr::Mul(a, b) => is_numeric_like(a) && is_numeric_like(b),
+        _ => false,
     }
 }
 
@@ -365,6 +381,20 @@ mod tests {
         // x * y^2 — no parens needed
         let e = mul(scalar("x"), pow(scalar("y"), constant(2.0)));
         assert_eq!(e.to_tex(), "x y^{2}");
+    }
+
+    #[test]
+    fn to_tex_numeric_mul_uses_times() {
+        // 2 * 10^10 should use \times, not juxtaposition
+        let e = mul(constant(2.0), pow(constant(10.0), constant(10.0)));
+        assert_eq!(e.to_tex(), "2 \\times 10^{10}");
+    }
+
+    #[test]
+    fn to_tex_numeric_mul_with_var() {
+        // 2 * 10^10 * c — numeric part uses \times, var uses juxtaposition
+        let e = mul(mul(constant(2.0), pow(constant(10.0), constant(10.0))), scalar("c"));
+        assert_eq!(e.to_tex(), "2 \\times 10^{10} c");
     }
 
     #[test]

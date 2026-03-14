@@ -30,6 +30,18 @@
 #                         ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.end.erd
 #                          ^ source.erd punctuation.definition.tag.end.erd
 #                           ^^ source.erd
+>Gravity exceeds math`2*10^10c`.
+#^^^^^^^^^^^^^^^^ source.erd
+#                ^^^^ source.erd support.function.tag.math.erd
+#                    ^ source.erd punctuation.definition.tag.begin.erd
+#                     ^ source.erd meta.embedded.math.erd constant.numeric.erd
+#                      ^ source.erd meta.embedded.math.erd keyword.operator.arithmetic.erd
+#                       ^^ source.erd meta.embedded.math.erd constant.numeric.erd
+#                         ^ source.erd meta.embedded.math.erd keyword.operator.power.erd
+#                          ^^ source.erd meta.embedded.math.erd constant.numeric.erd
+#                            ^ source.erd meta.embedded.math.erd
+#                             ^ source.erd punctuation.definition.tag.end.erd
+#                              ^^ source.erd
 >A citation cite`einstein1905` here.
 #^^^^^^^^^^^ source.erd
 #           ^^^^ source.erd support.function.tag.cite.erd
