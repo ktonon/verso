@@ -122,6 +122,13 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // Table of contents
+        if trimmed == ":toc" {
+            blocks.push(Block::Toc);
+            i += 1;
+            continue;
+        }
+
         // Page break
         if trimmed == ":pagebreak" {
             blocks.push(Block::PageBreak);
@@ -1005,6 +1012,18 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                                 };
                             fragments.push(ProseFragment::Ref { label, display });
                         }
+                        "url" => {
+                            let (url, display) =
+                                if let Some(pipe) = tag_match.content.find('|') {
+                                    (
+                                        tag_match.content[..pipe].to_string(),
+                                        Some(tag_match.content[pipe + 1..].to_string()),
+                                    )
+                                } else {
+                                    (tag_match.content.to_string(), None)
+                                };
+                            fragments.push(ProseFragment::Url { url, display });
+                        }
                         _ => {
                             fragments.push(ProseFragment::Text(
                                 rest[tag_match.start..tag_match.end].to_string(),
@@ -1053,7 +1072,7 @@ struct TagMatch<'a> {
 
 /// Find the next `tag\`content\`` pattern in the text.
 fn find_tagged_backtick(text: &str) -> Option<TagMatch<'_>> {
-    let tags = ["math", "tex", "claim", "cite", "ref"];
+    let tags = ["math", "tex", "claim", "cite", "ref", "url"];
 
     let mut best: Option<TagMatch<'_>> = None;
 
@@ -1120,6 +1139,15 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
             ProseFragment::Ref { label, display } => {
                 s.push_str("ref`");
                 s.push_str(label);
+                if let Some(d) = display {
+                    s.push('|');
+                    s.push_str(d);
+                }
+                s.push('`');
+            }
+            ProseFragment::Url { url, display } => {
+                s.push_str("url`");
+                s.push_str(url);
                 if let Some(d) = display {
                     s.push('|');
                     s.push_str(d);
@@ -2049,6 +2077,50 @@ More prose here.
     fn parse_usepackage_empty_error() {
         let err = parse_document(":usepackage").unwrap_err();
         assert!(err.message.contains(":usepackage requires"));
+    }
+
+    // Table of contents
+
+    #[test]
+    fn parse_toc() {
+        let doc = parse_document(":toc").unwrap();
+        assert!(matches!(&doc.blocks[0], Block::Toc));
+    }
+
+    // URLs
+
+    #[test]
+    fn parse_url_plain() {
+        let doc = parse_document("See url`https://example.com` for info.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                match &fragments[1] {
+                    ProseFragment::Url { url, display } => {
+                        assert_eq!(url, "https://example.com");
+                        assert!(display.is_none());
+                    }
+                    other => panic!("expected Url, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_url_with_display() {
+        let doc = parse_document("Click url`https://example.com|here`.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                match &fragments[1] {
+                    ProseFragment::Url { url, display } => {
+                        assert_eq!(url, "https://example.com");
+                        assert_eq!(display.as_deref(), Some("here"));
+                    }
+                    other => panic!("expected Url, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
     }
 
     // Page breaks

@@ -12,6 +12,7 @@
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
     { "include": "#directive-table" },
+    { "include": "#directive-toc" },
     { "include": "#directive-pagebreak" },
     { "include": "#directive-include" },
     { "include": "#directive-class" },
@@ -193,6 +194,13 @@
       ]
     },
 
+    "directive-toc": {
+      "match": "^(:toc)\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.toc.erd" }
+      }
+    },
+
     "directive-pagebreak": {
       "match": "^(:pagebreak)\\s*$",
       "captures": {
@@ -309,6 +317,7 @@
         { "include": "#tag-claim" },
         { "include": "#tag-cite" },
         { "include": "#tag-ref" },
+        { "include": "#tag-url" },
         { "include": "#quoted-string" },
         { "include": "#footnote" },
         { "include": "#bold-italic" },
@@ -363,6 +372,16 @@
         "1": { "name": "support.function.tag.ref.erd" },
         "2": { "name": "punctuation.definition.tag.begin.erd" },
         "3": { "name": "entity.name.tag.cross-ref.erd" },
+        "4": { "name": "punctuation.definition.tag.end.erd" }
+      }
+    },
+
+    "tag-url": {
+      "match": "(url)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": { "name": "support.function.tag.url.erd" },
+        "2": { "name": "punctuation.definition.tag.begin.erd" },
+        "3": { "name": "markup.underline.link.erd" },
         "4": { "name": "punctuation.definition.tag.end.erd" }
       }
     },

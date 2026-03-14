@@ -99,6 +99,8 @@ Within prose, the following inline constructs are recognized:
 | `cite`key`` | Bibliography citation | `\cite{key}` |
 | `ref`label`` | Section cross-reference | `\hyperref[label]{Title}` |
 | `ref`label\|text`` | Cross-reference with display text | `\hyperref[label]{text}` |
+| `url`https://...`` | URL link | `\url{https://...}` |
+| `url`https://...\|text`` | URL with display text | `\href{https://...}{text}` |
 | `**text**` | Bold | `\textbf{text}` |
 | `*text*` | Italic | `\textit{text}` |
 
@@ -347,6 +349,16 @@ Include images with optional captions, labels, and width control:
 
 Compiles to `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`.
 `\usepackage{graphicx}` is added conditionally when figures are present.
+
+---
+
+### Table of contents
+
+```
+:toc
+```
+
+Compiles to `\tableofcontents`.
 
 ---
 

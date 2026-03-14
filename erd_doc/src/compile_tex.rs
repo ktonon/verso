@@ -172,6 +172,9 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::PageBreak => {
                 writeln!(out, "\\newpage").unwrap();
             }
+            Block::Toc => {
+                writeln!(out, "\\tableofcontents").unwrap();
+            }
             Block::List(list) => {
                 write_list(&mut out, list, &section_titles);
             }
@@ -296,6 +299,13 @@ fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment], section_
                     .or_else(|| section_titles.get(label.as_str()).map(|s| s.as_str()))
                     .unwrap_or(label.as_str());
                 write!(out, "\\hyperref[{}]{{{}}}", label, text).unwrap();
+            }
+            ProseFragment::Url { url, display } => {
+                if let Some(text) = display {
+                    write!(out, "\\href{{{}}}{{{}}}", url, text).unwrap();
+                } else {
+                    write!(out, "\\url{{{}}}", url).unwrap();
+                }
             }
         }
     }
@@ -438,10 +448,10 @@ fn write_environment(out: &mut String, env: &Environment, section_titles: &HashM
     writeln!(out, "\\end{{{}}}", name).unwrap();
 }
 
-/// Check if any prose fragment in a slice contains a Ref.
+/// Check if any prose fragment in a slice contains a Ref or Url (both need hyperref).
 fn fragments_have_refs(fragments: &[ProseFragment]) -> bool {
     fragments.iter().any(|f| match f {
-        ProseFragment::Ref { .. } => true,
+        ProseFragment::Ref { .. } | ProseFragment::Url { .. } => true,
         ProseFragment::Bold(inner)
         | ProseFragment::Italic(inner)
         | ProseFragment::Footnote(inner) => fragments_have_refs(inner),
@@ -993,6 +1003,35 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textasciitilde{}``both''"));
+    }
+
+    // Table of contents
+
+    #[test]
+    fn compile_toc() {
+        let src = ":toc";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\tableofcontents"));
+    }
+
+    // URLs
+
+    #[test]
+    fn compile_url_plain() {
+        let src = "See url`https://example.com`.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\url{https://example.com}"));
+        assert!(tex.contains("\\usepackage{hyperref}"));
+    }
+
+    #[test]
+    fn compile_url_with_display() {
+        let src = "Click url`https://example.com|here`.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\href{https://example.com}{here}"));
     }
 
     // Page breaks

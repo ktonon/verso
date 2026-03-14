@@ -104,6 +104,20 @@
     ],
     "description": "Cross-reference with custom display text"
   },
+  "URL": {
+    "prefix": "url",
+    "body": [
+      "url`${1:https://}`"
+    ],
+    "description": "Inline URL"
+  },
+  "URL with Display Text": {
+    "prefix": "urld",
+    "body": [
+      "url`${1:https://}|${2:display text}`"
+    ],
+    "description": "Inline URL with custom display text"
+  },
   "Bibliography": {
     "prefix": "bib",
     "body": [

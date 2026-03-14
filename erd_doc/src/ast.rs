@@ -48,6 +48,8 @@ pub enum Block {
     UsePackage { name: String, options: Option<String> },
     /// Page break: `:pagebreak`
     PageBreak,
+    /// Table of contents: `:toc`
+    Toc,
 }
 
 /// A figure block.
@@ -143,6 +145,11 @@ pub enum ProseFragment {
     /// Cross-reference: ref`label` or ref`label|display text` — rendered as \hyperref.
     Ref {
         label: String,
+        display: Option<String>,
+    },
+    /// URL: url`https://...` or url`https://...|display text` — rendered as \url or \href.
+    Url {
+        url: String,
         display: Option<String>,
     },
 }
