@@ -499,6 +499,8 @@ not LaTeX. Key differences from LaTeX:
 | `pi` or `\u{03C0}` | `\pi` | Pi constant |
 | `sqrt(x)` | `\sqrt{x}` | Square root |
 | `x * y` or `xy` | `xy` | Implicit multiplication |
+| `2*10^8` | `2 \times 10^{8}` | Numeric × numeric uses `\times` |
+| `1_000_000` | `1000000` | Underscores as visual separators |
 | `1/2` | `\frac{1}{2}` | Fractions |
 | `exp(x)` | `e^{x}` | Exponential |
 
