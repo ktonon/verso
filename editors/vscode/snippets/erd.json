@@ -90,6 +90,20 @@
     ],
     "description": "Reference to a named claim"
   },
+  "Cross Reference": {
+    "prefix": "ref",
+    "body": [
+      "ref`${1:label}`"
+    ],
+    "description": "Cross-reference to a section"
+  },
+  "Cross Reference with Display Text": {
+    "prefix": "refd",
+    "body": [
+      "ref`${1:label}|${2:display text}`"
+    ],
+    "description": "Cross-reference with custom display text"
+  },
   "Bibliography": {
     "prefix": "bib",
     "body": [

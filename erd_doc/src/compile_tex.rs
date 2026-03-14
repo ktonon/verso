@@ -148,7 +148,7 @@ fn write_prose(out: &mut String, fragments: &[ProseFragment], section_titles: &H
 fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
     for fragment in fragments {
         match fragment {
-            ProseFragment::Text(text) => out.push_str(text),
+            ProseFragment::Text(text) => out.push_str(&text.replace('~', "\\textasciitilde{}")),
             ProseFragment::Math(expr) => {
                 write!(out, "${}$", expr.to_tex()).unwrap();
             }
@@ -563,6 +563,14 @@ mod tests {
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textbf{\\hyperref[earth-and-the-solar-system]{Hydrogen creation}}"));
         assert!(tex.contains("\\textit{— abundant}"));
+    }
+
+    #[test]
+    fn compile_tilde_in_prose() {
+        let src = "~200 million years and T~5000K";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\textasciitilde{}200 million years and T\\textasciitilde{}5000K"));
     }
 
     #[test]

@@ -187,6 +187,7 @@
         { "include": "#tag-tex" },
         { "include": "#tag-claim" },
         { "include": "#tag-cite" },
+        { "include": "#tag-ref" },
         { "include": "#footnote" },
         { "include": "#bold-italic" },
         { "include": "#bold" },
@@ -230,6 +231,16 @@
         "1": { "name": "support.function.tag.cite.erd" },
         "2": { "name": "punctuation.definition.tag.begin.erd" },
         "3": { "name": "string.other.citation.erd" },
+        "4": { "name": "punctuation.definition.tag.end.erd" }
+      }
+    },
+
+    "tag-ref": {
+      "match": "(ref)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": { "name": "support.function.tag.ref.erd" },
+        "2": { "name": "punctuation.definition.tag.begin.erd" },
+        "3": { "name": "entity.name.tag.cross-ref.erd" },
         "4": { "name": "punctuation.definition.tag.end.erd" }
       }
     },
