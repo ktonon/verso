@@ -2,8 +2,8 @@
 
 ## Goal
 
-Make ERD output complete, submission-ready LaTeX without manual post-processing.
-Today ~50-70% of a real physics paper can be written in ERD; the rest (metadata,
+Make Verso output complete, submission-ready LaTeX without manual post-processing.
+Today ~50-70% of a real physics paper can be written in Verso; the rest (metadata,
 figures, tables, custom formatting) requires editing the generated LaTeX by hand.
 This feature tracks closing those gaps.
 
@@ -113,7 +113,7 @@ Add markdown-style table syntax.
 
 ### M4: Default preamble
 
-The compiler generates a complete LaTeX preamble with sensible defaults (11pt article, geometry, microtype, etc.). Documents do not specify packages — erd chooses reasonable defaults. Conditional packages (hyperref, graphicx, wrapfig) are included only when needed.
+The compiler generates a complete LaTeX preamble with sensible defaults (11pt article, geometry, microtype, etc.). Documents do not specify packages — verso chooses reasonable defaults. Conditional packages (hyperref, graphicx, wrapfig) are included only when needed.
 
 **Key files:**
 - `verso_doc/src/compile_tex.rs` — hardcoded default preamble with all standard packages and layout settings
@@ -126,8 +126,8 @@ Allow splitting a document across multiple `.verso` files.
 
 **Syntax:**
 ```
-:include chapters/introduction.erd
-:include chapters/methods.erd
+:include chapters/introduction.verso
+:include chapters/methods.verso
 ```
 
 **Design decisions:**
@@ -218,7 +218,7 @@ Compiles to `\newpage`.
 - Compiler generates a complete default preamble: 11pt article, geometry, fontenc, inputenc, lmodern, microtype, amsmath, amsthm, xcolor, framed, bookmark
 - Conditional packages: hyperref (when refs/urls used), graphicx + wrapfig (when figures present)
 - Layout defaults: no parindent, 6pt parskip, 3em emergencystretch, tocdepth 3
-- Removed `:class` and `:usepackage` directives — erd chooses reasonable defaults
+- Removed `:class` and `:usepackage` directives — verso chooses reasonable defaults
 - Tests: 1 compile test for default preamble
 
 ### M3: Tables (completed)

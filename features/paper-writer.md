@@ -12,11 +12,11 @@ Six milestones:
 
 | M | Feature | Status |
 |---|---------|--------|
-| 1 | Red/green loop: `erd check file.verso` verifies claims | **completed** |
+| 1 | Red/green loop: `verso check file.verso` verifies claims | **completed** |
 | 2 | Proof chains + LaTeX compilation | **completed** |
 | 3 | Numerical spot-checks (random-point evaluation) | **completed** |
 | 4 | Dimensional analysis (`:dim` declarations, unit checking) | **completed** |
-| 5 | Watch mode (`erd watch` re-verifies on save) | **completed** |
+| 5 | Watch mode (`verso watch` re-verifies on save) | **completed** |
 | 6 | VSCode integration (inline diagnostics via LSP) | **completed** |
 
 ### Source format (`.verso`)

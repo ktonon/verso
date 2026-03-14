@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add SI unit support to erd expressions so that numeric values can carry unit annotations (e.g., `3*10^8 [m/s]`), enabling dimensional verification through units and unit-aware arithmetic with automatic SI prefix selection for display.
+Add SI unit support to verso expressions so that numeric values can carry unit annotations (e.g., `3*10^8 [m/s]`), enabling dimensional verification through units and unit-aware arithmetic with automatic SI prefix selection for display.
 
 ## Plan
 

@@ -17,17 +17,28 @@ function findServerPath(): string {
     return configPath;
   }
 
-  // Check workspace target/release/ only if it exists
+  // Check workspace target/release/
   const workspaceFolders = workspace.workspaceFolders;
   if (workspaceFolders && workspaceFolders.length > 0) {
-    const candidate = path.join(
-      workspaceFolders[0].uri.fsPath,
-      "target",
-      "release",
-      "verso_lsp"
-    );
-    if (fs.existsSync(candidate)) {
-      return candidate;
+    const wsRoot = workspaceFolders[0].uri.fsPath;
+
+    // Direct: workspace is the verso repo
+    const direct = path.join(wsRoot, "target", "release", "verso_lsp");
+    if (fs.existsSync(direct)) {
+      return direct;
+    }
+
+    // Sibling: workspace is next to the verso repo (e.g. ../erd/target/release/)
+    const parent = path.dirname(wsRoot);
+    try {
+      for (const sibling of fs.readdirSync(parent)) {
+        const candidate = path.join(parent, sibling, "target", "release", "verso_lsp");
+        if (fs.existsSync(candidate)) {
+          return candidate;
+        }
+      }
+    } catch {
+      // parent not readable, skip
     }
   }
 

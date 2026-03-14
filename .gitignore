@@ -1,3 +1,4 @@
+.claude/*.local.json
 node_modules/
 checkpoints/
 data_training/

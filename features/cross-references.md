@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add internal cross-referencing to ERD documents so authors can link to sections
+Add internal cross-referencing to Verso documents so authors can link to sections
 (and eventually theorem-like environments) using `\hyperref` in the compiled
 LaTeX output.
 
@@ -60,7 +60,7 @@ Compiles to `\hyperref[earth-and-the-solar-system]{Hydrogen creation in planets 
 
 #### Full example
 
-```erd
+```verso
 ## Earth and the Solar System
 
 Planets form through accretion in protoplanetary disks.

@@ -398,8 +398,8 @@ Compiles to `\newpage`.
 Split a document across multiple `.verso` files:
 
 ```
-:include chapters/introduction.erd
-:include chapters/methods.erd
+:include chapters/introduction.verso
+:include chapters/methods.verso
 ```
 
 - Included files are parsed and inlined at the include point.
@@ -421,7 +421,7 @@ The compiler automatically generates a LaTeX preamble with sensible defaults:
 - `graphicx` and `wrapfig` are included when the document contains figures
 - Layout: no paragraph indent, 6pt paragraph skip, 3-level TOC depth
 
-Documents do not need to specify packages — erd chooses reasonable defaults.
+Documents do not need to specify packages — verso chooses reasonable defaults.
 
 ---
 

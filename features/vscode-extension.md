@@ -2,7 +2,7 @@
 
 ## Goal
 
-Transform the ERD VSCode extension from a minimal LSP client into a polished
+Transform the Verso VSCode extension from a minimal LSP client into a polished
 editing experience with syntax highlighting, correct language configuration,
 code folding, and snippets.
 
@@ -15,7 +15,7 @@ The extension currently provides:
 
 What's missing or broken:
 - **No syntax highlighting** — `.verso` files render as plain text
-- **Wrong comment syntax** — configured as `//` but ERD uses `%`
+- **Wrong comment syntax** — configured as `//` but Verso uses `%`
 - **No code folding** — blocks, environments, lists can't be collapsed
 - **Missing bracket pairs** — no `{ }` matching
 - **No snippets** — no templates for common structures
@@ -28,7 +28,7 @@ What's missing or broken:
 | 1 | Fix language configuration (comments, brackets, folding) | **completed** |
 | 2 | TextMate grammar: structure and directives | **completed** |
 | 3 | TextMate grammar: inline constructs and expressions | **completed** |
-| 4 | Snippets for common ERD constructs | **completed** |
+| 4 | Snippets for common Verso constructs | **completed** |
 
 ## Plan
 
@@ -47,7 +47,7 @@ Fix incorrect settings and add missing features to `language-configuration.json`
   - Start: `:claim`, `:proof`, `:theorem`, `:lemma`, `:definition`, `:corollary`, `:remark`, `:example`, ` ```math `
   - End: blank line or closing ` ``` `
 - Add `surroundingPairs` for brackets, parens, braces, backticks, quotes
-- Add `wordPattern` for ERD identifiers
+- Add `wordPattern` for Verso identifiers
 
 **Tests:**
 - Manual: open `.verso` file, verify `Cmd+/` inserts `% ` not `// `
@@ -63,7 +63,7 @@ Fix incorrect settings and add missing features to `language-configuration.json`
 Create a TextMate grammar for block-level syntax highlighting.
 
 **Key files:**
-- `editors/vscode/syntaxes/erd.tmLanguage.json` (new)
+- `editors/vscode/syntaxes/verso.tmLanguage.json` (new)
 - `editors/vscode/package.json` — register grammar under `contributes.grammars`
 
 **Scopes to define:**
@@ -104,7 +104,7 @@ Create a TextMate grammar for block-level syntax highlighting.
 Extend the grammar with inline highlighting within prose and math contexts.
 
 **Key files:**
-- `editors/vscode/syntaxes/erd.tmLanguage.json`
+- `editors/vscode/syntaxes/verso.tmLanguage.json`
 
 **Scopes to add:**
 
@@ -143,10 +143,10 @@ Extend the grammar with inline highlighting within prose and math contexts.
 
 ### Phase 4: Snippets (M4)
 
-Add code snippets for common ERD constructs.
+Add code snippets for common Verso constructs.
 
 **Key files:**
-- `editors/vscode/snippets/erd.json` (new)
+- `editors/vscode/snippets/verso.json` (new)
 - `editors/vscode/package.json` — register under `contributes.snippets`
 
 **Snippets:**

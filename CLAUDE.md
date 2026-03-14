@@ -1,12 +1,12 @@
-# ERD Project
+# Verso Project
 
-A symbolic mathematics library in Rust with expression parsing, simplification, and tensor algebra support.
+A paper-writing tool with machine-verified mathematics, built in Rust.
 
 ## Project Structure
 
 ```
-erd/
-├── erd_symbolic/     # Core symbolic math library (Rust)
+verso/
+├── verso_symbolic/  # Core symbolic math library (Rust)
 │   ├── src/
 │   │   ├── expr.rs      # Expression AST (Const, Named, Var, Add, Mul, Neg, Inv, Pow, Fn)
 │   │   ├── rule.rs      # Pattern matching and rewriting rules
@@ -16,7 +16,7 @@ erd/
 │   │   ├── to_tex.rs    # LaTeX output
 │   │   └── bin/repl.rs  # Interactive REPL
 │   └── Cargo.toml
-├── erd_training/     # ML training pipeline (Rust + Burn)
+├── verso_training/  # ML training pipeline (Rust + Burn)
 │   ├── src/
 │   │   ├── model.rs     # Transformer encoder-decoder (Burn Module)
 │   │   ├── train.rs     # Supervised training loop
@@ -27,9 +27,7 @@ erd/
 │   │   ├── config.rs    # CLI configs (TrainConfig, RLConfig, EvalConfig)
 │   │   └── schedule.rs  # Cosine LR schedule with warmup
 │   └── Cargo.toml
-├── erd_model/        # Model definitions
-├── erd_viewer/       # Viewer component
-└── erd_app/          # Application layer
+└── verso_doc/       # Document parser, LaTeX compiler, verifier, LSP
 ```
 
 ## Key Design Principles
@@ -112,7 +110,7 @@ npm run repl:beam
 ## Testing
 
 ```bash
-cargo test --package erd_symbolic
+cargo test --package verso_symbolic
 ```
 
 ## Common Patterns

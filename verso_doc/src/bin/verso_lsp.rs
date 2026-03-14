@@ -7,12 +7,12 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-struct ErdServer {
+struct VersoServer {
     client: Client,
 }
 
 #[tower_lsp::async_trait]
-impl LanguageServer for ErdServer {
+impl LanguageServer for VersoServer {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
@@ -34,7 +34,7 @@ impl LanguageServer for ErdServer {
 
     async fn initialized(&self, _: InitializedParams) {
         self.client
-            .log_message(MessageType::INFO, "erd-lsp initialized")
+            .log_message(MessageType::INFO, "verso-lsp initialized")
             .await;
     }
 
@@ -81,7 +81,7 @@ fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> 
                 range: line_range(e.line),
                 severity: Some(DiagnosticSeverity::ERROR),
                 message: e.message,
-                source: Some("erd".to_string()),
+                source: Some("verso".to_string()),
                 ..Default::default()
             });
             return diagnostics;
@@ -103,7 +103,7 @@ fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> 
                         "'{}' passed numerically ({} samples) but not symbolically. Residual: {}",
                         result.name, samples, residual
                     ),
-                    source: Some("erd".to_string()),
+                    source: Some("verso".to_string()),
                     ..Default::default()
                 });
             }
@@ -112,7 +112,7 @@ fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> 
                     range: line_range(result.span.line),
                     severity: Some(DiagnosticSeverity::ERROR),
                     message: format!("'{}' failed. Residual: {}", result.name, residual),
-                    source: Some("erd".to_string()),
+                    source: Some("verso".to_string()),
                     ..Default::default()
                 });
             }
@@ -130,7 +130,7 @@ fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> 
                         "'{}' step {} failed: {} \u{2260} {}. Residual: {}",
                         result.name, step_index, from, to, residual
                     ),
-                    source: Some("erd".to_string()),
+                    source: Some("verso".to_string()),
                     ..Default::default()
                 });
             }
@@ -148,7 +148,7 @@ fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> 
                             "'{}' dimension mismatch: lhs {}, rhs {}",
                             result.name, lhs, rhs
                         ),
-                        source: Some("erd".to_string()),
+                        source: Some("verso".to_string()),
                         ..Default::default()
                     });
                 }
@@ -160,7 +160,7 @@ fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> 
                             "'{}' dimension error in {}: {}",
                             result.name, side, error
                         ),
-                        source: Some("erd".to_string()),
+                        source: Some("verso".to_string()),
                         ..Default::default()
                     });
                 }
@@ -182,7 +182,7 @@ fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> 
                 range: line_range(line),
                 severity: Some(DiagnosticSeverity::WARNING),
                 message: format!("unresolved reference: '{}'", label),
-                source: Some("erd".to_string()),
+                source: Some("verso".to_string()),
                 ..Default::default()
             });
         }
@@ -227,6 +227,6 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::new(|client| ErdServer { client });
+    let (service, socket) = LspService::new(|client| VersoServer { client });
     Server::new(stdin, stdout, socket).serve(service).await;
 }
