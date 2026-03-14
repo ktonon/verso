@@ -1,3 +1,4 @@
+use erd_doc::compile_tex::find_unresolved_refs;
 use erd_doc::dim::DimOutcome;
 use erd_doc::parse::parse_document;
 use erd_doc::verify::{verify_document, Outcome};
@@ -163,6 +164,22 @@ fn compute_diagnostics(text: &str) -> Vec<Diagnostic> {
                 }
             }
         }
+    }
+
+    // Unresolved ref diagnostics
+    for label in find_unresolved_refs(&doc) {
+        // Find the line containing this ref for positioning
+        let line = text.lines().enumerate()
+            .find(|(_, l)| l.contains(&format!("ref`{}", label)))
+            .map(|(i, _)| i + 1)
+            .unwrap_or(0);
+        diagnostics.push(Diagnostic {
+            range: line_range(line),
+            severity: Some(DiagnosticSeverity::WARNING),
+            message: format!("unresolved reference: '{}'", label),
+            source: Some("erd".to_string()),
+            ..Default::default()
+        });
     }
 
     diagnostics

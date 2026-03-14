@@ -16,7 +16,7 @@ This feature tracks closing those gaps.
 | 3 | Tables (markdown-style) | completed |
 | 4 | Custom preamble / document class | completed |
 | 5 | Multi-file include | completed |
-| 6 | Unresolved ref diagnostics | planned |
+| 6 | Unresolved ref diagnostics | completed |
 | 7 | Page breaks | planned |
 
 ## Plan
@@ -195,6 +195,14 @@ Compiles to `\newpage`.
 - `block_has_refs` updated to check figure captions
 - VSCode grammar: `directive-figure` with key-value highlighting
 - Tests: 4 parse tests + 3 compile tests
+
+### M6: Unresolved ref diagnostics (completed)
+
+- Added `collect_labels()` and `find_unresolved_refs()` public functions in `compile_tex.rs`
+- `collect_labels` gathers section slugs, figure labels, and table labels
+- `find_unresolved_refs` walks all prose fragments (including nested bold/italic/footnote, lists, environments, captions) to find `Ref` nodes, then filters against known labels
+- LSP `compute_diagnostics` now calls `find_unresolved_refs` and emits warnings with line-level positioning
+- Tests: 4 tests (detected, resolved section, resolved figure, resolved table)
 
 ### M5: Multi-file include (completed)
 

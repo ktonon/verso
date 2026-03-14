@@ -490,6 +490,97 @@ fn env_kind_display(kind: EnvKind) -> &'static str {
     }
 }
 
+/// Collect all defined labels in the document.
+pub fn collect_labels(doc: &Document) -> HashSet<String> {
+    let mut labels = HashSet::new();
+    for block in &doc.blocks {
+        match block {
+            Block::Section { title, .. } => {
+                let slug = slugify(title);
+                if !slug.is_empty() {
+                    labels.insert(slug);
+                }
+            }
+            Block::Figure(fig) => {
+                if let Some(label) = &fig.label {
+                    labels.insert(label.clone());
+                }
+            }
+            Block::Table(table) => {
+                if let Some(label) = &table.label {
+                    labels.insert(label.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    labels
+}
+
+/// Find all ref labels used in the document.
+fn collect_refs_from_fragments(fragments: &[ProseFragment], refs: &mut Vec<String>) {
+    for f in fragments {
+        match f {
+            ProseFragment::Ref { label, .. } => refs.push(label.clone()),
+            ProseFragment::Bold(inner)
+            | ProseFragment::Italic(inner)
+            | ProseFragment::Footnote(inner) => collect_refs_from_fragments(inner, refs),
+            _ => {}
+        }
+    }
+}
+
+fn collect_refs_from_block(block: &Block, refs: &mut Vec<String>) {
+    match block {
+        Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) => {
+            collect_refs_from_fragments(fragments, refs);
+        }
+        Block::List(list) => collect_refs_from_list(list, refs),
+        Block::Environment(env) => collect_refs_from_fragments(&env.body, refs),
+        Block::Figure(fig) => {
+            if let Some(cap) = &fig.caption {
+                collect_refs_from_fragments(cap, refs);
+            }
+        }
+        Block::Table(table) => {
+            for cell in &table.header {
+                collect_refs_from_fragments(cell, refs);
+            }
+            for row in &table.rows {
+                for cell in row {
+                    collect_refs_from_fragments(cell, refs);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_refs_from_list(list: &List, refs: &mut Vec<String>) {
+    for item in &list.items {
+        collect_refs_from_fragments(&item.fragments, refs);
+        if let Some(children) = &item.children {
+            collect_refs_from_list(children, refs);
+        }
+    }
+}
+
+/// Return labels referenced by `ref` tags that don't match any defined label.
+pub fn find_unresolved_refs(doc: &Document) -> Vec<String> {
+    let labels = collect_labels(doc);
+    let mut refs = Vec::new();
+    for block in &doc.blocks {
+        collect_refs_from_block(block, &mut refs);
+    }
+    let mut unresolved: Vec<String> = refs
+        .into_iter()
+        .filter(|r| !labels.contains(r))
+        .collect();
+    unresolved.sort();
+    unresolved.dedup();
+    unresolved
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -899,6 +990,40 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textasciitilde{}``both''"));
+    }
+
+    // Unresolved ref diagnostics
+
+    #[test]
+    fn unresolved_ref_detected() {
+        let src = "## Introduction\n\nSee ref`nonexistent` and ref`introduction`.";
+        let doc = parse_document(src).unwrap();
+        let unresolved = find_unresolved_refs(&doc);
+        assert_eq!(unresolved, vec!["nonexistent"]);
+    }
+
+    #[test]
+    fn all_refs_resolved() {
+        let src = "## Newton's Laws\n\nSee ref`newtons-laws`.";
+        let doc = parse_document(src).unwrap();
+        let unresolved = find_unresolved_refs(&doc);
+        assert!(unresolved.is_empty());
+    }
+
+    #[test]
+    fn unresolved_ref_figure_label_resolved() {
+        let src = ":figure img.png\n  label: my-fig\n\nSee ref`my-fig`.";
+        let doc = parse_document(src).unwrap();
+        let unresolved = find_unresolved_refs(&doc);
+        assert!(unresolved.is_empty());
+    }
+
+    #[test]
+    fn unresolved_ref_table_label_resolved() {
+        let src = ":table T\n  | A |\n  |---|\n  | 1 |\n  label: my-tab\n\nSee ref`my-tab`.";
+        let doc = parse_document(src).unwrap();
+        let unresolved = find_unresolved_refs(&doc);
+        assert!(unresolved.is_empty());
     }
 
     #[test]
