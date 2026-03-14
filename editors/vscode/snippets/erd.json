@@ -1,0 +1,100 @@
+{
+  "Claim": {
+    "prefix": "claim",
+    "body": [
+      ":claim ${1:name}",
+      "  ${2:lhs} = ${3:rhs}",
+      ""
+    ],
+    "description": "New claim block"
+  },
+  "Proof": {
+    "prefix": "proof",
+    "body": [
+      ":proof ${1:name}",
+      "  ${2:expr}",
+      "  = ${3:step}",
+      ""
+    ],
+    "description": "New proof block"
+  },
+  "Dimension": {
+    "prefix": "dim",
+    "body": [
+      ":dim ${1:var} [${2:dims}]"
+    ],
+    "description": "Dimension declaration"
+  },
+  "Theorem": {
+    "prefix": "thm",
+    "body": [
+      ":theorem ${1:Title}",
+      "  ${2:body}",
+      ""
+    ],
+    "description": "Theorem environment"
+  },
+  "Lemma": {
+    "prefix": "lem",
+    "body": [
+      ":lemma ${1:Title}",
+      "  ${2:body}",
+      ""
+    ],
+    "description": "Lemma environment"
+  },
+  "Definition": {
+    "prefix": "def",
+    "body": [
+      ":definition ${1:Title}",
+      "  ${2:body}",
+      ""
+    ],
+    "description": "Definition environment"
+  },
+  "Math Block": {
+    "prefix": "mathb",
+    "body": [
+      "```math",
+      "${1:expr}",
+      "```",
+      ""
+    ],
+    "description": "Fenced math block"
+  },
+  "Inline Math": {
+    "prefix": "math",
+    "body": [
+      "math`${1:expr}`"
+    ],
+    "description": "Inline math expression"
+  },
+  "Inline TeX": {
+    "prefix": "tex",
+    "body": [
+      "tex`${1:latex}`"
+    ],
+    "description": "Inline raw LaTeX"
+  },
+  "Citation": {
+    "prefix": "cite",
+    "body": [
+      "cite`${1:key}`"
+    ],
+    "description": "Bibliography citation"
+  },
+  "Claim Reference": {
+    "prefix": "cref",
+    "body": [
+      "claim`${1:name}`"
+    ],
+    "description": "Reference to a named claim"
+  },
+  "Bibliography": {
+    "prefix": "bib",
+    "body": [
+      ":bibliography ${1:refs.bib}"
+    ],
+    "description": "Bibliography declaration"
+  }
+}

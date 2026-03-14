@@ -26,6 +26,12 @@
         "path": "./syntaxes/erd.tmLanguage.json"
       }
     ],
+    "snippets": [
+      {
+        "language": "erd",
+        "path": "./snippets/erd.json"
+      }
+    ],
     "configuration": {
       "title": "ERD",
       "properties": {
