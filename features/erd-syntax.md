@@ -68,9 +68,11 @@ Within prose, the following inline constructs are recognized:
 | `math`expr`` | Inline math (parsed) | `$\text{to\_tex(expr)}$` |
 | `tex`raw`` | Inline raw LaTeX | `$raw$` |
 | `claim`name`` | Equation reference | `\eqref{eq:name}` |
-| `cite`key`` | Bibliography citation **(planned)** | `\cite{key}` |
-| `**text**` | Bold **(planned)** | `\textbf{text}` |
-| `*text*` | Italic **(planned)** | `\textit{text}` |
+| `cite`key`` | Bibliography citation | `\cite{key}` |
+| `ref`label`` | Section cross-reference | `\hyperref[label]{Title}` |
+| `ref`label\|text`` | Cross-reference with display text | `\hyperref[label]{text}` |
+| `**text**` | Bold | `\textbf{text}` |
+| `*text*` | Italic | `\textit{text}` |
 
 #### Inline math
 
@@ -119,6 +121,32 @@ This is **bold** and this is *italic*.
 
 Compiles to `\textbf{bold}` and `\textit{italic}`. Nesting is not supported.
 Bold-italic can be written as `***text***` **(planned)**.
+
+#### Cross-references
+
+Use `ref` backticks to reference a section by its auto-generated label:
+
+```
+See ref`newtons-laws` for details.
+```
+
+The label is the slugified section title (lowercase, hyphens for spaces, special
+characters stripped). The display text is auto-resolved from the section title.
+
+For custom display text, use `|`:
+
+```
+ref`earth-and-the-solar-system|Hydrogen creation in planets and moons`
+```
+
+Compiles to `\hyperref[earth-and-the-solar-system]{Hydrogen creation in planets and moons}`.
+
+Headings automatically generate labels:
+
+```
+## Newton's Laws     →  \label{newtons-laws}
+## The 2nd Law       →  \label{the-2nd-law}
+```
 
 ---
 

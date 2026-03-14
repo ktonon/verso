@@ -1,15 +1,61 @@
 use crate::ast::{Block, Claim, Document, EnvKind, Environment, List, MathBlock, Proof, ProseFragment};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use erd_symbolic::ToTex;
 use std::fmt::Write;
+
+/// Convert a section title to a URL-friendly slug for use as a label.
+pub fn slugify(title: &str) -> String {
+    let mut slug = String::new();
+    for c in title.chars() {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c.to_ascii_lowercase());
+        } else if c == ' ' || c == '-' || c == '_' {
+            slug.push('-');
+        }
+        // other characters (apostrophes, symbols, unicode) are dropped
+    }
+    // Collapse consecutive hyphens and trim
+    let mut result = String::new();
+    let mut prev_hyphen = false;
+    for c in slug.chars() {
+        if c == '-' {
+            if !prev_hyphen && !result.is_empty() {
+                result.push('-');
+            }
+            prev_hyphen = true;
+        } else {
+            result.push(c);
+            prev_hyphen = false;
+        }
+    }
+    // Trim trailing hyphen
+    if result.ends_with('-') {
+        result.pop();
+    }
+    result
+}
 
 /// Compile a Document to a LaTeX string.
 pub fn compile_to_tex(doc: &Document) -> String {
     let mut out = String::new();
 
+    // Build section label→title map for resolving ref`label` display text
+    let mut section_titles: HashMap<String, String> = HashMap::new();
+    for block in &doc.blocks {
+        if let Block::Section { title, .. } = block {
+            section_titles.insert(slugify(title), title.clone());
+        }
+    }
+
+    // Check if document uses ref tags (to conditionally include hyperref)
+    let has_refs = doc.blocks.iter().any(|b| block_has_refs(b));
+
     writeln!(out, "\\documentclass{{article}}").unwrap();
     writeln!(out, "\\usepackage{{amsmath}}").unwrap();
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
+    if has_refs {
+        writeln!(out, "\\usepackage{{hyperref}}").unwrap();
+    }
 
     // Collect used environment kinds for \newtheorem declarations
     let mut env_kinds: Vec<EnvKind> = Vec::new();
@@ -40,7 +86,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
                 write_section(&mut out, *level, title);
             }
             Block::Prose(fragments) => {
-                write_prose(&mut out, fragments);
+                write_prose(&mut out, fragments, &section_titles);
             }
             Block::Claim(claim) => {
                 write_claim(&mut out, claim);
@@ -50,17 +96,17 @@ pub fn compile_to_tex(doc: &Document) -> String {
             }
             Block::Dim(_) => {} // metadata, no LaTeX output
             Block::List(list) => {
-                write_list(&mut out, list);
+                write_list(&mut out, list, &section_titles);
             }
             Block::MathBlock(mb) => {
                 write_math_block(&mut out, mb);
             }
             Block::Bibliography { .. } => {} // handled after loop
             Block::Environment(env) => {
-                write_environment(&mut out, env);
+                write_environment(&mut out, env, &section_titles);
             }
             Block::BlockQuote(fragments) => {
-                write_block_quote(&mut out, fragments);
+                write_block_quote(&mut out, fragments, &section_titles);
             }
         }
     }
@@ -87,15 +133,19 @@ fn write_section(out: &mut String, level: u8, title: &str) {
         3 => "subsubsection",
         _ => "paragraph",
     };
-    writeln!(out, "\\{}{{{}}}",cmd, title).unwrap();
+    let slug = slugify(title);
+    writeln!(out, "\\{}{{{}}}", cmd, title).unwrap();
+    if !slug.is_empty() {
+        writeln!(out, "\\label{{{}}}", slug).unwrap();
+    }
 }
 
-fn write_prose(out: &mut String, fragments: &[ProseFragment]) {
-    write_prose_fragments(out, fragments);
+fn write_prose(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
+    write_prose_fragments(out, fragments, section_titles);
     writeln!(out).unwrap();
 }
 
-fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment]) {
+fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
     for fragment in fragments {
         match fragment {
             ProseFragment::Text(text) => out.push_str(text),
@@ -110,12 +160,12 @@ fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment]) {
             }
             ProseFragment::Bold(inner) => {
                 out.push_str("\\textbf{");
-                write_prose_fragments(out, inner);
+                write_prose_fragments(out, inner, section_titles);
                 out.push('}');
             }
             ProseFragment::Italic(inner) => {
                 out.push_str("\\textit{");
-                write_prose_fragments(out, inner);
+                write_prose_fragments(out, inner, section_titles);
                 out.push('}');
             }
             ProseFragment::Cite(keys) => {
@@ -123,8 +173,15 @@ fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment]) {
             }
             ProseFragment::Footnote(inner) => {
                 out.push_str("\\footnote{");
-                write_prose_fragments(out, inner);
+                write_prose_fragments(out, inner, section_titles);
                 out.push('}');
+            }
+            ProseFragment::Ref { label, display } => {
+                let text = display
+                    .as_deref()
+                    .or_else(|| section_titles.get(label.as_str()).map(|s| s.as_str()))
+                    .unwrap_or(label.as_str());
+                write!(out, "\\hyperref[{}]{{{}}}", label, text).unwrap();
             }
         }
     }
@@ -163,15 +220,15 @@ fn write_proof(out: &mut String, proof: &Proof) {
     writeln!(out, "\\end{{align*}}").unwrap();
 }
 
-fn write_list(out: &mut String, list: &List) {
+fn write_list(out: &mut String, list: &List, section_titles: &HashMap<String, String>) {
     let env = if list.ordered { "enumerate" } else { "itemize" };
     writeln!(out, "\\begin{{{}}}", env).unwrap();
     for item in &list.items {
         write!(out, "  \\item ").unwrap();
-        write_prose_fragments(out, &item.fragments);
+        write_prose_fragments(out, &item.fragments, section_titles);
         writeln!(out).unwrap();
         if let Some(ref children) = item.children {
-            write_list(out, children);
+            write_list(out, children, section_titles);
         }
     }
     writeln!(out, "\\end{{{}}}", env).unwrap();
@@ -195,23 +252,51 @@ fn write_math_block(out: &mut String, mb: &MathBlock) {
     }
 }
 
-fn write_block_quote(out: &mut String, fragments: &[ProseFragment]) {
+fn write_block_quote(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
     writeln!(out, "\\begin{{quote}}").unwrap();
-    write_prose_fragments(out, fragments);
+    write_prose_fragments(out, fragments, section_titles);
     writeln!(out).unwrap();
     writeln!(out, "\\end{{quote}}").unwrap();
 }
 
-fn write_environment(out: &mut String, env: &Environment) {
+fn write_environment(out: &mut String, env: &Environment, section_titles: &HashMap<String, String>) {
     let name = env_kind_name(env.kind);
     if let Some(ref title) = env.title {
         writeln!(out, "\\begin{{{}}}[{}]", name, title).unwrap();
     } else {
         writeln!(out, "\\begin{{{}}}", name).unwrap();
     }
-    write_prose_fragments(out, &env.body);
+    write_prose_fragments(out, &env.body, section_titles);
     writeln!(out).unwrap();
     writeln!(out, "\\end{{{}}}", name).unwrap();
+}
+
+/// Check if any prose fragment in a slice contains a Ref.
+fn fragments_have_refs(fragments: &[ProseFragment]) -> bool {
+    fragments.iter().any(|f| match f {
+        ProseFragment::Ref { .. } => true,
+        ProseFragment::Bold(inner)
+        | ProseFragment::Italic(inner)
+        | ProseFragment::Footnote(inner) => fragments_have_refs(inner),
+        _ => false,
+    })
+}
+
+/// Check if a block contains any Ref prose fragments.
+fn block_has_refs(block: &Block) -> bool {
+    match block {
+        Block::Prose(fragments) | Block::BlockQuote(fragments) => fragments_have_refs(fragments),
+        Block::List(list) => list_has_refs(list),
+        Block::Environment(env) => fragments_have_refs(&env.body),
+        _ => false,
+    }
+}
+
+fn list_has_refs(list: &List) -> bool {
+    list.items.iter().any(|item| {
+        fragments_have_refs(&item.fragments)
+            || item.children.as_ref().map_or(false, |c| list_has_refs(c))
+    })
 }
 
 fn env_kind_name(kind: EnvKind) -> &'static str {
@@ -428,5 +513,64 @@ mod tests {
         let tex = compile_to_tex(&doc);
         assert!(!tex.contains("comment"));
         assert!(tex.contains("Visible."));
+    }
+
+    // Cross-references
+
+    #[test]
+    fn compile_section_has_label() {
+        let doc = parse_document("# My Section").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\section{My Section}"));
+        assert!(tex.contains("\\label{my-section}"));
+    }
+
+    #[test]
+    fn compile_ref_with_auto_title() {
+        let src = "# Newton's Laws\n\nSee ref`newtons-laws` for details.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\hyperref[newtons-laws]{Newton's Laws}"));
+        assert!(tex.contains("\\usepackage{hyperref}"));
+    }
+
+    #[test]
+    fn compile_ref_with_custom_display() {
+        let src = "# Earth and the Solar System\n\nref`earth-and-the-solar-system|Hydrogen creation`";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\hyperref[earth-and-the-solar-system]{Hydrogen creation}"));
+    }
+
+    #[test]
+    fn compile_ref_unresolved_uses_label() {
+        let doc = parse_document("See ref`unknown-section` here.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\hyperref[unknown-section]{unknown-section}"));
+    }
+
+    #[test]
+    fn compile_no_hyperref_without_refs() {
+        let doc = parse_document("# My Section\n\nJust prose.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(!tex.contains("\\usepackage{hyperref}"));
+    }
+
+    #[test]
+    fn compile_ref_in_bold_in_list() {
+        let src = "## Earth and the Solar System\n\n1. **ref`earth-and-the-solar-system|Hydrogen creation`** *— abundant*";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\textbf{\\hyperref[earth-and-the-solar-system]{Hydrogen creation}}"));
+        assert!(tex.contains("\\textit{— abundant}"));
+    }
+
+    #[test]
+    fn slugify_basic() {
+        assert_eq!(slugify("Newton's Laws"), "newtons-laws");
+        assert_eq!(slugify("E = mc²"), "e-mc");
+        assert_eq!(slugify("The 2nd Law"), "the-2nd-law");
+        assert_eq!(slugify("Earth and the Solar System"), "earth-and-the-solar-system");
+        assert_eq!(slugify("  Leading spaces  "), "leading-spaces");
     }
 }

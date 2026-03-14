@@ -93,6 +93,11 @@ pub enum ProseFragment {
     Cite(Vec<String>),
     /// Footnote: ^[text] — rendered as \footnote{text}.
     Footnote(Vec<ProseFragment>),
+    /// Cross-reference: ref`label` or ref`label|display text` — rendered as \hyperref.
+    Ref {
+        label: String,
+        display: Option<String>,
+    },
 }
 
 /// An assertion that two expressions are equal.

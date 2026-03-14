@@ -712,6 +712,18 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                                 .collect();
                             fragments.push(ProseFragment::Cite(keys));
                         }
+                        "ref" => {
+                            let (label, display) =
+                                if let Some(pipe) = tag_match.content.find('|') {
+                                    (
+                                        tag_match.content[..pipe].to_string(),
+                                        Some(tag_match.content[pipe + 1..].to_string()),
+                                    )
+                                } else {
+                                    (tag_match.content.to_string(), None)
+                                };
+                            fragments.push(ProseFragment::Ref { label, display });
+                        }
                         _ => {
                             fragments.push(ProseFragment::Text(
                                 rest[tag_match.start..tag_match.end].to_string(),
@@ -760,7 +772,7 @@ struct TagMatch<'a> {
 
 /// Find the next `tag\`content\`` pattern in the text.
 fn find_tagged_backtick(text: &str) -> Option<TagMatch<'_>> {
-    let tags = ["math", "tex", "claim", "cite"];
+    let tags = ["math", "tex", "claim", "cite", "ref"];
 
     let mut best: Option<TagMatch<'_>> = None;
 
@@ -823,6 +835,15 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
                 s.push_str("^[");
                 s.push_str(&prose_to_string(inner));
                 s.push(']');
+            }
+            ProseFragment::Ref { label, display } => {
+                s.push_str("ref`");
+                s.push_str(label);
+                if let Some(d) = display {
+                    s.push('|');
+                    s.push_str(d);
+                }
+                s.push('`');
             }
         }
     }
@@ -1523,6 +1544,80 @@ More prose here.
                 assert_eq!(prose_to_string(fragments), "Text^[a note] more.");
             }
             _ => panic!("expected Prose"),
+        }
+    }
+
+    // Cross-references
+
+    #[test]
+    fn parse_ref_label_only() {
+        let doc = parse_document("See ref`newtons-laws` for details.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                match &fragments[1] {
+                    ProseFragment::Ref { label, display } => {
+                        assert_eq!(label, "newtons-laws");
+                        assert!(display.is_none());
+                    }
+                    other => panic!("expected Ref, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_ref_with_display_text() {
+        let doc =
+            parse_document("ref`earth-and-the-solar-system|Hydrogen creation`").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 1);
+                match &fragments[0] {
+                    ProseFragment::Ref { label, display } => {
+                        assert_eq!(label, "earth-and-the-solar-system");
+                        assert_eq!(display.as_deref(), Some("Hydrogen creation"));
+                    }
+                    other => panic!("expected Ref, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_ref_roundtrip() {
+        let doc = parse_document("See ref`foo|bar baz` here.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(prose_to_string(fragments), "See ref`foo|bar baz` here.");
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_ref_inside_bold_in_list() {
+        let src = "1. **ref`my-section|Custom text`** *— description*";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::List(list) => {
+                assert_eq!(list.items.len(), 1);
+                // Bold should contain the ref
+                let bold = &list.items[0].fragments[0];
+                match bold {
+                    ProseFragment::Bold(inner) => {
+                        assert!(
+                            inner.iter().any(|f| matches!(f, ProseFragment::Ref { .. })),
+                            "expected Ref inside Bold, got {:?}",
+                            inner
+                        );
+                    }
+                    other => panic!("expected Bold, got {:?}", other),
+                }
+            }
+            other => panic!("expected List, got {:?}", other),
         }
     }
 }
