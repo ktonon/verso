@@ -495,6 +495,18 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // Skip :include lines (resolved before parsing in parse_document_from_file)
+        if trimmed.starts_with(":include") {
+            i += 1;
+            continue;
+        }
+
+        // Skip any other unrecognized directive to avoid infinite loop
+        if trimmed.starts_with(':') {
+            i += 1;
+            continue;
+        }
+
         // Prose line — collect consecutive non-special lines into a paragraph
         let mut prose_text = String::new();
         // Map: (char_offset_in_prose_text, 1-based_line_number)
