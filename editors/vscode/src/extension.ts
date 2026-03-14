@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { workspace, ExtensionContext } from "vscode";
+import { ExtensionContext, workspace } from "vscode";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -28,7 +28,7 @@ function findServerPath(): string {
       return direct;
     }
 
-    // Sibling: workspace is next to the verso repo (e.g. ../erd/target/release/)
+    // Sibling: workspace is next to the verso repo (e.g. ../verso/target/release/)
     const parent = path.dirname(wsRoot);
     try {
       for (const sibling of fs.readdirSync(parent)) {
