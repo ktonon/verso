@@ -3,6 +3,7 @@
   "displayName": "ERD Language Support",
   "description": "Language support for .erd documents — verified math papers",
   "version": "0.1.0",
+  "license": "MIT",
   "publisher": "erd",
   "engines": {
     "vscode": "^1.80.0"
