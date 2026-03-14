@@ -887,83 +887,89 @@ impl InlineMatch<'_> {
 }
 
 /// Find the next bold `**...**` or italic `*...*` marker.
-/// Bold (`**`) is checked before italic (`*`) to avoid false matches.
+/// Returns whichever appears first in the text.
 fn find_emphasis(text: &str) -> Option<InlineMatch<'_>> {
-    // Look for ** first (bold)
-    if let Some(open) = text.find("**") {
-        // Check for *** (bold+italic)
-        if text[open..].starts_with("***") {
-            // Find closing ***
-            if let Some(close_offset) = text[open + 3..].find("***") {
-                let content = &text[open + 3..open + 3 + close_offset];
-                if !content.is_empty() {
-                    return Some(InlineMatch::Bold {
-                        start: open,
-                        end: open + 3 + close_offset + 3,
-                        content,
-                    });
-                }
-            }
+    let bold = find_bold(text);
+    let italic = find_italic(text);
+    match (bold, italic) {
+        (Some(b), Some(i)) => {
+            if i.start() < b.start() { Some(i) } else { Some(b) }
         }
-        // Find closing **
-        if let Some(close_offset) = text[open + 2..].find("**") {
-            let content = &text[open + 2..open + 2 + close_offset];
+        (Some(b), None) => Some(b),
+        (None, i) => i,
+    }
+}
+
+/// Find the next bold `**...**` or `***...***` marker.
+fn find_bold(text: &str) -> Option<InlineMatch<'_>> {
+    let open = text.find("**")?;
+    // Check for *** (bold+italic)
+    if text[open..].starts_with("***") {
+        if let Some(close_offset) = text[open + 3..].find("***") {
+            let content = &text[open + 3..open + 3 + close_offset];
             if !content.is_empty() {
                 return Some(InlineMatch::Bold {
                     start: open,
-                    end: open + 2 + close_offset + 2,
+                    end: open + 3 + close_offset + 3,
                     content,
                 });
             }
         }
     }
+    // Find closing **
+    let close_offset = text[open + 2..].find("**")?;
+    let content = &text[open + 2..open + 2 + close_offset];
+    if content.is_empty() {
+        return None;
+    }
+    Some(InlineMatch::Bold {
+        start: open,
+        end: open + 2 + close_offset + 2,
+        content,
+    })
+}
 
-    // Look for single * (italic)
+/// Find the next italic `*...*` marker (single `*`, not part of `**`).
+fn find_italic(text: &str) -> Option<InlineMatch<'_>> {
     let mut search_from = 0;
     while search_from < text.len() {
-        if let Some(open) = text[search_from..].find('*') {
-            let open = search_from + open;
-            // Skip if this is part of a ** sequence
-            if open + 1 < text.len() && text.as_bytes()[open + 1] == b'*' {
-                search_from = open + 2;
-                continue;
-            }
-            // Also skip if preceded by * (we're at the second char of **)
-            if open > 0 && text.as_bytes()[open - 1] == b'*' {
-                search_from = open + 1;
-                continue;
-            }
-            // Find closing * (that isn't part of **)
-            let mut close_from = open + 1;
-            while close_from < text.len() {
-                if let Some(close_offset) = text[close_from..].find('*') {
-                    let close = close_from + close_offset;
-                    // Skip if part of **
-                    if close + 1 < text.len() && text.as_bytes()[close + 1] == b'*' {
-                        close_from = close + 2;
-                        continue;
-                    }
-                    if close > 0 && text.as_bytes()[close - 1] == b'*' {
-                        close_from = close + 1;
-                        continue;
-                    }
-                    let content = &text[open + 1..close];
-                    if !content.is_empty() {
-                        return Some(InlineMatch::Italic {
-                            start: open,
-                            end: close + 1,
-                            content,
-                        });
-                    }
-                    break;
-                } else {
-                    break;
-                }
-            }
-            search_from = open + 1;
-        } else {
-            break;
+        let open = search_from + text[search_from..].find('*')?;
+        // Skip if this is part of a ** sequence
+        if open + 1 < text.len() && text.as_bytes()[open + 1] == b'*' {
+            search_from = open + 2;
+            continue;
         }
+        if open > 0 && text.as_bytes()[open - 1] == b'*' {
+            search_from = open + 1;
+            continue;
+        }
+        // Find closing * (that isn't part of **)
+        let mut close_from = open + 1;
+        while close_from < text.len() {
+            if let Some(close_offset) = text[close_from..].find('*') {
+                let close = close_from + close_offset;
+                if close + 1 < text.len() && text.as_bytes()[close + 1] == b'*' {
+                    close_from = close + 2;
+                    continue;
+                }
+                if close > 0 && text.as_bytes()[close - 1] == b'*' {
+                    close_from = close + 1;
+                    continue;
+                }
+                let content = &text[open + 1..close];
+                if !content.is_empty() {
+                    return Some(InlineMatch::Italic {
+                        start: open,
+                        end: close + 1,
+                        content,
+                    });
+                }
+                break;
+            } else {
+                break;
+            }
+        }
+        search_from = open + 1;
     }
 
     None
@@ -1438,6 +1444,21 @@ More prose here.
                     other => panic!("expected Italic, got {:?}", other),
                 }
                 assert!(matches!(&fragments[2], ProseFragment::Text(t) if t == " text."));
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_italic_before_bold() {
+        // Italic *seems* appears before bold **energy density** — both must render
+        let doc = parse_document("gravity *seems* negligible but **energy density** matters").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                let has_italic = fragments.iter().any(|f| matches!(f, ProseFragment::Italic(_)));
+                let has_bold = fragments.iter().any(|f| matches!(f, ProseFragment::Bold(_)));
+                assert!(has_italic, "expected italic *seems*, fragments: {:?}", fragments);
+                assert!(has_bold, "expected bold **energy density**, fragments: {:?}", fragments);
             }
             _ => panic!("expected Prose"),
         }
