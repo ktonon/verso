@@ -7,15 +7,22 @@
   "engines": {
     "vscode": "^1.80.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": [
+    "Programming Languages"
+  ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
         "id": "erd",
-        "extensions": [".erd"],
-        "aliases": ["ERD", "erd"],
+        "extensions": [
+          ".erd"
+        ],
+        "aliases": [
+          "ERD",
+          "erd"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -45,6 +52,7 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "test": "vscode-tmgrammar-snap -g syntaxes/erd.tmLanguage.json tests/snap-*.erd",
     "package": "vsce package"
   },
   "dependencies": {
@@ -52,6 +60,7 @@
   },
   "devDependencies": {
     "@types/vscode": "^1.80.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vscode-tmgrammar-test": "^0.1.3"
   }
 }

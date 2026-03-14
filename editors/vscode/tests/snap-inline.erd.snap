@@ -1,0 +1,66 @@
+>The velocity math`v [L T^-1]` is measured.
+#^^^^^^^^^^^^^ source.erd
+#             ^^^^ source.erd support.function.tag.math.erd
+#                 ^ source.erd punctuation.definition.tag.begin.erd
+#                  ^^ source.erd meta.embedded.math.erd
+#                    ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.begin.erd
+#                     ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd support.type.dimension.erd
+#                      ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd
+#                       ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd support.type.dimension.erd
+#                        ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd keyword.operator.erd
+#                         ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd keyword.operator.erd
+#                          ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd constant.numeric.erd
+#                           ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.end.erd
+#                            ^ source.erd punctuation.definition.tag.end.erd
+#                             ^^^^^^^^^^^^^^ source.erd
+>Speed is math`3*10^8 [m/s]`.
+#^^^^^^^^^ source.erd
+#         ^^^^ source.erd support.function.tag.math.erd
+#             ^ source.erd punctuation.definition.tag.begin.erd
+#              ^ source.erd meta.embedded.math.erd constant.numeric.erd
+#               ^ source.erd meta.embedded.math.erd keyword.operator.arithmetic.erd
+#                ^^ source.erd meta.embedded.math.erd constant.numeric.erd
+#                  ^ source.erd meta.embedded.math.erd keyword.operator.power.erd
+#                   ^ source.erd meta.embedded.math.erd constant.numeric.erd
+#                    ^ source.erd meta.embedded.math.erd
+#                     ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.begin.erd
+#                      ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd support.type.unit.erd
+#                       ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd keyword.operator.erd
+#                        ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd support.type.unit.erd
+#                         ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.end.erd
+#                          ^ source.erd punctuation.definition.tag.end.erd
+#                           ^^ source.erd
+>A citation cite`einstein1905` here.
+#^^^^^^^^^^^ source.erd
+#           ^^^^ source.erd support.function.tag.cite.erd
+#               ^ source.erd punctuation.definition.tag.begin.erd
+#                ^^^^^^^^^^^^ source.erd string.other.citation.erd
+#                            ^ source.erd punctuation.definition.tag.end.erd
+#                             ^^^^^^^ source.erd
+>See claim`pythagorean` for details.
+#^^^^ source.erd
+#    ^^^^^ source.erd support.function.tag.claim.erd
+#         ^ source.erd punctuation.definition.tag.begin.erd
+#          ^^^^^^^^^^^ source.erd entity.name.tag.claim-ref.erd
+#                     ^ source.erd punctuation.definition.tag.end.erd
+#                      ^^^^^^^^^^^^^^ source.erd
+>Using tex`\alpha` for greek.
+#^^^^^^ source.erd
+#      ^^^ source.erd support.function.tag.tex.erd
+#         ^ source.erd punctuation.definition.tag.begin.erd
+#          ^^^^^^ source.erd markup.raw.inline.tex.erd
+#                ^ source.erd punctuation.definition.tag.end.erd
+#                 ^^^^^^^^^^^^ source.erd
+>:dim v [L T^-1]
+#^^^^ source.erd keyword.control.directive.dim.erd
+#    ^ source.erd
+#     ^ source.erd variable.other.dim.erd
+#      ^ source.erd
+#       ^^^^^^^^ source.erd support.type.dimension.erd
+>:dim F [M L T^-2]
+#^^^^ source.erd keyword.control.directive.dim.erd
+#    ^ source.erd
+#     ^ source.erd variable.other.dim.erd
+#      ^ source.erd
+#       ^^^^^^^^^^ source.erd support.type.dimension.erd
+>

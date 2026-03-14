@@ -1,0 +1,7 @@
+The velocity math`v [L T^-1]` is measured.
+Speed is math`3*10^8 [m/s]`.
+A citation cite`einstein1905` here.
+See claim`pythagorean` for details.
+Using tex`\alpha` for greek.
+:dim v [L T^-1]
+:dim F [M L T^-2]

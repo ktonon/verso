@@ -507,6 +507,46 @@ not LaTeX. Key differences from LaTeX:
 
 The `ToTex` trait handles conversion to proper LaTeX notation.
 
+#### Dimension and unit annotations
+
+Square brackets `[...]` after an expression annotate it with physical dimensions
+or SI units. The meaning depends on context:
+
+| Syntax | Context | Meaning |
+|--------|---------|---------|
+| `v [L T^-1]` | Variable | Dimension annotation |
+| `F [M L T^-2]` | Variable | Dimension annotation |
+| `theta [1]` | Variable | Dimensionless annotation |
+| `3 [m]` | Numeric | Unit annotation → `Quantity` |
+| `5 [km]` | Numeric | Prefixed unit → `Quantity` |
+| `3*10^8 [m/s]` | Numeric | Compound unit → `Quantity` |
+| `10 [kg*m/s^2]` | Numeric | Same as `[N]` → `Quantity` |
+| `100 [N]` | Numeric | Derived SI unit → `Quantity` |
+| `5 [1/s]` | Numeric | Inverse unit → `Quantity` |
+| `c [m/s]` | Variable + unit | **SYNTAX ERROR** |
+| `3 [L]` | Numeric + dimension | **SYNTAX ERROR** |
+
+**Variables require dimensions** (uppercase base dimension symbols: L, M, T,
+Theta, I, N, J). **Numeric values require units** (lowercase/mixed SI symbols:
+m, s, kg, N, Hz, Pa, etc.).
+
+Dimension shorthand: `[L/T]` is equivalent to `[L T^-1]`.
+
+**SI base units:** m (meter), g (gram), s (second), K (kelvin), A (ampere),
+mol (mole), cd (candela). Note: gram (not kilogram) is the parseable base;
+`kg` = k prefix (10³) × g (10⁻³) = scale 1.0.
+
+**Derived units:** N (newton), J (joule), W (watt), Pa (pascal), Hz (hertz),
+C (coulomb), V (volt), Ohm (ohm).
+
+**SI prefixes:** p (pico, 10⁻¹²), n (nano, 10⁻⁹), μ (micro, 10⁻⁶),
+m (milli, 10⁻³), c (centi, 10⁻²), k (kilo, 10³), M (mega, 10⁶),
+G (giga, 10⁹), T (tera, 10¹²).
+
+Quantities are evaluated by converting to base SI: `eval(5 [km]) = 5000.0`.
+Dimensional analysis uses the unit's implied dimension:
+`infer_dim(3 [m/s]) = [L T⁻¹]`.
+
 ---
 
 ## What ERD is not

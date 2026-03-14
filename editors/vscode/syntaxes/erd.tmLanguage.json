@@ -462,6 +462,9 @@
     "math-expression": {
       "patterns": [
         {
+          "include": "#bracket-annotation"
+        },
+        {
           "match": "\\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|exp|log|ln|abs|det|tr)\\b",
           "name": "support.function.math.erd"
         },
@@ -492,6 +495,47 @@
         {
           "match": "&",
           "name": "keyword.operator.alignment.erd"
+        }
+      ]
+    },
+
+    "bracket-annotation": {
+      "begin": "(\\[)",
+      "end": "(\\])",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.bracket.begin.erd" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.bracket.end.erd" }
+      },
+      "name": "meta.bracket-annotation.erd",
+      "patterns": [
+        {
+          "comment": "Base dimension symbols: L, M, T, Theta, I, N, J",
+          "match": "\\b(L|M|T|Theta|I|N|J)\\b",
+          "name": "support.type.dimension.erd"
+        },
+        {
+          "comment": "SI derived units",
+          "match": "\\b(Hz|Pa|Ohm)\\b",
+          "name": "support.type.unit.erd"
+        },
+        {
+          "comment": "SI base and derived unit symbols (single/multi-char)",
+          "match": "\\b[pnμmckMGT]?(m|g|s|K|A|mol|cd|N|J|W|C|V)\\b",
+          "name": "support.type.unit.erd"
+        },
+        {
+          "match": "\\b(kg)\\b",
+          "name": "support.type.unit.erd"
+        },
+        {
+          "match": "\\b\\d+\\b",
+          "name": "constant.numeric.erd"
+        },
+        {
+          "match": "[\\^/\\*\\-]",
+          "name": "keyword.operator.erd"
         }
       ]
     }

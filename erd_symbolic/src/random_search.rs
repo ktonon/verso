@@ -386,7 +386,8 @@ impl RandomizedBeamSearch {
 
         // Recursively try rewrites in children (with path tracking)
         match expr {
-            Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. } => {}
+            Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. }
+            | Expr::Quantity(_, _) => {}
 
             Expr::Add(a, b) => {
                 let mut left_path = path.to_vec();

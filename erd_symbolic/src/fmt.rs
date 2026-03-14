@@ -50,7 +50,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
             let s = fmt_frac_pi(r);
             format!("{}{}{}", color::MAGENTA, s, color::RESET)
         }
-        Expr::Var { name, indices } => {
+        Expr::Var { name, indices, dim } => {
             let order = indices.len();
             let (start_color, end_color) = match order {
                 0 => (color::YELLOW, color::RESET),      // Scalar: default
@@ -58,7 +58,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 _ => (color::BOLD_YELLOW, color::RESET), // 2nd+: bold yellow
             };
 
-            if indices.is_empty() {
+            let mut result = if indices.is_empty() {
                 format!("{}{}{}", start_color, name, end_color)
             } else {
                 let upper: Vec<_> = indices
@@ -73,9 +73,9 @@ pub fn fmt_colored(expr: &Expr) -> String {
                     .collect();
 
                 // Color the tensor name, dim the indices
-                let mut result = format!("{}{}{}", start_color, name, color::RESET);
+                let mut r = format!("{}{}{}", start_color, name, color::RESET);
                 if !lower.is_empty() {
-                    result.push_str(&format!(
+                    r.push_str(&format!(
                         "{}_{{{}}}{}",
                         color::DIM,
                         lower.join(","),
@@ -83,15 +83,19 @@ pub fn fmt_colored(expr: &Expr) -> String {
                     ));
                 }
                 if !upper.is_empty() {
-                    result.push_str(&format!(
+                    r.push_str(&format!(
                         "{}^{{{}}}{}",
                         color::DIM,
                         upper.join(","),
                         color::RESET
                     ));
                 }
-                result
+                r
+            };
+            if let Some(d) = dim {
+                result.push_str(&format!(" {}{}{}", color::DIM, d, color::RESET));
             }
+            result
         }
         Expr::Add(a, b) => {
             let op = format!("{} + {}", color::DIM, color::RESET);
@@ -217,6 +221,15 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 rendered.join(", ")
             )
         }
+        Expr::Quantity(inner, unit) => {
+            format!(
+                "{} {}[{}]{}",
+                fmt_colored(inner),
+                color::DIM,
+                unit,
+                color::RESET
+            )
+        }
     }
 }
 
@@ -298,9 +311,9 @@ impl std::fmt::Display for Expr {
             Expr::Rational(r) => write!(f, "{}", r),
             Expr::Named(nc) => write!(f, "{}", nc),
             Expr::FracPi(r) => write!(f, "{}", fmt_frac_pi(r)),
-            Expr::Var { name, indices } => {
-                if indices.is_empty() {
-                    write!(f, "{}", name)
+            Expr::Var { name, indices, dim } => {
+                let mut result = if indices.is_empty() {
+                    name.clone()
                 } else {
                     let upper: Vec<_> = indices
                         .iter()
@@ -313,15 +326,19 @@ impl std::fmt::Display for Expr {
                         .map(|i| format!("{}", i))
                         .collect();
 
-                    let mut result = name.clone();
+                    let mut r = name.clone();
                     if !lower.is_empty() {
-                        result.push_str(&format!("_{{{}}}", lower.join(",")));
+                        r.push_str(&format!("_{{{}}}", lower.join(",")));
                     }
                     if !upper.is_empty() {
-                        result.push_str(&format!("^{{{}}}", upper.join(",")));
+                        r.push_str(&format!("^{{{}}}", upper.join(",")));
                     }
-                    write!(f, "{}", result)
+                    r
+                };
+                if let Some(d) = dim {
+                    result.push_str(&format!(" {}", d));
                 }
+                write!(f, "{}", result)
             }
             Expr::Add(a, b) => match b.as_ref() {
                 Expr::Neg(inner) => {
@@ -376,6 +393,7 @@ impl std::fmt::Display for Expr {
                 let rendered: Vec<String> = args.iter().map(|a| format!("{}", a)).collect();
                 write!(f, "{}({})", kind, rendered.join(", "))
             }
+            Expr::Quantity(inner, unit) => write!(f, "{} [{}]", inner, unit),
         }
     }
 }
@@ -569,6 +587,13 @@ mod tests {
     fn display_log_base() {
         let e = mul(ln(scalar("x")), inv(ln(constant(10.0))));
         assert_eq!(format!("{}", e), "log_10(x)");
+    }
+
+    #[test]
+    fn display_var_with_dimension() {
+        use crate::dim::Dimension;
+        let e = scalar_dim("v", Dimension::parse("[L T^-1]").unwrap());
+        assert_eq!(format!("{}", e), "v [L T^-1]");
     }
 
     #[test]

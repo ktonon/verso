@@ -145,6 +145,7 @@ fn gen_leaf(rng: &mut StdRng, config: &GenExprConfig) -> Expr {
             Expr::Var {
                 name: name.to_string(),
                 indices: vec![],
+                dim: None,
             }
         }
         1 => {
@@ -180,7 +181,8 @@ fn gen_leaf(rng: &mut StdRng, config: &GenExprConfig) -> Expr {
 /// Compute the depth of an expression tree.
 pub fn expr_depth(expr: &Expr) -> usize {
     match expr {
-        Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. } => 0,
+        Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. }
+        | Expr::Quantity(_, _) => 0,
         Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + expr_depth(a),
         Expr::FnN(_, args) => 1 + args.iter().map(expr_depth).max().unwrap_or(0),
         Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {

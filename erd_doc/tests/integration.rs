@@ -165,6 +165,30 @@ fn dimensional_mismatch_detected() {
 }
 
 #[test]
+fn unit_annotations_pass_dim_check() {
+    let src = load_fixture("units.erd");
+    let doc = parse_document(&src).unwrap();
+    let report = verify_document(&doc);
+    for r in &report.results {
+        assert!(
+            r.passed(),
+            "'{}' should pass but failed: {:?} dim: {:?}",
+            r.name,
+            r.outcome,
+            r.dim_outcome
+        );
+        // Claims with :dim declarations and unit quantities should have dimension checking
+        assert!(
+            matches!(r.dim_outcome, Some(DimOutcome::Pass)),
+            "'{}' should have DimOutcome::Pass, got {:?}",
+            r.name,
+            r.dim_outcome
+        );
+    }
+    assert_eq!(report.pass_count(), 2);
+}
+
+#[test]
 fn no_dim_declarations_skips_dim_check() {
     // Documents without :dim blocks should have dim_outcome = None
     let src = load_fixture("basic_algebra.erd");

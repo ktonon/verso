@@ -475,6 +475,7 @@ impl Pattern {
                 Expr::Var {
                     name: expr_name,
                     indices: expr_indices,
+                    ..
                 },
             ) => {
                 // Check variable name matches
@@ -626,6 +627,7 @@ impl Pattern {
                 Expr::Var {
                     name: var_name,
                     indices: var_indices,
+                    dim: None,
                 }
             }
         }

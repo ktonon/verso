@@ -77,7 +77,7 @@ impl ToTex for Expr {
             }
             Expr::Named(nc) => nc.to_tex(),
             Expr::FracPi(r) => frac_pi_to_tex(r),
-            Expr::Var { name, indices } => {
+            Expr::Var { name, indices, .. } => {
                 if indices.is_empty() {
                     name.clone()
                 } else {
@@ -163,6 +163,9 @@ impl ToTex for Expr {
                     }
                     _ => format!("{}\\left( {} \\right)", kind.to_tex(), joined),
                 }
+            }
+            Expr::Quantity(inner, unit) => {
+                format!("{} \\; \\mathrm{{{}}}", inner.to_tex(), unit.display)
             }
         }
     }

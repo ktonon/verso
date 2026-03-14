@@ -2,8 +2,7 @@ use crate::ast::{
     Block, Claim, ColumnAlign, DimDecl, Document, EnvKind, Environment, Figure, List, ListItem,
     MathBlock, Proof, ProofStep, ProseFragment, Span, Table,
 };
-use crate::dim::Dimension;
-use erd_symbolic::parse_expr;
+use erd_symbolic::{parse_expr, Dimension};
 use std::fmt;
 
 #[derive(Debug)]
@@ -2270,5 +2269,98 @@ More prose here.
             }
             other => panic!("expected List, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn parse_inline_math_with_dimension() {
+        // math`v [L T^-1]` should parse as a Var with dimension annotation
+        let doc = parse_document("The velocity math`v [L T^-1]` is measured.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                match &fragments[1] {
+                    ProseFragment::Math(expr) => match expr {
+                        erd_symbolic::Expr::Var { name, dim, .. } => {
+                            assert_eq!(name, "v");
+                            assert!(dim.is_some());
+                            assert_eq!(
+                                dim.as_ref().unwrap(),
+                                &erd_symbolic::Dimension::parse("[L T^-1]").unwrap()
+                            );
+                        }
+                        other => panic!("expected Var with dim, got {:?}", other),
+                    },
+                    other => panic!("expected Math, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_inline_math_with_unit() {
+        // math`3 [m]` should parse as a Quantity
+        let doc = parse_document("A distance of math`3 [m]` was observed.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert_eq!(fragments.len(), 3);
+                match &fragments[1] {
+                    ProseFragment::Math(expr) => {
+                        assert!(
+                            matches!(expr, erd_symbolic::Expr::Quantity(_, _)),
+                            "expected Quantity, got {:?}",
+                            expr
+                        );
+                    }
+                    other => panic!("expected Math, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_inline_math_compound_unit() {
+        // math`3*10^8 [m/s]` should parse as a Quantity
+        let doc = parse_document("The speed of light is math`3*10^8 [m/s]`.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                match &fragments[1] {
+                    ProseFragment::Math(expr) => {
+                        assert!(
+                            matches!(expr, erd_symbolic::Expr::Quantity(_, _)),
+                            "expected Quantity, got {:?}",
+                            expr
+                        );
+                    }
+                    other => panic!("expected Math, got {:?}", other),
+                }
+            }
+            _ => panic!("expected Prose"),
+        }
+    }
+
+    #[test]
+    fn parse_inline_math_var_with_unit_is_error() {
+        // math`c [m/s]` should fail: variable with unit
+        let result = parse_document("Value is math`c [m/s]`.");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_claim_with_inline_dim() {
+        // Claim using inline dimension annotations on variables
+        let src = ":dim F [M L T^-2]\n:claim newton\n  F = m [M] * a [L T^-2]";
+        let doc = parse_document(src).unwrap();
+        // Should parse without error — the claim body has inline dimensions
+        assert_eq!(doc.blocks.len(), 2); // Dim + Claim
+    }
+
+    #[test]
+    fn parse_claim_with_quantity() {
+        // Claim using a quantity (numeric with unit)
+        let src = ":claim speed_of_light\n  c [L T^-1] = 3*10^8 [m/s]";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1); // just the Claim (no :dim needed)
     }
 }

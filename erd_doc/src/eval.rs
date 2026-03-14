@@ -26,6 +26,9 @@ fn collect_vars(expr: &Expr, vars: &mut HashSet<String>) {
             }
         }
         Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => {}
+        Expr::Quantity(inner, _) => {
+            collect_vars(inner, vars);
+        }
     }
 }
 
@@ -109,6 +112,10 @@ pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
                 FnKind::Clamp if vals.len() == 3 => Some(vals[0].clamp(vals[1], vals[2])),
                 _ => None,
             }
+        }
+        Expr::Quantity(inner, unit) => {
+            let v = eval_f64(inner, bindings)?;
+            Some(v * unit.scale)
         }
     }
 }
@@ -248,5 +255,37 @@ mod tests {
         let lhs = parse_expr("(x + y)(x - y)").unwrap();
         let rhs = parse_expr("x^2 - y^2").unwrap();
         assert!(spot_check(&lhs, &rhs, 100).is_ok());
+    }
+
+    #[test]
+    fn eval_quantity_scales_to_base_si() {
+        // 5 km = 5000 m (base SI)
+        let expr = parse_expr("5 [km]").unwrap();
+        let val = eval_f64(&expr, &HashMap::new()).unwrap();
+        assert!((val - 5000.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eval_quantity_base_unit() {
+        // 3 m = 3 (scale 1.0)
+        let expr = parse_expr("3 [m]").unwrap();
+        let val = eval_f64(&expr, &HashMap::new()).unwrap();
+        assert!((val - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn eval_quantity_kg() {
+        // 2 kg = 2 (kg is SI base, scale 1.0)
+        let expr = parse_expr("2 [kg]").unwrap();
+        let val = eval_f64(&expr, &HashMap::new()).unwrap();
+        assert!((val - 2.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn eval_quantity_mg() {
+        // 500 mg = 0.0005 kg (base SI)
+        let expr = parse_expr("500 [mg]").unwrap();
+        let val = eval_f64(&expr, &HashMap::new()).unwrap();
+        assert!((val - 0.0005).abs() < 1e-12);
     }
 }

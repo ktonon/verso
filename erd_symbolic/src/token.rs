@@ -124,7 +124,7 @@ fn tokenize_rec(expr: &Expr, tokens: &mut Vec<Token>, db: &mut DeBruijn) {
         Expr::Named(nc) => {
             tokens.push(Token::Named(*nc));
         }
-        Expr::Var { name, indices } => {
+        Expr::Var { name, indices, .. } => {
             let id = db.var_id(name);
             tokens.push(Token::Var(id));
             for idx in indices {
@@ -169,6 +169,10 @@ fn tokenize_rec(expr: &Expr, tokens: &mut Vec<Token>, db: &mut DeBruijn) {
             for arg in args {
                 tokenize_rec(arg, tokens, db);
             }
+        }
+        Expr::Quantity(inner, _unit) => {
+            // For now, tokenize just the inner expression (unit info is lost)
+            tokenize_rec(inner, tokens, db);
         }
     }
 }
@@ -247,7 +251,7 @@ fn detokenize_rec(tokens: &[Token], pos: &mut usize, db: &DeBruijn) -> Result<Ex
                     _ => break,
                 }
             }
-            Ok(Expr::Var { name, indices })
+            Ok(Expr::Var { name, indices, dim: None })
         }
         Token::Add => {
             let a = detokenize_rec(tokens, pos, db)?;

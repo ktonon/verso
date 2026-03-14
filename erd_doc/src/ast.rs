@@ -1,5 +1,4 @@
-use crate::dim::Dimension;
-use erd_symbolic::Expr;
+use erd_symbolic::{Dimension, Expr};
 
 /// A parsed `.erd` document.
 #[derive(Debug)]

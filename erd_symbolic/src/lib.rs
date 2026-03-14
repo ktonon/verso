@@ -1,4 +1,6 @@
+pub mod dim;
 mod expr;
+pub mod unit;
 pub mod fmt;
 pub mod gen_expr;
 mod parser;
@@ -12,6 +14,8 @@ pub mod token;
 pub mod training_data;
 pub mod validate;
 
+pub use dim::{BaseDim, Dimension};
+pub use unit::Unit;
 pub use expr::*;
 pub use fmt::{fmt_colored, Colored};
 pub use parser::{parse_expr, ParseError};

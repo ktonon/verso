@@ -1,4 +1,6 @@
+use crate::dim::Dimension;
 use crate::rational::Rational;
+use crate::unit::Unit;
 
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -6,7 +8,7 @@ pub enum Expr {
     Rational(Rational), // Exact rational number
     FracPi(Rational),   // Rational multiple of π (value = r * π)
     Named(NamedConst),  // Named mathematical constant (e, √2, etc.)
-    Var { name: String, indices: Vec<Index> },
+    Var { name: String, indices: Vec<Index>, dim: Option<Dimension> },
 
     // Arithmetic
     Add(Box<Expr>, Box<Expr>),
@@ -18,6 +20,9 @@ pub enum Expr {
     // Functions
     Fn(FnKind, Box<Expr>),
     FnN(FnKind, Vec<Expr>),
+
+    // Quantity: numeric expression with unit annotation
+    Quantity(Box<Expr>, Unit),
 }
 
 impl PartialEq for Expr {
@@ -28,10 +33,12 @@ impl PartialEq for Expr {
                 Expr::Var {
                     name: n1,
                     indices: i1,
+                    ..
                 },
                 Expr::Var {
                     name: n2,
                     indices: i2,
+                    ..
                 },
             ) => n1 == n2 && i1 == i2,
             (Expr::Add(a1, b1), Expr::Add(a2, b2))
@@ -42,6 +49,7 @@ impl PartialEq for Expr {
             (Expr::FnN(k1, a), Expr::FnN(k2, b)) => k1 == k2 && a == b,
             (Expr::Rational(a), Expr::Rational(b)) => a == b,
             (Expr::FracPi(a), Expr::FracPi(b)) => a == b,
+            (Expr::Quantity(a1, u1), Expr::Quantity(a2, u2)) => a1 == a2 && u1 == u2,
             _ => false,
         }
     }
@@ -132,6 +140,7 @@ impl Expr {
     pub fn complexity(&self) -> usize {
         match self {
             Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. } => 1,
+            Expr::Quantity(inner, _) => 1 + inner.complexity(),
             Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + a.complexity(),
             Expr::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
             Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
@@ -146,6 +155,7 @@ impl Expr {
             | Expr::Named(_)
             | Expr::FracPi(_)
             | Expr::Var { .. }
+            | Expr::Quantity(_, _)
             | Expr::Fn(_, _)
             | Expr::FnN(_, _) => 100,
             Expr::Pow(_, _) => 80,
@@ -160,6 +170,15 @@ pub fn scalar(name: &str) -> Expr {
     Expr::Var {
         name: name.to_string(),
         indices: vec![],
+        dim: None,
+    }
+}
+
+pub fn scalar_dim(name: &str, dim: Dimension) -> Expr {
+    Expr::Var {
+        name: name.to_string(),
+        indices: vec![],
+        dim: Some(dim),
     }
 }
 
@@ -167,6 +186,7 @@ pub fn tensor(name: &str, indices: Vec<Index>) -> Expr {
     Expr::Var {
         name: name.to_string(),
         indices,
+        dim: None,
     }
 }
 
@@ -322,6 +342,10 @@ pub fn exp(a: Expr) -> Expr {
 
 pub fn ln(a: Expr) -> Expr {
     Expr::Fn(FnKind::Ln, Box::new(a))
+}
+
+pub fn quantity(expr: Expr, unit: Unit) -> Expr {
+    Expr::Quantity(Box::new(expr), unit)
 }
 
 /// Returns true if the expression has tensor indices.

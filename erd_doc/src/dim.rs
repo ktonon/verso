@@ -1,157 +1,6 @@
-use erd_symbolic::Expr;
-use std::collections::{BTreeMap, HashMap};
+use erd_symbolic::{Dimension, Expr};
+use std::collections::HashMap;
 use std::fmt;
-
-/// Base physical dimensions (SI).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum BaseDim {
-    L,     // Length
-    M,     // Mass
-    T,     // Time
-    Theta, // Temperature
-    I,     // Electric current
-    N,     // Amount of substance
-    J,     // Luminous intensity
-}
-
-impl BaseDim {
-    fn from_str(s: &str) -> Option<BaseDim> {
-        match s {
-            "L" => Some(BaseDim::L),
-            "M" => Some(BaseDim::M),
-            "T" => Some(BaseDim::T),
-            "Θ" | "Theta" => Some(BaseDim::Theta),
-            "I" => Some(BaseDim::I),
-            "N" => Some(BaseDim::N),
-            "J" => Some(BaseDim::J),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for BaseDim {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BaseDim::L => write!(f, "L"),
-            BaseDim::M => write!(f, "M"),
-            BaseDim::T => write!(f, "T"),
-            BaseDim::Theta => write!(f, "Θ"),
-            BaseDim::I => write!(f, "I"),
-            BaseDim::N => write!(f, "N"),
-            BaseDim::J => write!(f, "J"),
-        }
-    }
-}
-
-/// A physical dimension as a product of base dimensions with integer exponents.
-/// E.g., force = M L T^-2 is represented as {M: 1, L: 1, T: -2}.
-/// Dimensionless = empty map.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Dimension {
-    exponents: BTreeMap<BaseDim, i32>,
-}
-
-impl Dimension {
-    pub fn dimensionless() -> Self {
-        Dimension {
-            exponents: BTreeMap::new(),
-        }
-    }
-
-    pub fn is_dimensionless(&self) -> bool {
-        self.exponents.values().all(|&e| e == 0)
-    }
-
-    /// Multiply dimensions (add exponents).
-    pub fn mul(&self, other: &Dimension) -> Dimension {
-        let mut result = self.exponents.clone();
-        for (&base, &exp) in &other.exponents {
-            *result.entry(base).or_insert(0) += exp;
-        }
-        result.retain(|_, e| *e != 0);
-        Dimension { exponents: result }
-    }
-
-    /// Inverse dimension (negate exponents).
-    pub fn inv(&self) -> Dimension {
-        let exponents = self.exponents.iter().map(|(&b, &e)| (b, -e)).collect();
-        Dimension { exponents }
-    }
-
-    /// Raise to integer power (multiply all exponents).
-    pub fn pow(&self, n: i32) -> Dimension {
-        if n == 0 {
-            return Dimension::dimensionless();
-        }
-        let exponents = self
-            .exponents
-            .iter()
-            .map(|(&b, &e)| (b, e * n))
-            .filter(|(_, e)| *e != 0)
-            .collect();
-        Dimension { exponents }
-    }
-
-    /// Parse a dimension from bracket notation: `[M L T^-2]`
-    pub fn parse(s: &str) -> Result<Dimension, String> {
-        let s = s.trim();
-        let s = s
-            .strip_prefix('[')
-            .and_then(|s| s.strip_suffix(']'))
-            .ok_or_else(|| {
-                "dimension must be enclosed in brackets, e.g. [M L T^-2]".to_string()
-            })?;
-        let s = s.trim();
-
-        if s == "1" || s.is_empty() {
-            return Ok(Dimension::dimensionless());
-        }
-
-        let mut exponents = BTreeMap::new();
-        for token in s.split_whitespace() {
-            let (base_str, exp) = if let Some(caret_pos) = token.find('^') {
-                let base_str = &token[..caret_pos];
-                let exp_str = &token[caret_pos + 1..];
-                let exp: i32 = exp_str
-                    .parse()
-                    .map_err(|_| format!("invalid exponent '{}' in dimension", exp_str))?;
-                (base_str, exp)
-            } else {
-                (token, 1)
-            };
-
-            let base = BaseDim::from_str(base_str)
-                .ok_or_else(|| format!("unknown base dimension '{}'", base_str))?;
-
-            *exponents.entry(base).or_insert(0) += exp;
-        }
-
-        exponents.retain(|_, e| *e != 0);
-        Ok(Dimension { exponents })
-    }
-}
-
-impl fmt::Display for Dimension {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.is_dimensionless() {
-            return write!(f, "[1]");
-        }
-        write!(f, "[")?;
-        let mut first = true;
-        for (base, exp) in &self.exponents {
-            if !first {
-                write!(f, " ")?;
-            }
-            first = false;
-            if *exp == 1 {
-                write!(f, "{}", base)?;
-            } else {
-                write!(f, "{}^{}", base, exp)?;
-            }
-        }
-        write!(f, "]")
-    }
-}
 
 /// Map from variable name to its declared dimension.
 pub type DimEnv = HashMap<String, Dimension>;
@@ -222,10 +71,16 @@ impl DimOutcome {
 pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
     match expr {
         Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => Ok(Dimension::dimensionless()),
-        Expr::Var { name, .. } => env
-            .get(name)
-            .cloned()
-            .ok_or_else(|| DimError::UndeclaredVar(name.clone())),
+        Expr::Quantity(_inner, unit) => Ok(unit.dimension.clone()),
+        Expr::Var { name, dim, .. } => {
+            // Inline dimension annotation takes precedence over environment
+            if let Some(d) = dim {
+                return Ok(d.clone());
+            }
+            env.get(name)
+                .cloned()
+                .ok_or_else(|| DimError::UndeclaredVar(name.clone()))
+        }
         Expr::Add(a, b) => {
             let da = infer_dim(a, env)?;
             let db = infer_dim(b, env)?;
@@ -353,8 +208,8 @@ fn collect_undeclared(expr: &Expr, env: &DimEnv) -> Vec<String> {
 
 fn collect_undeclared_inner(expr: &Expr, env: &DimEnv, out: &mut Vec<String>) {
     match expr {
-        Expr::Var { name, .. } => {
-            if !env.contains_key(name) {
+        Expr::Var { name, dim, .. } => {
+            if dim.is_none() && !env.contains_key(name) {
                 out.push(name.clone());
             }
         }
@@ -371,6 +226,9 @@ fn collect_undeclared_inner(expr: &Expr, env: &DimEnv, out: &mut Vec<String>) {
             }
         }
         Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => {}
+        Expr::Quantity(inner, _) => {
+            collect_undeclared_inner(inner, env, out);
+        }
     }
 }
 
@@ -541,5 +399,62 @@ mod tests {
         // (1/2) m v^2 has dimension [M L^2 T^-2] = energy
         let expr = parse_expr("(1/2) * m * v^2").unwrap();
         assert_eq!(infer_dim(&expr, &env).unwrap(), dim("[M L^2 T^-2]"));
+    }
+
+    #[test]
+    fn inline_dimension_annotation() {
+        let env: DimEnv = HashMap::new();
+        let expr = parse_expr("v [L T^-1]").unwrap();
+        assert_eq!(infer_dim(&expr, &env).unwrap(), dim("[L T^-1]"));
+    }
+
+    #[test]
+    fn inline_dim_overrides_env() {
+        let env = env_from(&[("v", "[M]")]); // wrong dim in env
+        let expr = parse_expr("v [L T^-1]").unwrap();
+        // Inline annotation takes precedence
+        assert_eq!(infer_dim(&expr, &env).unwrap(), dim("[L T^-1]"));
+    }
+
+    #[test]
+    fn quantity_has_unit_dimension() {
+        let env: DimEnv = HashMap::new();
+        // 5 [m] has dimension [L]
+        let expr = parse_expr("5 [m]").unwrap();
+        assert_eq!(infer_dim(&expr, &env).unwrap(), dim("[L]"));
+    }
+
+    #[test]
+    fn quantity_derived_unit_dimension() {
+        let env: DimEnv = HashMap::new();
+        // 100 [N] has dimension [M L T^-2]
+        let expr = parse_expr("100 [N]").unwrap();
+        assert_eq!(infer_dim(&expr, &env).unwrap(), dim("[M L T^-2]"));
+    }
+
+    #[test]
+    fn quantity_compound_unit_dimension() {
+        let env: DimEnv = HashMap::new();
+        // 3*10^8 [m/s] has dimension [L T^-1]
+        let expr = parse_expr("3*10^8 [m/s]").unwrap();
+        assert_eq!(infer_dim(&expr, &env).unwrap(), dim("[L T^-1]"));
+    }
+
+    #[test]
+    fn check_claim_quantity_vs_var() {
+        // F = 10 [N] should pass when F has dim [M L T^-2]
+        let env = env_from(&[("F", "[M L T^-2]")]);
+        let lhs = parse_expr("F").unwrap();
+        let rhs = parse_expr("10 [N]").unwrap();
+        assert!(check_claim_dim(&lhs, &rhs, &env).passed());
+    }
+
+    #[test]
+    fn check_claim_quantity_dim_mismatch() {
+        // x [L] = 5 [s] should fail (length vs time)
+        let env: DimEnv = HashMap::new();
+        let lhs = parse_expr("5 [m]").unwrap();
+        let rhs = parse_expr("3 [s]").unwrap();
+        assert!(!check_claim_dim(&lhs, &rhs, &env).passed());
     }
 }

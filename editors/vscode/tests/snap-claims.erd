@@ -1,0 +1,11 @@
+:claim inline_dim
+  v [L T^-1] = v [L T^-1]
+
+:claim compound_unit
+  3*10^8 [m/s] = 3*10^8 [m/s]
+
+:claim si_prefix
+  1 [km] = 1000 [m]
+
+:claim derived_unit
+  10 [N] = 10 [N]

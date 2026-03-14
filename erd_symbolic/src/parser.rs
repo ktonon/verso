@@ -1,9 +1,11 @@
+use crate::dim::Dimension;
 use crate::expr::{
     acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
-    min, mul, named, neg, pow, round, scalar, sign, sin, sinh, sqrt, tan, tanh, tensor, Expr,
+    min, mul, named, neg, pow, quantity, round, scalar, sign, sin, sinh, sqrt, tan, tanh, Expr,
     Index, IndexPosition, NamedConst,
 };
 use crate::rational::Rational;
+use crate::unit::Unit;
 
 // TODO: allow the input of special characters by using a latex style.
 // For example \delta becomes δ.
@@ -43,6 +45,8 @@ enum Token {
     Caret,
     LBrace,
     RBrace,
+    LBracket,
+    RBracket,
     Tensor,
     DotOp,
     Colon,
@@ -152,6 +156,14 @@ fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
             '}' => {
                 chars.next();
                 tokens.push(Token::RBrace);
+            }
+            '[' => {
+                chars.next();
+                tokens.push(Token::LBracket);
+            }
+            ']' => {
+                chars.next();
+                tokens.push(Token::RBracket);
             }
             '⊗' => {
                 chars.next();
@@ -264,6 +276,13 @@ impl Parser {
                     break;
                 }
             }
+        }
+
+        // Check for unit annotation: [unit] on purely numeric expressions
+        if matches!(self.peek(), Some(Token::LBracket)) && !expr_has_vars(&expr) {
+            self.next(); // consume [
+            let unit = self.parse_unit_bracket()?;
+            expr = quantity(expr, unit);
         }
 
         Ok(expr)
@@ -460,16 +479,204 @@ impl Parser {
             }
         }
 
-        if !lowers.is_empty() || !uppers.is_empty() {
+        // Parse optional dimension annotation: [M L T^-2]
+        let dim = if matches!(self.peek(), Some(Token::LBracket)) {
+            self.next(); // consume [
+            Some(self.parse_dimension_bracket()?)
+        } else {
+            None
+        };
+
+        if !lowers.is_empty() || !uppers.is_empty() || dim.is_some() {
             let mut all = Vec::new();
             all.extend(lowers);
             all.extend(uppers);
             if let crate::expr::Expr::Var { name, .. } = expr {
-                expr = tensor(&name, all);
+                expr = crate::expr::Expr::Var { name, indices: all, dim };
             }
         }
 
         Ok(expr)
+    }
+
+    /// Parse dimension content inside brackets: `M L T^-2]` or `L/T]`
+    /// The opening `[` has already been consumed.
+    fn parse_dimension_bracket(&mut self) -> Result<Dimension, ParseError> {
+        use crate::dim::BaseDim;
+
+        let mut dim = Dimension::dimensionless();
+        let mut divisor = false;
+
+        loop {
+            match self.peek() {
+                Some(Token::RBracket) => {
+                    self.next();
+                    break;
+                }
+                Some(Token::Slash) => {
+                    self.next();
+                    divisor = true;
+                }
+                // Allow `1` as a no-op numerator: [1] is dimensionless, [1/T] = [T^-1]
+                Some(Token::Number(s)) if s == "1" => {
+                    self.next();
+                }
+                Some(Token::Ident(_)) => {
+                    let name = match self.next() {
+                        Some(Token::Ident(s)) => s,
+                        _ => unreachable!(),
+                    };
+                    let base = BaseDim::from_str(&name).ok_or_else(|| {
+                        if crate::unit::lookup_unit(&name).is_some() {
+                            ParseError::Expected(format!(
+                                "dimension (e.g., L, M, T), not unit '{}'. \
+                                 Variables require dimension annotations, not units",
+                                name
+                            ))
+                        } else {
+                            ParseError::Expected(format!("base dimension, got '{}'", name))
+                        }
+                    })?;
+                    // Check for ^exponent
+                    let mut exp: i32 = 1;
+                    if matches!(self.peek(), Some(Token::Caret)) {
+                        self.next(); // consume ^
+                        let neg = if matches!(self.peek(), Some(Token::Minus)) {
+                            self.next();
+                            true
+                        } else {
+                            false
+                        };
+                        let exp_str = match self.next() {
+                            Some(Token::Number(s)) => s,
+                            _ => return Err(ParseError::Expected("exponent number".to_string())),
+                        };
+                        exp = exp_str.parse().map_err(|_| {
+                            ParseError::InvalidNumber(exp_str)
+                        })?;
+                        if neg {
+                            exp = -exp;
+                        }
+                    }
+                    if divisor {
+                        exp = -exp;
+                    }
+                    dim = dim.mul(&Dimension::single(base, exp));
+                    divisor = false;
+                }
+                _ => return Err(ParseError::Expected("]".to_string())),
+            }
+        }
+
+        Ok(dim)
+    }
+
+    /// Parse unit content inside brackets: `m/s]` or `kg*m/s^2]`
+    /// The opening `[` has already been consumed.
+    fn parse_unit_bracket(&mut self) -> Result<Unit, ParseError> {
+        use crate::unit::lookup_unit;
+
+        let mut dimension = Dimension::dimensionless();
+        let mut scale: f64 = 1.0;
+        let mut display = String::new();
+        let mut divisor = false;
+
+        loop {
+            match self.peek() {
+                Some(Token::RBracket) => {
+                    self.next();
+                    break;
+                }
+                Some(Token::Slash) => {
+                    self.next();
+                    display.push('/');
+                    divisor = true;
+                }
+                Some(Token::Star) => {
+                    self.next();
+                    if !display.is_empty() {
+                        display.push('*');
+                    }
+                }
+                // Allow `1` as a no-op numerator: [1/s] = [s^-1]
+                Some(Token::Number(s)) if s == "1" => {
+                    self.next();
+                }
+                Some(Token::Ident(_)) => {
+                    let name = match self.next() {
+                        Some(Token::Ident(s)) => s,
+                        _ => unreachable!(),
+                    };
+
+                    let (unit_dim, unit_scale) = match lookup_unit(&name) {
+                        Some(result) => result,
+                        None => {
+                            if crate::dim::BaseDim::from_str(&name).is_some() {
+                                return Err(ParseError::Expected(format!(
+                                    "unit (e.g., m, s, kg), not dimension '{}'. \
+                                     Numeric values require units, not dimensions",
+                                    name
+                                )));
+                            }
+                            return Err(ParseError::Expected(format!(
+                                "unit symbol, got '{}'",
+                                name
+                            )));
+                        }
+                    };
+
+                    if !display.is_empty()
+                        && !display.ends_with('/')
+                        && !display.ends_with('*')
+                    {
+                        display.push(' ');
+                    }
+                    display.push_str(&name);
+
+                    // Check for ^exponent
+                    let mut exp: i32 = 1;
+                    if matches!(self.peek(), Some(Token::Caret)) {
+                        self.next(); // consume ^
+                        let neg = if matches!(self.peek(), Some(Token::Minus)) {
+                            self.next();
+                            true
+                        } else {
+                            false
+                        };
+                        let exp_str = match self.next() {
+                            Some(Token::Number(s)) => s,
+                            _ => {
+                                return Err(ParseError::Expected("exponent number".to_string()))
+                            }
+                        };
+                        let exp_val: i32 = exp_str.parse().map_err(|_| {
+                            ParseError::InvalidNumber(exp_str.clone())
+                        })?;
+                        exp = if neg { -exp_val } else { exp_val };
+                        if neg {
+                            display.push_str(&format!("^-{}", exp_str));
+                        } else {
+                            display.push_str(&format!("^{}", exp_str));
+                        }
+                    }
+
+                    // Apply divisor sign flip
+                    let effective_exp = if divisor { -exp } else { exp };
+
+                    dimension = dimension.mul(&unit_dim.pow(effective_exp));
+                    scale *= unit_scale.powi(effective_exp);
+
+                    divisor = false;
+                }
+                _ => return Err(ParseError::Expected("]".to_string())),
+            }
+        }
+
+        Ok(Unit {
+            dimension,
+            scale,
+            display,
+        })
     }
 
     fn parse_brace_index_list(
@@ -506,6 +713,20 @@ impl Parser {
             self.peek(),
             Some(Token::Number(_)) | Some(Token::Ident(_)) | Some(Token::LParen) | Some(Token::Pi)
         )
+    }
+}
+
+/// Check if an expression contains any variable references.
+fn expr_has_vars(expr: &Expr) -> bool {
+    match expr {
+        Expr::Var { .. } => true,
+        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+            expr_has_vars(a) || expr_has_vars(b)
+        }
+        Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => expr_has_vars(a),
+        Expr::FnN(_, args) => args.iter().any(expr_has_vars),
+        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => false,
+        Expr::Quantity(inner, _) => expr_has_vars(inner),
     }
 }
 
@@ -559,6 +780,7 @@ fn expect_n(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(unused_imports)]
     use crate::expr::*;
 
     #[test]
@@ -879,5 +1101,182 @@ mod tests {
             expr,
             tensor("T", vec![lower("mu"), upper("nu")])
         );
+    }
+
+    #[test]
+    fn parse_dimension_annotation() {
+        use crate::dim::Dimension;
+
+        let expr = parse_expr("v [L T^-1]").unwrap();
+        match &expr {
+            Expr::Var { name, dim, .. } => {
+                assert_eq!(name, "v");
+                assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[L T^-1]").unwrap());
+            }
+            _ => panic!("expected Var"),
+        }
+    }
+
+    #[test]
+    fn parse_dimension_slash_shorthand() {
+        use crate::dim::Dimension;
+
+        // [L/T] is shorthand for [L T^-1]
+        let expr = parse_expr("v [L/T]").unwrap();
+        match &expr {
+            Expr::Var { dim, .. } => {
+                assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[L T^-1]").unwrap());
+            }
+            _ => panic!("expected Var"),
+        }
+
+        // [M L/T^2] is shorthand for [M L T^-2]
+        let expr = parse_expr("F [M L/T^2]").unwrap();
+        match &expr {
+            Expr::Var { dim, .. } => {
+                assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[M L T^-2]").unwrap());
+            }
+            _ => panic!("expected Var"),
+        }
+    }
+
+    #[test]
+    fn parse_dimensionless_annotation() {
+        let expr = parse_expr("theta [1]").unwrap();
+        match &expr {
+            Expr::Var { dim, .. } => {
+                assert!(dim.as_ref().unwrap().is_dimensionless());
+            }
+            _ => panic!("expected Var"),
+        }
+    }
+
+    #[test]
+    fn parse_dimension_one_over() {
+        use crate::dim::Dimension;
+
+        // [1/T] is shorthand for [T^-1]
+        let expr = parse_expr("f [1/T]").unwrap();
+        match &expr {
+            Expr::Var { dim, .. } => {
+                assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[T^-1]").unwrap());
+            }
+            _ => panic!("expected Var"),
+        }
+    }
+
+    #[test]
+    fn parse_quantity_basic() {
+        use crate::dim::{BaseDim, Dimension};
+
+        let expr = parse_expr("3 [m]").unwrap();
+        match &expr {
+            Expr::Quantity(inner, unit) => {
+                assert_eq!(**inner, Expr::Rational(Rational::from_i64(3)));
+                assert_eq!(unit.dimension, Dimension::single(BaseDim::L, 1));
+                assert!((unit.scale - 1.0).abs() < 1e-15);
+                assert_eq!(unit.display, "m");
+            }
+            _ => panic!("expected Quantity, got {:?}", expr),
+        }
+    }
+
+    #[test]
+    fn parse_quantity_speed_of_light() {
+        use crate::dim::Dimension;
+
+        let expr = parse_expr("3*10^8 [m/s]").unwrap();
+        match &expr {
+            Expr::Quantity(_, unit) => {
+                assert_eq!(unit.dimension, Dimension::parse("[L T^-1]").unwrap());
+                assert!((unit.scale - 1.0).abs() < 1e-15);
+            }
+            _ => panic!("expected Quantity, got {:?}", expr),
+        }
+    }
+
+    #[test]
+    fn parse_quantity_prefixed_unit() {
+        use crate::dim::{BaseDim, Dimension};
+
+        let expr = parse_expr("5 [km]").unwrap();
+        match &expr {
+            Expr::Quantity(_, unit) => {
+                assert_eq!(unit.dimension, Dimension::single(BaseDim::L, 1));
+                assert!((unit.scale - 1000.0).abs() < 1e-10);
+                assert_eq!(unit.display, "km");
+            }
+            _ => panic!("expected Quantity"),
+        }
+    }
+
+    #[test]
+    fn parse_quantity_compound_unit() {
+        use crate::dim::Dimension;
+
+        let expr = parse_expr("10 [kg*m/s^2]").unwrap();
+        match &expr {
+            Expr::Quantity(_, unit) => {
+                assert_eq!(unit.dimension, Dimension::parse("[M L T^-2]").unwrap());
+                assert!((unit.scale - 1.0).abs() < 1e-15);
+            }
+            _ => panic!("expected Quantity"),
+        }
+    }
+
+    #[test]
+    fn parse_quantity_derived_unit() {
+        use crate::dim::Dimension;
+
+        let expr = parse_expr("100 [N]").unwrap();
+        match &expr {
+            Expr::Quantity(_, unit) => {
+                assert_eq!(unit.dimension, Dimension::parse("[M L T^-2]").unwrap());
+                assert!((unit.scale - 1.0).abs() < 1e-15);
+                assert_eq!(unit.display, "N");
+            }
+            _ => panic!("expected Quantity"),
+        }
+    }
+
+    #[test]
+    fn parse_quantity_one_over_unit() {
+        use crate::dim::Dimension;
+
+        let expr = parse_expr("5 [1/s]").unwrap();
+        match &expr {
+            Expr::Quantity(_, unit) => {
+                assert_eq!(unit.dimension, Dimension::parse("[T^-1]").unwrap());
+            }
+            _ => panic!("expected Quantity"),
+        }
+    }
+
+    #[test]
+    fn parse_quantity_addition() {
+        let expr = parse_expr("3 [m] + 5 [m]").unwrap();
+        assert!(matches!(&expr, Expr::Add(_, _)));
+    }
+
+    #[test]
+    fn parse_quantity_round_trip() {
+        // Parsing a Quantity's display format should produce the same expression
+        let expr = parse_expr("3 [m]").unwrap();
+        let displayed = format!("{}", expr);
+        assert_eq!(displayed, "3 [m]");
+        let reparsed = parse_expr(&displayed).unwrap();
+        assert_eq!(reparsed, expr);
+    }
+
+    #[test]
+    fn parse_var_with_unit_is_error() {
+        // Variable + unit annotation should fail
+        assert!(parse_expr("c [m/s]").is_err());
+    }
+
+    #[test]
+    fn parse_number_with_dim_is_error() {
+        // Number + dimension annotation should fail (leftover bracket)
+        assert!(parse_expr("3 [L]").is_err());
     }
 }

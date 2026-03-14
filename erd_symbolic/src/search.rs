@@ -97,7 +97,8 @@ impl BeamSearch {
             Expr::Rational(_)
             | Expr::Named(_)
             | Expr::FracPi(_)
-            | Expr::Var { .. } => {}
+            | Expr::Var { .. }
+            | Expr::Quantity(_, _) => {}
 
             Expr::Add(a, b) => {
                 for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
@@ -471,6 +472,27 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<TraceStep
 pub fn eval_constants(expr: &Expr) -> Expr {
     match expr {
         Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
+        Expr::Quantity(inner, unit) => {
+            let inner = eval_constants(inner);
+            if let Expr::Rational(r) = &inner {
+                let val = r.value() * unit.scale;
+                // Try integer
+                let rounded = val.round();
+                if (val - rounded).abs() < 1e-9 && rounded.abs() < i64::MAX as f64 {
+                    return Expr::Rational(Rational::from_i64(rounded as i64));
+                }
+                // Try common denominators for SI scales (handles gram = 0.001, etc.)
+                for den in [10i64, 100, 1000, 1_000_000, 1_000_000_000] {
+                    let num_f64 = val * den as f64;
+                    let num_rounded = num_f64.round();
+                    if (num_f64 - num_rounded).abs() < 1e-6 && num_rounded.abs() < i64::MAX as f64
+                    {
+                        return Expr::Rational(Rational::new(num_rounded as i64, den));
+                    }
+                }
+            }
+            Expr::Quantity(Box::new(inner), unit.clone())
+        }
         Expr::Neg(a) => {
             let inner = eval_constants(a);
             match &inner {
@@ -662,7 +684,7 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
         Expr::Rational(r) => format!("Rat({}/{})", r.num(), r.den()),
         Expr::Named(nc) => format!("Named({:?})", nc),
         Expr::FracPi(r) => format!("FracPi({}/{})", r.num(), r.den()),
-        Expr::Var { name, indices } => {
+        Expr::Var { name, indices, .. } => {
             if indices.is_empty() {
                 format!("Var({})", name)
             } else {
@@ -724,6 +746,9 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
                 .map(|a| canonical_key_with_map(a, dummy_map))
                 .collect();
             format!("FnN({:?}, [{}])", kind, arg_keys.join(", "))
+        }
+        Expr::Quantity(inner, unit) => {
+            format!("Qty({}, {})", canonical_key_with_map(inner, dummy_map), unit)
         }
     }
 }
@@ -3176,5 +3201,59 @@ mod tests {
         );
         let result = simplify(&expr, &rules);
         assert_eq!(result, mul(constant(5.0), sin(scalar("x"))));
+    }
+
+    #[test]
+    fn eval_constants_folds_quantity_to_rational() {
+        use crate::unit::Unit;
+        use crate::dim::Dimension;
+        // 1 [km] should fold to Rational(1000)
+        let km = Unit {
+            dimension: Dimension::single(crate::dim::BaseDim::L, 1),
+            scale: 1000.0,
+            display: "km".to_string(),
+        };
+        let expr = Expr::Quantity(Box::new(rational(1, 1)), km);
+        let result = eval_constants(&expr);
+        assert_eq!(result, rational(1000, 1));
+    }
+
+    #[test]
+    fn eval_constants_folds_quantity_with_fractional_scale() {
+        use crate::unit::Unit;
+        use crate::dim::Dimension;
+        // 5 [g] should fold to Rational(5, 1000) since gram scale is 0.001
+        let g = Unit {
+            dimension: Dimension::single(crate::dim::BaseDim::M, 1),
+            scale: 0.001,
+            display: "g".to_string(),
+        };
+        let expr = Expr::Quantity(Box::new(rational(5, 1)), g);
+        let result = eval_constants(&expr);
+        assert_eq!(result, rational(1, 200));
+    }
+
+    #[test]
+    fn simplify_quantity_unit_conversion() {
+        // 1000 [m] - 1 [km] should simplify to 0
+        use crate::unit::Unit;
+        use crate::dim::Dimension;
+        let m = Unit {
+            dimension: Dimension::single(crate::dim::BaseDim::L, 1),
+            scale: 1.0,
+            display: "m".to_string(),
+        };
+        let km = Unit {
+            dimension: Dimension::single(crate::dim::BaseDim::L, 1),
+            scale: 1000.0,
+            display: "km".to_string(),
+        };
+        let rules = RuleSet::standard();
+        let expr = add(
+            Expr::Quantity(Box::new(rational(1000, 1)), m),
+            neg(Expr::Quantity(Box::new(rational(1, 1)), km)),
+        );
+        let result = simplify(&expr, &rules);
+        assert_eq!(result, rational(0, 1));
     }
 }
