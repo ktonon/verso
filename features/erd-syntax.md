@@ -109,7 +109,7 @@ Within prose, the following inline constructs are recognized:
 Use `math` backticks for expressions that ERD can parse, verify, and render:
 
 ```
-The identity math`sin(x)**2 + cos(x)**2` equals one.
+The identity math`sin(x)^2 + cos(x)^2` equals one.
 ```
 
 The expression is parsed by erd_symbolic, so it uses expression syntax (not LaTeX).
@@ -200,7 +200,7 @@ simplification doesn't reach zero.
 
 ```
 :claim pythagorean
-  sin(x)**2 + cos(x)**2 = 1
+  sin(x)^2 + cos(x)^2 = 1
 ```
 
 - The body must be indented.
@@ -217,8 +217,8 @@ of steps is verified. Justifications are optional annotations after `;`.
 
 ```
 :proof pythagorean
-  sin(x)**2 + cos(x)**2
-  = 1 - cos(x)**2 + cos(x)**2    ; sin_sq
+  sin(x)^2 + cos(x)^2
+  = 1 - cos(x)^2 + cos(x)^2      ; sin_sq
   = 1                              ; add_cancel
 ```
 
@@ -491,13 +491,19 @@ not LaTeX. Key differences from LaTeX:
 
 | ERD expression | LaTeX equivalent | Notes |
 |---------------|-----------------|-------|
-| `x**2` or `x^2` | `x^{2}` | Power |
+| `x^2` | `x^{2}` | Power (exponent) |
+| `x^(a+b)` | `x^{a+b}` | Parenthesized exponent |
+| `T^{mu}` | `T^{\mu}` | Tensor upper index (superscript) |
+| `T_{mu}` | `T_{\mu}` | Tensor lower index (subscript) |
 | `sin(x)` | `\sin{x}` | Functions |
 | `pi` or `\u{03C0}` | `\pi` | Pi constant |
 | `sqrt(x)` | `\sqrt{x}` | Square root |
 | `x * y` or `xy` | `xy` | Implicit multiplication |
 | `1/2` | `\frac{1}{2}` | Fractions |
 | `exp(x)` | `e^{x}` | Exponential |
+
+`^` means exponent by default. `^{...}` with curly braces means tensor index
+(superscript).
 
 The `ToTex` trait handles conversion to proper LaTeX notation.
 

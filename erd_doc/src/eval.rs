@@ -231,7 +231,7 @@ mod tests {
 
     #[test]
     fn spot_check_identity_passes() {
-        let lhs = parse_expr("sin(x)**2 + cos(x)**2").unwrap();
+        let lhs = parse_expr("sin(x)^2 + cos(x)^2").unwrap();
         let rhs = parse_expr("1").unwrap();
         assert!(spot_check(&lhs, &rhs, 100).is_ok());
     }
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn spot_check_distributive() {
         let lhs = parse_expr("(x + y)(x - y)").unwrap();
-        let rhs = parse_expr("x**2 - y**2").unwrap();
+        let rhs = parse_expr("x^2 - y^2").unwrap();
         assert!(spot_check(&lhs, &rhs, 100).is_ok());
     }
 }

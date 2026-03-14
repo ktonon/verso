@@ -1266,7 +1266,7 @@ mod tests {
     fn parse_proof() {
         let src = "\
 :proof pythag
-  sin(x)**2 + cos(x)**2
+  sin(x)^2 + cos(x)^2
   = 1                        ; pythagorean_identity";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
@@ -1500,7 +1500,7 @@ More prose here.
 
     #[test]
     fn parse_list_with_inline_math() {
-        let src = "- Energy: math`mc**2`\n- Momentum: math`m * v`";
+        let src = "- Energy: math`mc^2`\n- Momentum: math`m * v`";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::List(list) => {
@@ -1638,7 +1638,7 @@ More prose here.
 
     #[test]
     fn parse_theorem_with_title() {
-        let src = ":theorem Pythagorean\n  For any right triangle, math`a**2 + b**2` is important.";
+        let src = ":theorem Pythagorean\n  For any right triangle, math`a^2 + b^2` is important.";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1688,7 +1688,7 @@ More prose here.
 
     #[test]
     fn parse_env_body_with_inline_math() {
-        let src = ":lemma\n  If math`x` is positive then math`x**2` is positive.";
+        let src = ":lemma\n  If math`x` is positive then math`x^2` is positive.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Environment(env) => {
@@ -1830,7 +1830,7 @@ More prose here.
 
     #[test]
     fn parse_footnote_with_math() {
-        let src = "Result^[See math`x**2` for details.] here.";
+        let src = "Result^[See math`x^2` for details.] here.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Prose(fragments) => {
@@ -1951,7 +1951,7 @@ More prose here.
 
     #[test]
     fn parse_abstract_with_inline_math() {
-        let src = ":abstract\n  We study math`x**2 + 1` in detail.";
+        let src = ":abstract\n  We study math`x^2 + 1` in detail.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Abstract(fragments) => {
@@ -2006,7 +2006,7 @@ More prose here.
 
     #[test]
     fn parse_figure_caption_with_math() {
-        let src = ":figure plot.pdf\n  caption: Energy math`mc**2` shown.";
+        let src = ":figure plot.pdf\n  caption: Energy math`mc^2` shown.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Figure(fig) => {
@@ -2232,7 +2232,7 @@ More prose here.
 
     #[test]
     fn parse_table_cell_with_math() {
-        let src = ":table\n  | Expr |\n  |------|\n  | math`x**2` |";
+        let src = ":table\n  | Expr |\n  |------|\n  | math`x^2` |";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Table(table) => {

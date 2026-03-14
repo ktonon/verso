@@ -36,12 +36,13 @@ enum Token {
     Minus,
     Star,
     Slash,
-    Pow,
     LParen,
     RParen,
     Comma,
     Underscore,
     Caret,
+    LBrace,
+    RBrace,
     Tensor,
     DotOp,
     Colon,
@@ -118,12 +119,7 @@ fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
             }
             '*' => {
                 chars.next();
-                if chars.peek() == Some(&'*') {
-                    chars.next();
-                    tokens.push(Token::Pow);
-                } else {
-                    tokens.push(Token::Star);
-                }
+                tokens.push(Token::Star);
             }
             '/' => {
                 chars.next();
@@ -148,6 +144,14 @@ fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
             '^' => {
                 chars.next();
                 tokens.push(Token::Caret);
+            }
+            '{' => {
+                chars.next();
+                tokens.push(Token::LBrace);
+            }
+            '}' => {
+                chars.next();
+                tokens.push(Token::RBrace);
             }
             '⊗' => {
                 chars.next();
@@ -186,6 +190,10 @@ impl Parser {
 
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.pos)
+    }
+
+    fn peek_at(&self, offset: usize) -> Option<&Token> {
+        self.tokens.get(self.pos + offset)
     }
 
     fn next(&mut self) -> Option<Token> {
@@ -263,7 +271,9 @@ impl Parser {
 
     fn parse_power(&mut self) -> Result<crate::expr::Expr, ParseError> {
         let mut expr = self.parse_primary()?;
-        if matches!(self.peek(), Some(Token::Pow)) {
+        if matches!(self.peek(), Some(Token::Caret))
+            && !matches!(self.peek_at(1), Some(Token::LBrace))
+        {
             self.next();
             let rhs = self.parse_power()?;
             expr = pow(expr, rhs);
@@ -431,18 +441,22 @@ impl Parser {
         let mut uppers: Vec<Index> = Vec::new();
 
         loop {
-            match self.peek() {
-                Some(Token::Underscore) => {
-                    self.next();
-                    let indices = self.parse_index_list(IndexPosition::Lower)?;
-                    lowers.extend(indices);
-                }
-                Some(Token::Caret) => {
-                    self.next();
-                    let indices = self.parse_index_list(IndexPosition::Upper)?;
-                    uppers.extend(indices);
-                }
-                _ => break,
+            if matches!(self.peek(), Some(Token::Underscore))
+                && matches!(self.peek_at(1), Some(Token::LBrace))
+            {
+                self.next(); // consume _
+                self.next(); // consume {
+                let indices = self.parse_brace_index_list(IndexPosition::Lower)?;
+                lowers.extend(indices);
+            } else if matches!(self.peek(), Some(Token::Caret))
+                && matches!(self.peek_at(1), Some(Token::LBrace))
+            {
+                self.next(); // consume ^
+                self.next(); // consume {
+                let indices = self.parse_brace_index_list(IndexPosition::Upper)?;
+                uppers.extend(indices);
+            } else {
+                break;
             }
         }
 
@@ -458,52 +472,33 @@ impl Parser {
         Ok(expr)
     }
 
-    fn parse_index_list(&mut self, position: IndexPosition) -> Result<Vec<Index>, ParseError> {
-        if self.peek() == Some(&Token::LParen) {
-            self.next();
-            let mut indices = Vec::new();
-            loop {
-                let ident = match self.next() {
-                    Some(Token::Ident(name)) => name,
-                    _ => return Err(ParseError::InvalidIndexList),
-                };
-                indices.push(Index {
-                    name: ident,
-                    position: position.clone(),
-                });
-                match self.peek() {
-                    Some(Token::Comma) => {
-                        self.next();
-                        continue;
-                    }
-                    Some(Token::RParen) => {
-                        self.next();
-                        break;
-                    }
-                    _ => return Err(ParseError::InvalidIndexList),
+    fn parse_brace_index_list(
+        &mut self,
+        position: IndexPosition,
+    ) -> Result<Vec<Index>, ParseError> {
+        let mut indices = Vec::new();
+        loop {
+            let ident = match self.next() {
+                Some(Token::Ident(name)) => name,
+                _ => return Err(ParseError::InvalidIndexList),
+            };
+            indices.push(Index {
+                name: ident,
+                position: position.clone(),
+            });
+            match self.peek() {
+                Some(Token::Comma) => {
+                    self.next();
+                    continue;
                 }
-            }
-            Ok(indices)
-        } else {
-            match self.next() {
-                Some(Token::Ident(name)) => {
-                    let mut parts = name.split('_').filter(|p| !p.is_empty());
-                    let first = parts.next().ok_or(ParseError::InvalidIndexList)?;
-                    let mut indices = vec![Index {
-                        name: first.to_string(),
-                        position: position.clone(),
-                    }];
-                    for part in parts {
-                        indices.push(Index {
-                            name: part.to_string(),
-                            position: IndexPosition::Lower,
-                        });
-                    }
-                    Ok(indices)
+                Some(Token::RBrace) => {
+                    self.next();
+                    break;
                 }
-                _ => Err(ParseError::InvalidIndexList),
+                _ => return Err(ParseError::InvalidIndexList),
             }
         }
+        Ok(indices)
     }
 
     fn next_starts_primary(&self) -> bool {
@@ -568,20 +563,20 @@ mod tests {
 
     #[test]
     fn parse_tensor_indices() {
-        let expr = parse_expr("X_(i,j)^(k)").unwrap();
+        let expr = parse_expr("X_{i,j}^{k}").unwrap();
         assert_eq!(expr, tensor("X", vec![lower("i"), lower("j"), upper("k")]));
     }
 
     #[test]
-    fn parse_compact_indices() {
-        let expr = parse_expr("d^v_p").unwrap();
-        assert_eq!(expr, tensor("d", vec![lower("p"), upper("v")]));
+    fn parse_tensor_lower_only() {
+        let expr = parse_expr("v_{p}").unwrap();
+        assert_eq!(expr, tensor("v", vec![lower("p")]));
     }
 
     #[test]
-    fn parse_compact_lower_only() {
-        let expr = parse_expr("v_p").unwrap();
-        assert_eq!(expr, tensor("v", vec![lower("p")]));
+    fn parse_tensor_mixed() {
+        let expr = parse_expr("d_{p}^{v}").unwrap();
+        assert_eq!(expr, tensor("d", vec![lower("p"), upper("v")]));
     }
 
     #[test]
@@ -616,7 +611,7 @@ mod tests {
 
     #[test]
     fn parse_nested_functions_and_indices() {
-        let expr = parse_expr("sin(A_(i,j)^(k) * cosh(x))").unwrap();
+        let expr = parse_expr("sin(A_{i,j}^{k} * cosh(x))").unwrap();
         assert_eq!(
             expr,
             sin(mul(
@@ -637,7 +632,7 @@ mod tests {
 
     #[test]
     fn parse_precedence_and_power() {
-        let expr = parse_expr("2x**2 + -y").unwrap();
+        let expr = parse_expr("2x^2 + -y").unwrap();
         assert_eq!(
             expr,
             add(
@@ -690,7 +685,7 @@ mod tests {
 
     #[test]
     fn parse_unary_minus_vs_subtraction() {
-        let expr = parse_expr("-x**2").unwrap();
+        let expr = parse_expr("-x^2").unwrap();
         assert_eq!(expr, neg(pow(scalar("x"), constant(2.0))));
 
         let expr = parse_expr("x - -y").unwrap();
@@ -714,7 +709,7 @@ mod tests {
 
     #[test]
     fn parse_multi_char_indices() {
-        let expr = parse_expr("T_(mu,nu)^(alpha)").unwrap();
+        let expr = parse_expr("T_{mu,nu}^{alpha}").unwrap();
         assert_eq!(
             expr,
             tensor("T", vec![lower("mu"), lower("nu"), upper("alpha")])
@@ -723,7 +718,7 @@ mod tests {
 
     #[test]
     fn parse_spacing_robustness() {
-        let expr = parse_expr("min( a , b ) + X_( i , j )^( k )").unwrap();
+        let expr = parse_expr("min( a , b ) + X_{ i , j }^{ k }").unwrap();
         assert_eq!(
             expr,
             add(
@@ -755,7 +750,7 @@ mod tests {
     fn parse_error_cases() {
         assert!(parse_expr("log_").is_err());
         assert!(parse_expr("min(a)").is_err());
-        assert!(parse_expr("X_(").is_err());
+        assert!(parse_expr("X_{").is_err());
     }
 
     #[test]
@@ -766,19 +761,19 @@ mod tests {
         let expr = parse_expr("x * (y + z)").unwrap();
         assert_eq!(expr, mul(scalar("x"), add(scalar("y"), scalar("z"))));
 
-        let expr = parse_expr("-(x + y)**2").unwrap();
+        let expr = parse_expr("-(x + y)^2").unwrap();
         assert_eq!(expr, neg(pow(add(scalar("x"), scalar("y")), constant(2.0))));
     }
 
     #[test]
     fn parse_tensor_ops() {
-        let expr = parse_expr("A_(i) ⋅ B^(i)").unwrap();
+        let expr = parse_expr("A_{i} ⋅ B^{i}").unwrap();
         assert_eq!(
             expr,
             mul(tensor("A", vec![lower("i")]), tensor("B", vec![upper("i")]))
         );
 
-        let expr = parse_expr("A^(i) ⊗ B^(j)").unwrap();
+        let expr = parse_expr("A^{i} ⊗ B^{j}").unwrap();
         assert_eq!(
             expr,
             mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]))
@@ -858,5 +853,31 @@ mod tests {
         assert!(parse_expr("clamp(x, 0)").is_err());
         assert!(parse_expr("log_2x").is_err());
         assert!(parse_expr("x @ y").is_err());
+    }
+
+    #[test]
+    fn parse_caret_as_exponent() {
+        let expr = parse_expr("x^2").unwrap();
+        assert_eq!(expr, pow(scalar("x"), constant(2.0)));
+
+        let expr = parse_expr("x^(a+b)").unwrap();
+        assert_eq!(
+            expr,
+            pow(scalar("x"), add(scalar("a"), scalar("b")))
+        );
+
+    }
+
+    #[test]
+    fn parse_caret_brace_as_index() {
+        // ^{} is tensor index, not exponent
+        let expr = parse_expr("T^{mu}").unwrap();
+        assert_eq!(expr, tensor("T", vec![upper("mu")]));
+
+        let expr = parse_expr("T_{mu}^{nu}").unwrap();
+        assert_eq!(
+            expr,
+            tensor("T", vec![lower("mu"), upper("nu")])
+        );
     }
 }

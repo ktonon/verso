@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn verify_pythagorean() {
         let doc =
-            parse_document(":claim pythag\n  sin(x)**2 + cos(x)**2 = 1").unwrap();
+            parse_document(":claim pythag\n  sin(x)^2 + cos(x)^2 = 1").unwrap();
         let report = verify_document(&doc);
         assert!(report.all_passed(), "pythagorean identity should pass");
     }
@@ -305,8 +305,8 @@ mod tests {
         let src = "\
 :proof expand
   (x + 1)(x + 1)
-  = x**2 + x + x + 1
-  = x**2 + 2x + 1
+  = x^2 + x + x + 1
+  = x^2 + 2x + 1
 ";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);

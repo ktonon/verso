@@ -76,7 +76,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 let mut result = format!("{}{}{}", start_color, name, color::RESET);
                 if !lower.is_empty() {
                     result.push_str(&format!(
-                        "{}_({}){}",
+                        "{}_{{{}}}{}",
                         color::DIM,
                         lower.join(","),
                         color::RESET
@@ -84,7 +84,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 }
                 if !upper.is_empty() {
                     result.push_str(&format!(
-                        "{}^({}){}",
+                        "{}^{{{}}}{}",
                         color::DIM,
                         upper.join(","),
                         color::RESET
@@ -190,7 +190,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
             if is_sqrt_exp(exp) {
                 return format!("{}sqrt({}){}", color::BLUE, fmt_colored(base), color::RESET);
             }
-            let op = format!("{}**{}", color::DIM, color::RESET);
+            let op = format!("{}^{}", color::DIM, color::RESET);
             format!(
                 "{}{}{}",
                 maybe_paren_colored(base, expr),
@@ -315,10 +315,10 @@ impl std::fmt::Display for Expr {
 
                     let mut result = name.clone();
                     if !lower.is_empty() {
-                        result.push_str(&format!("_({})", lower.join(",")));
+                        result.push_str(&format!("_{{{}}}", lower.join(",")));
                     }
                     if !upper.is_empty() {
-                        result.push_str(&format!("^({})", upper.join(",")));
+                        result.push_str(&format!("^{{{}}}", upper.join(",")));
                     }
                     write!(f, "{}", result)
                 }
@@ -369,7 +369,7 @@ impl std::fmt::Display for Expr {
                 if is_sqrt_exp(exp) {
                     return write!(f, "sqrt({})", base);
                 }
-                write!(f, "{}**{}", maybe_paren(base, self), maybe_paren(exp, self))
+                write!(f, "{}^{}", maybe_paren(base, self), maybe_paren(exp, self))
             }
             Expr::Fn(kind, arg) => write!(f, "{}({})", kind, arg),
             Expr::FnN(kind, args) => {
@@ -437,11 +437,11 @@ mod tests {
 
     #[test]
     fn display_tensor() {
-        assert_eq!(format!("{}", tensor("X", vec![lower("i")])), "X_(i)");
-        assert_eq!(format!("{}", tensor("X", vec![upper("i")])), "X^(i)");
+        assert_eq!(format!("{}", tensor("X", vec![lower("i")])), "X_{i}");
+        assert_eq!(format!("{}", tensor("X", vec![upper("i")])), "X^{i}");
         assert_eq!(
             format!("{}", tensor("X", vec![lower("i"), lower("j"), upper("k")])),
-            "X_(i,j)^(k)"
+            "X_{i,j}^{k}"
         );
     }
 
@@ -468,7 +468,7 @@ mod tests {
     fn display_mul_single_contraction() {
         // A^i B_i contracts on i → single contraction → dot
         let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![lower("i")]));
-        assert_eq!(format!("{}", e), "A^(i)⋅B_(i)");
+        assert_eq!(format!("{}", e), "A^{i}⋅B_{i}");
     }
 
     #[test]
@@ -478,14 +478,14 @@ mod tests {
             tensor("A", vec![upper("i"), upper("j")]),
             tensor("B", vec![lower("i"), lower("j")]),
         );
-        assert_eq!(format!("{}", e), "A^(i,j):B_(i,j)");
+        assert_eq!(format!("{}", e), "A^{i,j}:B_{i,j}");
     }
 
     #[test]
     fn display_mul_outer_product() {
         // A^i B^j has no contractions (both upper) → outer/tensor product
         let e = mul(tensor("A", vec![upper("i")]), tensor("B", vec![upper("j")]));
-        assert_eq!(format!("{}", e), "A^(i)⊗B^(j)");
+        assert_eq!(format!("{}", e), "A^{i}⊗B^{j}");
     }
 
     #[test]
@@ -513,14 +513,14 @@ mod tests {
 
     #[test]
     fn display_pow() {
-        assert_eq!(format!("{}", pow(scalar("x"), constant(2.0))), "x**2");
+        assert_eq!(format!("{}", pow(scalar("x"), constant(2.0))), "x^2");
         assert_eq!(
             format!("{}", pow(scalar("y"), add(constant(2.0), scalar("x")))),
-            "y**(2 + x)"
+            "y^(2 + x)"
         );
         assert_eq!(
             format!("{}", pow(add(constant(2.0), scalar("x")), scalar("y"))),
-            "(2 + x)**y"
+            "(2 + x)^y"
         );
     }
 
@@ -581,6 +581,6 @@ mod tests {
             ),
             constant(1.0),
         );
-        assert_eq!(format!("{}", e), "x**2 + 2x + 1");
+        assert_eq!(format!("{}", e), "x^2 + 2x + 1");
     }
 }

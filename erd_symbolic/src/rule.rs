@@ -323,7 +323,7 @@ impl std::fmt::Display for Pattern {
             Pattern::Pow(base, exp) => {
                 write!(
                     f,
-                    "{}**{}",
+                    "{}^{}",
                     maybe_paren_pattern(base, self),
                     maybe_paren_pattern(exp, self)
                 )

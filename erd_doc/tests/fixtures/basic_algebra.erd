@@ -15,4 +15,4 @@ These are fundamental properties of arithmetic.
   x + x = 2x
 
 :claim square_expansion
-  (x + y)(x + y) = x**2 + 2x*y + y**2
+  (x + y)(x + y) = x^2 + 2x*y + y^2

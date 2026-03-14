@@ -83,7 +83,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
     writeln!(out, "\\usepackage{{amsmath}}").unwrap();
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
     if has_refs {
-        writeln!(out, "\\usepackage{{hyperref}}").unwrap();
+        writeln!(out, "\\usepackage[hidelinks]{{hyperref}}").unwrap();
     }
     let has_figures = doc.blocks.iter().any(|b| matches!(b, Block::Figure(_)));
     if has_figures {
@@ -804,7 +804,7 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\hyperref[newtons-laws]{Newton's Laws}"));
-        assert!(tex.contains("\\usepackage{hyperref}"));
+        assert!(tex.contains("\\usepackage[hidelinks]{hyperref}"));
     }
 
     #[test]
@@ -826,7 +826,7 @@ mod tests {
     fn compile_no_hyperref_without_refs() {
         let doc = parse_document("# My Section\n\nJust prose.").unwrap();
         let tex = compile_to_tex(&doc);
-        assert!(!tex.contains("\\usepackage{hyperref}"));
+        assert!(!tex.contains("\\usepackage[hidelinks]{hyperref}"));
     }
 
     #[test]
@@ -957,7 +957,7 @@ mod tests {
 
     #[test]
     fn compile_abstract_with_math() {
-        let src = ":title T\n:abstract\n  We study math`x**2`.";
+        let src = ":title T\n:abstract\n  We study math`x^2`.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\begin{abstract}"));
@@ -1023,7 +1023,7 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\url{https://example.com}"));
-        assert!(tex.contains("\\usepackage{hyperref}"));
+        assert!(tex.contains("\\usepackage[hidelinks]{hyperref}"));
     }
 
     #[test]

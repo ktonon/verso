@@ -8,7 +8,7 @@ Algebraic identities with dimension annotations.
 :dim t [T]
 
 :claim ke_commutative
-  (1/2) * m * v * v = (1/2) * m * v**2
+  (1/2) * m * v * v = (1/2) * m * v^2
 
 :claim vel_commutative
   m * v = v * m

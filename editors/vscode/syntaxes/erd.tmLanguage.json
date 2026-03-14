@@ -478,7 +478,7 @@
           "name": "constant.numeric.erd"
         },
         {
-          "match": "\\*\\*|\\^",
+          "match": "\\^",
           "name": "keyword.operator.power.erd"
         },
         {

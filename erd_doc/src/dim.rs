@@ -468,7 +468,7 @@ mod tests {
     #[test]
     fn infer_power_dimension() {
         let env = env_from(&[("v", "[L T^-1]")]);
-        let expr = parse_expr("v**2").unwrap();
+        let expr = parse_expr("v^2").unwrap();
         assert_eq!(infer_dim(&expr, &env).unwrap(), dim("[L^2 T^-2]"));
     }
 
@@ -539,7 +539,7 @@ mod tests {
     fn kinetic_energy_dimensions() {
         let env = env_from(&[("m", "[M]"), ("v", "[L T^-1]")]);
         // (1/2) m v^2 has dimension [M L^2 T^-2] = energy
-        let expr = parse_expr("(1/2) * m * v**2").unwrap();
+        let expr = parse_expr("(1/2) * m * v^2").unwrap();
         assert_eq!(infer_dim(&expr, &env).unwrap(), dim("[M L^2 T^-2]"));
     }
 }
