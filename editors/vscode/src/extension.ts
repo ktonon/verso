@@ -23,16 +23,16 @@ function findServerPath(): string {
     const wsRoot = workspaceFolders[0].uri.fsPath;
 
     // Direct: workspace is the verso repo
-    const direct = path.join(wsRoot, "target", "release", "verso_lsp");
+    const direct = path.join(wsRoot, "target", "release", "verso");
     if (fs.existsSync(direct)) {
       return direct;
     }
 
-    // Sibling: workspace is next to the verso repo (e.g. ../verso/target/release/)
+    // Sibling: workspace is next to the verso repo (e.g. ../erd/target/release/)
     const parent = path.dirname(wsRoot);
     try {
       for (const sibling of fs.readdirSync(parent)) {
-        const candidate = path.join(parent, sibling, "target", "release", "verso_lsp");
+        const candidate = path.join(parent, sibling, "target", "release", "verso");
         if (fs.existsSync(candidate)) {
           return candidate;
         }
@@ -43,15 +43,15 @@ function findServerPath(): string {
   }
 
   // Default: assume it's in PATH
-  return "verso_lsp";
+  return "verso";
 }
 
-export function activate(context: ExtensionContext) {
+export function activate(_context: ExtensionContext) {
   const serverPath = findServerPath();
 
   const serverOptions: ServerOptions = {
     command: serverPath,
-    args: [],
+    args: ["lsp"],
   };
 
   const clientOptions: LanguageClientOptions = {

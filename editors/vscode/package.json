@@ -53,7 +53,7 @@
         "verso.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the verso_lsp binary. If empty, searches PATH and workspace target/release/."
+          "description": "Path to the verso binary. If empty, searches PATH and workspace target/release/."
         }
       }
     }

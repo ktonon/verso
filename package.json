@@ -16,10 +16,10 @@
 		"train": "cargo run --release -p verso_training --bin policy_train -- --device wgpu",
 		"evaluate": "cargo run --release -p verso_training --bin policy_evaluate -- --device ndarray",
 		"rl-train": "cargo run --release -p verso_training --bin policy_rl_train -- --device ndarray",
-		"check": "cargo run --release -p verso_doc --bin verso_check --",
-		"compile": "cargo run --release -p verso_doc --bin verso_compile --",
-		"watch": "cargo run --release -p verso_doc --bin verso_watch --",
-		"vscode:install": "cargo build --release -p verso_doc --bin verso_lsp && cd editors/vscode && npx tsc -p ./ && npx @vscode/vsce package --allow-missing-repository && code --install-extension verso-lang-0.1.0.vsix --force",
+		"check": "cargo run --release -p verso_doc --bin verso -- check",
+		"compile": "cargo run --release -p verso_doc --bin verso -- compile",
+		"watch": "cargo run --release -p verso_doc --bin verso -- watch",
+		"vscode:install": "cargo build --release -p verso_doc --bin verso && cd editors/vscode && npx tsc -p ./ && npx @vscode/vsce package --allow-missing-repository && code --install-extension verso-lang-0.1.0.vsix --force",
 		"test": "cargo test --workspace && npm run lint"
 	},
 	"devDependencies": {
