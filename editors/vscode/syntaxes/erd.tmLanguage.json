@@ -188,6 +188,7 @@
         { "include": "#tag-claim" },
         { "include": "#tag-cite" },
         { "include": "#tag-ref" },
+        { "include": "#quoted-string" },
         { "include": "#footnote" },
         { "include": "#bold-italic" },
         { "include": "#bold" },
@@ -243,6 +244,11 @@
         "3": { "name": "entity.name.tag.cross-ref.erd" },
         "4": { "name": "punctuation.definition.tag.end.erd" }
       }
+    },
+
+    "quoted-string": {
+      "match": "\"([^\"]*)\"",
+      "name": "string.quoted.double.erd"
     },
 
     "footnote": {

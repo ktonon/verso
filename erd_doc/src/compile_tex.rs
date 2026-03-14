@@ -145,10 +145,41 @@ fn write_prose(out: &mut String, fragments: &[ProseFragment], section_titles: &H
     writeln!(out).unwrap();
 }
 
+/// Escape prose text for LaTeX: `~` → `\textasciitilde{}`, paired `"` → ``` `` ''' ```.
+/// Unpaired trailing `"` is left as-is.
+fn escape_prose(text: &str) -> String {
+    let quote_count = text.chars().filter(|&c| c == '"').count();
+    let pairs = quote_count / 2;
+    if pairs == 0 {
+        return text.replace('~', "\\textasciitilde{}");
+    }
+    let mut result = String::with_capacity(text.len() + pairs * 4);
+    let mut open = true;
+    let mut quotes_remaining = quote_count;
+    for ch in text.chars() {
+        match ch {
+            '"' if open && quotes_remaining > 1 => {
+                result.push_str("``");
+                open = false;
+                quotes_remaining -= 1;
+            }
+            '"' if !open => {
+                result.push_str("''");
+                open = true;
+                quotes_remaining -= 1;
+            }
+            '"' => result.push('"'),
+            '~' => result.push_str("\\textasciitilde{}"),
+            _ => result.push(ch),
+        }
+    }
+    result
+}
+
 fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
     for fragment in fragments {
         match fragment {
-            ProseFragment::Text(text) => out.push_str(&text.replace('~', "\\textasciitilde{}")),
+            ProseFragment::Text(text) => out.push_str(&escape_prose(text)),
             ProseFragment::Math(expr) => {
                 write!(out, "${}$", expr.to_tex()).unwrap();
             }
@@ -571,6 +602,30 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textasciitilde{}200 million years and T\\textasciitilde{}5000K"));
+    }
+
+    #[test]
+    fn compile_smart_quotes() {
+        let src = r#"He said "hello" and she said "goodbye""#;
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("He said ``hello'' and she said ``goodbye''"));
+    }
+
+    #[test]
+    fn compile_smart_quotes_unmatched_stays() {
+        let src = r#"A lone " on this line"#;
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains(r#"A lone " on this line"#));
+    }
+
+    #[test]
+    fn compile_smart_quotes_and_tilde() {
+        let src = r#"~"both""#;
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\textasciitilde{}``both''"));
     }
 
     #[test]
