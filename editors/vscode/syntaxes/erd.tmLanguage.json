@@ -12,6 +12,8 @@
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
     { "include": "#directive-table" },
+    { "include": "#directive-class" },
+    { "include": "#directive-usepackage" },
     { "include": "#directive-metadata" },
     { "include": "#directive-environment" },
     { "include": "#block-quote" },
@@ -187,6 +189,24 @@
           "name": "punctuation.separator.table.erd"
         }
       ]
+    },
+
+    "directive-class": {
+      "match": "^(:class)\\s+(\\S+)(?:\\s+(\\[.*\\]))?\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.class.erd" },
+        "2": { "name": "entity.name.type.class.erd" },
+        "3": { "name": "string.other.options.erd" }
+      }
+    },
+
+    "directive-usepackage": {
+      "match": "^(:usepackage)\\s+(\\S+)(?:\\s+(\\[.*\\]))?\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.usepackage.erd" },
+        "2": { "name": "entity.name.type.package.erd" },
+        "3": { "name": "string.other.options.erd" }
+      }
     },
 
     "directive-metadata": {

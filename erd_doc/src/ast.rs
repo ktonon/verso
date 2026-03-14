@@ -42,6 +42,10 @@ pub enum Block {
     Figure(Figure),
     /// A table: `:table Title` with pipe-delimited rows
     Table(Table),
+    /// Document class override: `:class name [options]`
+    DocumentClass { name: String, options: Option<String> },
+    /// Additional package: `:usepackage name [options]`
+    UsePackage { name: String, options: Option<String> },
 }
 
 /// A figure block.

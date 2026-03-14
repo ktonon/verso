@@ -350,6 +350,24 @@ Compiles to `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
 
 ---
 
+### Document class and packages
+
+Override the default `article` document class or add custom LaTeX packages:
+
+```
+:class revtex4-2 [aps,prl,twocolumn]
+:usepackage siunitx
+:usepackage pgfplots [compat=1.18]
+```
+
+- `:class name [options]` replaces the default `\documentclass{article}`.
+- `:usepackage name [options]` adds `\usepackage[options]{name}` to the preamble.
+- Options in square brackets are optional.
+- Multiple `:usepackage` directives are supported.
+- `amsmath` and `amsthm` are always included automatically.
+
+---
+
 ### Tables
 
 Tables use the `:table` directive with pipe-delimited rows:

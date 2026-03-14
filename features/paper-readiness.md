@@ -14,7 +14,7 @@ This feature tracks closing those gaps.
 | 1 | Document metadata (title, author, date, abstract) | completed |
 | 2 | Figures with captions and labels | completed |
 | 3 | Tables (markdown-style) | completed |
-| 4 | Custom preamble / document class | planned |
+| 4 | Custom preamble / document class | completed |
 | 5 | Multi-file include | planned |
 | 6 | Unresolved ref diagnostics | planned |
 | 7 | Page breaks | planned |
@@ -195,6 +195,16 @@ Compiles to `\newpage`.
 - `block_has_refs` updated to check figure captions
 - VSCode grammar: `directive-figure` with key-value highlighting
 - Tests: 4 parse tests + 3 compile tests
+
+### M4: Custom preamble / document class (completed)
+
+- Added `Block::DocumentClass { name, options }` and `Block::UsePackage { name, options }` to AST
+- `parse_name_with_options` helper parses `name [options]` syntax
+- Parser detects `:class` and `:usepackage` directives
+- Compiler uses first `:class` to override default `\documentclass{article}`, appends all `:usepackage` to preamble
+- Options rendered in `[...]` for both `\documentclass` and `\usepackage`
+- VSCode grammar: `directive-class` and `directive-usepackage` rules
+- Tests: 6 parse tests + 3 compile tests
 
 ### M3: Tables (completed)
 

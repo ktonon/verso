@@ -66,7 +66,20 @@ pub fn compile_to_tex(doc: &Document) -> String {
     // Check if document uses ref tags (to conditionally include hyperref)
     let has_refs = doc.blocks.iter().any(|b| block_has_refs(b));
 
-    writeln!(out, "\\documentclass{{article}}").unwrap();
+    // Document class
+    let custom_class = doc.blocks.iter().find_map(|b| match b {
+        Block::DocumentClass { name, options } => Some((name.as_str(), options.as_deref())),
+        _ => None,
+    });
+    if let Some((name, opts)) = custom_class {
+        if let Some(o) = opts {
+            writeln!(out, "\\documentclass[{}]{{{}}}", o, name).unwrap();
+        } else {
+            writeln!(out, "\\documentclass{{{}}}", name).unwrap();
+        }
+    } else {
+        writeln!(out, "\\documentclass{{article}}").unwrap();
+    }
     writeln!(out, "\\usepackage{{amsmath}}").unwrap();
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
     if has_refs {
@@ -75,6 +88,16 @@ pub fn compile_to_tex(doc: &Document) -> String {
     let has_figures = doc.blocks.iter().any(|b| matches!(b, Block::Figure(_)));
     if has_figures {
         writeln!(out, "\\usepackage{{graphicx}}").unwrap();
+    }
+    // User packages
+    for block in &doc.blocks {
+        if let Block::UsePackage { name, options } = block {
+            if let Some(o) = options {
+                writeln!(out, "\\usepackage[{}]{{{}}}", o, name).unwrap();
+            } else {
+                writeln!(out, "\\usepackage{{{}}}", name).unwrap();
+            }
+        }
     }
 
     // Title block in preamble
@@ -144,7 +167,8 @@ pub fn compile_to_tex(doc: &Document) -> String {
                 write_proof(&mut out, proof);
             }
             Block::Dim(_) => {}
-            Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_) => {}
+            Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_)
+            | Block::DocumentClass { .. } | Block::UsePackage { .. } => {}
             Block::List(list) => {
                 write_list(&mut out, list, &section_titles);
             }
@@ -708,6 +732,34 @@ mod tests {
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textbf{\\hyperref[earth-and-the-solar-system]{Hydrogen creation}}"));
         assert!(tex.contains("\\textit{— abundant}"));
+    }
+
+    // Document class and packages
+
+    #[test]
+    fn compile_custom_class() {
+        let src = ":class revtex4-2 [aps,prl]\nSome text.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\documentclass[aps,prl]{revtex4-2}"));
+        assert!(!tex.contains("\\documentclass{article}"));
+    }
+
+    #[test]
+    fn compile_default_class() {
+        let src = "Just prose.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\documentclass{article}"));
+    }
+
+    #[test]
+    fn compile_usepackage() {
+        let src = ":usepackage siunitx\n:usepackage pgfplots [compat=1.18]\nText.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\usepackage{siunitx}"));
+        assert!(tex.contains("\\usepackage[compat=1.18]{pgfplots}"));
     }
 
     // Tables
