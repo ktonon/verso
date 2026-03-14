@@ -1,0 +1,342 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "ERD",
+  "scopeName": "source.erd",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#heading" },
+    { "include": "#math-block" },
+    { "include": "#directive-claim" },
+    { "include": "#directive-proof" },
+    { "include": "#directive-dim" },
+    { "include": "#directive-bibliography" },
+    { "include": "#directive-environment" },
+    { "include": "#block-quote" },
+    { "include": "#list-bullet" },
+    { "include": "#list-numbered" },
+    { "include": "#prose-inline" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "^%.*$",
+      "name": "comment.line.percentage.erd"
+    },
+
+    "heading": {
+      "patterns": [
+        {
+          "match": "^(#{4})\\s+(.*)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.heading.erd" },
+            "2": { "name": "markup.heading.4.erd" }
+          }
+        },
+        {
+          "match": "^(#{3})\\s+(.*)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.heading.erd" },
+            "2": { "name": "markup.heading.3.erd" }
+          }
+        },
+        {
+          "match": "^(#{2})\\s+(.*)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.heading.erd" },
+            "2": { "name": "markup.heading.2.erd" }
+          }
+        },
+        {
+          "match": "^(#)\\s+(.*)$",
+          "captures": {
+            "1": { "name": "punctuation.definition.heading.erd" },
+            "2": { "name": "markup.heading.1.erd" }
+          }
+        }
+      ]
+    },
+
+    "math-block": {
+      "begin": "^(```math)\\s*$",
+      "end": "^(```)\\s*$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.fenced.begin.erd" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.fenced.end.erd" }
+      },
+      "name": "meta.block.math.erd",
+      "patterns": [
+        { "include": "#math-expression" }
+      ]
+    },
+
+    "directive-claim": {
+      "begin": "^(:claim)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.claim.erd" },
+        "2": { "name": "entity.name.tag.claim.erd" }
+      },
+      "name": "meta.block.claim.erd",
+      "patterns": [
+        { "include": "#claim-body" }
+      ]
+    },
+
+    "claim-body": {
+      "match": "^\\s+(.+?)\\s*(=)\\s*(.+)$",
+      "captures": {
+        "1": { "name": "meta.expression.lhs.erd", "patterns": [{ "include": "#math-expression" }] },
+        "2": { "name": "keyword.operator.equals.erd" },
+        "3": { "name": "meta.expression.rhs.erd", "patterns": [{ "include": "#math-expression" }] }
+      }
+    },
+
+    "directive-proof": {
+      "begin": "^(:proof)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.proof.erd" },
+        "2": { "name": "entity.name.tag.proof.erd" }
+      },
+      "name": "meta.block.proof.erd",
+      "patterns": [
+        { "include": "#proof-step" }
+      ]
+    },
+
+    "proof-step": {
+      "patterns": [
+        {
+          "match": "^\\s+(=)\\s*(.+?)\\s*(;\\s*.+)?$",
+          "captures": {
+            "1": { "name": "keyword.operator.proof-step.erd" },
+            "2": { "name": "meta.expression.erd", "patterns": [{ "include": "#math-expression" }] },
+            "3": { "name": "comment.line.justification.erd" }
+          }
+        },
+        {
+          "match": "^\\s+(.+?)\\s*(;\\s*.+)?$",
+          "captures": {
+            "1": { "name": "meta.expression.erd", "patterns": [{ "include": "#math-expression" }] },
+            "2": { "name": "comment.line.justification.erd" }
+          }
+        }
+      ]
+    },
+
+    "directive-dim": {
+      "match": "^(:dim)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.dim.erd" },
+        "2": { "name": "variable.other.dim.erd" },
+        "3": { "name": "support.type.dimension.erd" }
+      }
+    },
+
+    "directive-bibliography": {
+      "match": "^(:bibliography)\\s+(.+)$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.bibliography.erd" },
+        "2": { "name": "string.unquoted.path.erd" }
+      }
+    },
+
+    "directive-environment": {
+      "begin": "^(:(?:theorem|lemma|definition|corollary|remark|example))(?:\\s+(.+))?\\s*$",
+      "end": "^(?!\\s)|^\\s*$",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.environment.erd" },
+        "2": { "name": "entity.name.section.environment.erd" }
+      },
+      "name": "meta.block.environment.erd",
+      "patterns": [
+        { "include": "#prose-inline" }
+      ]
+    },
+
+    "block-quote": {
+      "match": "^(>)\\s?(.*)$",
+      "captures": {
+        "1": { "name": "punctuation.definition.quote.erd" },
+        "2": { "name": "markup.quote.erd", "patterns": [{ "include": "#prose-inline" }] }
+      }
+    },
+
+    "list-bullet": {
+      "match": "^(\\s*)(-)\\s+(.+)$",
+      "captures": {
+        "1": { "name": "punctuation.whitespace.erd" },
+        "2": { "name": "punctuation.definition.list.begin.erd" },
+        "3": { "name": "meta.list.item.erd", "patterns": [{ "include": "#prose-inline" }] }
+      }
+    },
+
+    "list-numbered": {
+      "match": "^(\\s*)(\\d+\\.)\\s+(.+)$",
+      "captures": {
+        "1": { "name": "punctuation.whitespace.erd" },
+        "2": { "name": "punctuation.definition.list.begin.erd" },
+        "3": { "name": "meta.list.item.erd", "patterns": [{ "include": "#prose-inline" }] }
+      }
+    },
+
+    "prose-inline": {
+      "patterns": [
+        { "include": "#tag-math" },
+        { "include": "#tag-tex" },
+        { "include": "#tag-claim" },
+        { "include": "#tag-cite" },
+        { "include": "#footnote" },
+        { "include": "#bold-italic" },
+        { "include": "#bold" },
+        { "include": "#italic" }
+      ]
+    },
+
+    "tag-math": {
+      "match": "(math)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": { "name": "support.function.tag.math.erd" },
+        "2": { "name": "punctuation.definition.tag.begin.erd" },
+        "3": { "name": "meta.embedded.math.erd", "patterns": [{ "include": "#math-expression" }] },
+        "4": { "name": "punctuation.definition.tag.end.erd" }
+      }
+    },
+
+    "tag-tex": {
+      "match": "(tex)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": { "name": "support.function.tag.tex.erd" },
+        "2": { "name": "punctuation.definition.tag.begin.erd" },
+        "3": { "name": "markup.raw.inline.tex.erd" },
+        "4": { "name": "punctuation.definition.tag.end.erd" }
+      }
+    },
+
+    "tag-claim": {
+      "match": "(claim)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": { "name": "support.function.tag.claim.erd" },
+        "2": { "name": "punctuation.definition.tag.begin.erd" },
+        "3": { "name": "entity.name.tag.claim-ref.erd" },
+        "4": { "name": "punctuation.definition.tag.end.erd" }
+      }
+    },
+
+    "tag-cite": {
+      "match": "(cite)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": { "name": "support.function.tag.cite.erd" },
+        "2": { "name": "punctuation.definition.tag.begin.erd" },
+        "3": { "name": "string.other.citation.erd" },
+        "4": { "name": "punctuation.definition.tag.end.erd" }
+      }
+    },
+
+    "footnote": {
+      "begin": "(\\^)(\\[)",
+      "end": "(\\])",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.footnote.erd" },
+        "2": { "name": "punctuation.definition.footnote.begin.erd" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.footnote.end.erd" }
+      },
+      "name": "markup.other.footnote.erd",
+      "patterns": [
+        { "include": "#prose-inline" }
+      ]
+    },
+
+    "bold-italic": {
+      "begin": "(\\*{3})(?=\\S)",
+      "end": "(\\*{3})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.bold.italic.erd" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.bold.italic.erd" }
+      },
+      "name": "markup.bold.erd",
+      "patterns": [
+        {
+          "begin": "(?<=\\*{3})",
+          "end": "(?=\\*{3})",
+          "name": "markup.italic.erd",
+          "patterns": [
+            { "include": "#prose-inline" }
+          ]
+        }
+      ]
+    },
+
+    "bold": {
+      "begin": "(\\*{2})(?=\\S)",
+      "end": "(\\*{2})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.bold.erd" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.bold.erd" }
+      },
+      "name": "markup.bold.erd",
+      "patterns": [
+        { "include": "#prose-inline" }
+      ]
+    },
+
+    "italic": {
+      "begin": "(\\*)(?=[^\\s*])",
+      "end": "(\\*)(?!\\*)",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.italic.erd" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.definition.italic.erd" }
+      },
+      "name": "markup.italic.erd",
+      "patterns": [
+        { "include": "#prose-inline" }
+      ]
+    },
+
+    "math-expression": {
+      "patterns": [
+        {
+          "match": "\\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|exp|log|ln|abs|det|tr)\\b",
+          "name": "support.function.math.erd"
+        },
+        {
+          "match": "\\b(pi|π)\\b",
+          "name": "constant.language.pi.erd"
+        },
+        {
+          "match": "\\be\\b",
+          "name": "constant.language.euler.erd"
+        },
+        {
+          "match": "\\b\\d+(\\.\\d+)?\\b",
+          "name": "constant.numeric.erd"
+        },
+        {
+          "match": "\\*\\*|\\^",
+          "name": "keyword.operator.power.erd"
+        },
+        {
+          "match": "[+\\-*/=]",
+          "name": "keyword.operator.arithmetic.erd"
+        },
+        {
+          "match": "[()]",
+          "name": "punctuation.brackets.round.erd"
+        },
+        {
+          "match": "&",
+          "name": "keyword.operator.alignment.erd"
+        }
+      ]
+    }
+  }
+}

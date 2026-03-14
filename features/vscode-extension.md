@@ -26,8 +26,8 @@ What's missing or broken:
 | M | Feature | Status |
 |---|---------|--------|
 | 1 | Fix language configuration (comments, brackets, folding) | **completed** |
-| 2 | TextMate grammar: structure and directives | planned |
-| 3 | TextMate grammar: inline constructs and expressions | planned |
+| 2 | TextMate grammar: structure and directives | **completed** |
+| 3 | TextMate grammar: inline constructs and expressions | **completed** |
 | 4 | Snippets for common ERD constructs | planned |
 
 ## Plan

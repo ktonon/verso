@@ -19,6 +19,13 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "grammars": [
+      {
+        "language": "erd",
+        "scopeName": "source.erd",
+        "path": "./syntaxes/erd.tmLanguage.json"
+      }
+    ],
     "configuration": {
       "title": "ERD",
       "properties": {
