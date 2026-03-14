@@ -17,7 +17,7 @@ This feature tracks closing those gaps.
 | 4 | Custom preamble / document class | completed |
 | 5 | Multi-file include | completed |
 | 6 | Unresolved ref diagnostics | completed |
-| 7 | Page breaks | planned |
+| 7 | Page breaks | completed |
 
 ## Plan
 
@@ -195,6 +195,14 @@ Compiles to `\newpage`.
 - `block_has_refs` updated to check figure captions
 - VSCode grammar: `directive-figure` with key-value highlighting
 - Tests: 4 parse tests + 3 compile tests
+
+### M7: Page breaks (completed)
+
+- Added `Block::PageBreak` to AST
+- Parser detects `:pagebreak` directive
+- Compiler emits `\newpage`
+- VSCode grammar: `directive-pagebreak` rule
+- Tests: 1 parse test + 1 compile test
 
 ### M6: Unresolved ref diagnostics (completed)
 

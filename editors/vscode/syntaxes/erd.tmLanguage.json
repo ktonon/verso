@@ -12,6 +12,7 @@
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
     { "include": "#directive-table" },
+    { "include": "#directive-pagebreak" },
     { "include": "#directive-include" },
     { "include": "#directive-class" },
     { "include": "#directive-usepackage" },
@@ -190,6 +191,13 @@
           "name": "punctuation.separator.table.erd"
         }
       ]
+    },
+
+    "directive-pagebreak": {
+      "match": "^(:pagebreak)\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.pagebreak.erd" }
+      }
     },
 
     "directive-include": {

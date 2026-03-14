@@ -46,6 +46,8 @@ pub enum Block {
     DocumentClass { name: String, options: Option<String> },
     /// Additional package: `:usepackage name [options]`
     UsePackage { name: String, options: Option<String> },
+    /// Page break: `:pagebreak`
+    PageBreak,
 }
 
 /// A figure block.

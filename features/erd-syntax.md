@@ -350,6 +350,16 @@ Compiles to `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
 
 ---
 
+### Page breaks
+
+```
+:pagebreak
+```
+
+Compiles to `\newpage`.
+
+---
+
 ### Multi-file include
 
 Split a document across multiple `.erd` files:

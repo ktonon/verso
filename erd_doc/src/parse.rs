@@ -122,6 +122,13 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // Page break
+        if trimmed == ":pagebreak" {
+            blocks.push(Block::PageBreak);
+            i += 1;
+            continue;
+        }
+
         // Document metadata
         if trimmed.starts_with(":title") {
             let text = trimmed[":title".len()..].trim().to_string();
@@ -2042,6 +2049,15 @@ More prose here.
     fn parse_usepackage_empty_error() {
         let err = parse_document(":usepackage").unwrap_err();
         assert!(err.message.contains(":usepackage requires"));
+    }
+
+    // Page breaks
+
+    #[test]
+    fn parse_pagebreak() {
+        let doc = parse_document("Text.\n\n:pagebreak\n\nMore text.").unwrap();
+        assert_eq!(doc.blocks.len(), 3);
+        assert!(matches!(&doc.blocks[1], Block::PageBreak));
     }
 
     // Includes

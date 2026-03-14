@@ -169,6 +169,9 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Dim(_) => {}
             Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_)
             | Block::DocumentClass { .. } | Block::UsePackage { .. } => {}
+            Block::PageBreak => {
+                writeln!(out, "\\newpage").unwrap();
+            }
             Block::List(list) => {
                 write_list(&mut out, list, &section_titles);
             }
@@ -990,6 +993,16 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textasciitilde{}``both''"));
+    }
+
+    // Page breaks
+
+    #[test]
+    fn compile_pagebreak() {
+        let src = "Text.\n\n:pagebreak\n\nMore.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\newpage"));
     }
 
     // Unresolved ref diagnostics
