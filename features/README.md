@@ -6,3 +6,4 @@
 | [cross-references.md](cross-references.md) | Cross-References | 2026-03-13 | 2026-03-13 | completed |
 | [paper-readiness.md](paper-readiness.md) | Paper Readiness | 2026-03-13 | 2026-03-13 | completed |
 | [si-units.md](si-units.md) | SI Unit System | 2026-03-14 | 2026-03-14 | completed |
+| [verso-rename.md](verso-rename.md) | Verso Rename | 2026-03-14 | 2026-03-14 | planned |
