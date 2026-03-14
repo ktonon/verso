@@ -307,6 +307,9 @@ fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment], section_
                     write!(out, "\\url{{{}}}", url).unwrap();
                 }
             }
+            ProseFragment::ParBreak => {
+                out.push_str("\n\\par\n");
+            }
         }
     }
 }
@@ -963,6 +966,14 @@ mod tests {
         assert!(tex.contains("\\begin{abstract}"));
         assert!(tex.contains("$x^{2}$"));
         assert!(tex.contains("\\end{abstract}"));
+    }
+
+    #[test]
+    fn compile_abstract_paragraph_break() {
+        let src = ":title T\n:abstract\n  First paragraph.\n\n  Second paragraph.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("First paragraph.\n\\par\nSecond paragraph."));
     }
 
     #[test]

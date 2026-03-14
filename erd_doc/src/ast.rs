@@ -151,6 +151,8 @@ pub enum ProseFragment {
         url: String,
         display: Option<String>,
     },
+    /// Paragraph break within an indented block (blank line between indented lines).
+    ParBreak,
 }
 
 /// An assertion that two expressions are equal.

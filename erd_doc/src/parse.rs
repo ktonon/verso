@@ -175,22 +175,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         if trimmed.starts_with(":abstract") {
             let abs_line = i + 1;
             i += 1;
-            let mut body = String::new();
-            while i < lines.len() && is_continuation(&lines[i]) {
-                if !body.is_empty() {
-                    body.push(' ');
-                }
-                body.push_str(lines[i].trim());
-                i += 1;
-            }
-            let fragments = if body.is_empty() {
-                Vec::new()
-            } else {
-                parse_prose_fragments(&body).map_err(|mut e| {
-                    if e.line == 0 { e.line = abs_line; }
-                    e
-                })?
-            };
+            let fragments = collect_indented_body(&lines, &mut i, abs_line)?;
             blocks.push(Block::Abstract(fragments));
             continue;
         }
@@ -590,6 +575,72 @@ fn is_continuation(line: &str) -> bool {
     line.starts_with(' ') || line.starts_with('\t')
 }
 
+/// Collect an indented block body, treating blank lines between indented lines
+/// as paragraph breaks (Python-style blocking). Returns fragments with
+/// `ParBreak` inserted at blank-line boundaries.
+fn collect_indented_body(
+    lines: &[&str],
+    i: &mut usize,
+    base_line: usize,
+) -> Result<Vec<ProseFragment>, ParseDocError> {
+    let mut paragraphs: Vec<String> = Vec::new();
+    let mut current = String::new();
+
+    while *i < lines.len() {
+        let line = lines[*i];
+        if line.trim().is_empty() {
+            // Blank line: check if the next non-blank line is indented
+            let mut peek = *i + 1;
+            while peek < lines.len() && lines[peek].trim().is_empty() {
+                peek += 1;
+            }
+            if peek < lines.len() && is_continuation(&lines[peek]) {
+                // Blank line within block — paragraph break
+                if !current.is_empty() {
+                    paragraphs.push(current);
+                    current = String::new();
+                }
+                *i = peek; // skip blank lines, continue with next indented line
+                continue;
+            } else {
+                // Blank line followed by non-indented or EOF — block ends
+                break;
+            }
+        } else if is_continuation(line) {
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(line.trim());
+            *i += 1;
+        } else {
+            break;
+        }
+    }
+
+    if !current.is_empty() {
+        paragraphs.push(current);
+    }
+
+    if paragraphs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut fragments = Vec::new();
+    for (idx, para) in paragraphs.iter().enumerate() {
+        if idx > 0 {
+            fragments.push(ProseFragment::ParBreak);
+        }
+        let mut para_fragments = parse_prose_fragments(para).map_err(|mut e| {
+            if e.line == 0 {
+                e.line = base_line;
+            }
+            e
+        })?;
+        fragments.append(&mut para_fragments);
+    }
+    Ok(fragments)
+}
+
 /// Check if a trimmed line starts with a list marker (`- ` or `N. `).
 fn is_list_marker(trimmed: &str) -> bool {
     if trimmed.starts_with("- ") {
@@ -770,25 +821,9 @@ fn parse_environment(
         Some(title_str.to_string())
     };
 
-    // Collect indented body lines
+    // Collect indented body lines (with paragraph break support)
     *i += 1;
-    let mut body_text = String::new();
-    while *i < lines.len() && is_continuation(&lines[*i]) {
-        if !body_text.is_empty() {
-            body_text.push(' ');
-        }
-        body_text.push_str(lines[*i].trim());
-        *i += 1;
-    }
-
-    let body = if body_text.is_empty() {
-        Vec::new()
-    } else {
-        parse_prose_fragments(&body_text).map_err(|mut e| {
-            if e.line == 0 { e.line = span.line; }
-            e
-        })?
-    };
+    let body = collect_indented_body(lines, i, span.line)?;
 
     Ok(Environment {
         kind,
@@ -1212,6 +1247,9 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
                     s.push_str(d);
                 }
                 s.push('`');
+            }
+            ProseFragment::ParBreak => {
+                s.push_str("\n\n");
             }
         }
     }
@@ -1726,6 +1764,21 @@ More prose here.
     }
 
     #[test]
+    fn parse_theorem_with_paragraph_break() {
+        let src = ":theorem Main Result\n  First paragraph.\n\n  Second paragraph.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Environment(env) => {
+                assert!(
+                    env.body.iter().any(|f| matches!(f, ProseFragment::ParBreak)),
+                    "expected ParBreak in theorem body: {:?}", env.body
+                );
+            }
+            other => panic!("expected Environment, got {:?}", other),
+        }
+    }
+
+    #[test]
     fn parse_definition_no_title() {
         let src = ":definition\n  A group is a set with a binary operation.";
         let doc = parse_document(src).unwrap();
@@ -2021,6 +2074,30 @@ More prose here.
             }
             other => panic!("expected Abstract, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn parse_abstract_with_paragraph_break() {
+        let src = ":abstract\n  First paragraph.\n\n  Second paragraph.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Abstract(fragments) => {
+                assert!(
+                    fragments.iter().any(|f| matches!(f, ProseFragment::ParBreak)),
+                    "expected ParBreak in abstract fragments: {:?}", fragments
+                );
+            }
+            other => panic!("expected Abstract, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_abstract_ends_on_outdent() {
+        let src = ":abstract\n  First paragraph.\n\n  Second paragraph.\nNot abstract.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::Abstract(_)));
+        assert!(matches!(&doc.blocks[1], Block::Prose(_)));
     }
 
     #[test]
