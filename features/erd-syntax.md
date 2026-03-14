@@ -122,6 +122,18 @@ This is **bold** and this is *italic*.
 Compiles to `\textbf{bold}` and `\textit{italic}`. Nesting is not supported.
 Bold-italic can be written as `***text***` **(planned)**.
 
+#### Prose escaping
+
+Certain characters in prose text are automatically converted for correct LaTeX output:
+
+| ERD source | LaTeX output | Notes |
+|------------|-------------|-------|
+| `~` | `\textasciitilde{}` | Tilde (not a non-breaking space) |
+| `"text"` | `` ``text'' `` | Smart quotes (paired `"` converted) |
+
+Unpaired `"` (odd count in a text fragment) leaves the last `"` as-is.
+Both escapes apply only within `ProseFragment::Text` — not inside math, tex, or other tags.
+
 #### Cross-references
 
 Use `ref` backticks to reference a section by its auto-generated label:
