@@ -1,7 +1,8 @@
-use erd_doc::compile_tex::find_unresolved_refs;
+use erd_doc::compile_tex::find_unresolved_refs_against;
 use erd_doc::dim::DimOutcome;
-use erd_doc::parse::parse_document;
+use erd_doc::parse::{parse_document, parse_document_from_file};
 use erd_doc::verify::{verify_document, Outcome};
+use std::path::{Path, PathBuf};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -42,34 +43,35 @@ impl LanguageServer for ErdServer {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.check_document(params.text_document.uri, &params.text_document.text)
+        let file_path = params.text_document.uri.to_file_path().ok();
+        let diagnostics = compute_diagnostics(&params.text_document.text, file_path.as_deref());
+        self.client
+            .publish_diagnostics(params.text_document.uri, diagnostics, None)
             .await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         if let Some(change) = params.content_changes.into_iter().last() {
-            self.check_document(params.text_document.uri, &change.text)
+            // Fast path: skip cross-file ref resolution on every keystroke
+            let diagnostics = compute_diagnostics(&change.text, None);
+            self.client
+                .publish_diagnostics(params.text_document.uri, diagnostics, None)
                 .await;
         }
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         if let Some(text) = params.text {
-            self.check_document(params.text_document.uri, &text).await;
+            let file_path = params.text_document.uri.to_file_path().ok();
+            let diagnostics = compute_diagnostics(&text, file_path.as_deref());
+            self.client
+                .publish_diagnostics(params.text_document.uri, diagnostics, None)
+                .await;
         }
     }
 }
 
-impl ErdServer {
-    async fn check_document(&self, uri: Url, text: &str) {
-        let diagnostics = compute_diagnostics(text);
-        self.client
-            .publish_diagnostics(uri, diagnostics, None)
-            .await;
-    }
-}
-
-fn compute_diagnostics(text: &str) -> Vec<Diagnostic> {
+fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
 
     let doc = match parse_document(text) {
@@ -166,20 +168,24 @@ fn compute_diagnostics(text: &str) -> Vec<Diagnostic> {
         }
     }
 
-    // Unresolved ref diagnostics
-    for label in find_unresolved_refs(&doc) {
-        // Find the line containing this ref for positioning
-        let line = text.lines().enumerate()
-            .find(|(_, l)| l.contains(&format!("ref`{}", label)))
-            .map(|(i, _)| i + 1)
-            .unwrap_or(0);
-        diagnostics.push(Diagnostic {
-            range: line_range(line),
-            severity: Some(DiagnosticSeverity::WARNING),
-            message: format!("unresolved reference: '{}'", label),
-            source: Some("erd".to_string()),
-            ..Default::default()
-        });
+    // Unresolved ref diagnostics — only when file_path is provided (open/save, not change)
+    if let Some(path) = file_path {
+        let ref_doc = find_root_document(path)
+            .and_then(|root| parse_document_from_file(&root).ok());
+        let check_doc = ref_doc.as_ref().unwrap_or(&doc);
+        for label in find_unresolved_refs_against(check_doc, &doc) {
+            let line = text.lines().enumerate()
+                .find(|(_, l)| l.contains(&format!("ref`{}", label)))
+                .map(|(i, _)| i + 1)
+                .unwrap_or(0);
+            diagnostics.push(Diagnostic {
+                range: line_range(line),
+                severity: Some(DiagnosticSeverity::WARNING),
+                message: format!("unresolved reference: '{}'", label),
+                source: Some("erd".to_string()),
+                ..Default::default()
+            });
+        }
     }
 
     diagnostics
@@ -197,6 +203,22 @@ fn line_range(line: usize) -> Range {
             line,
             character: u32::MAX,
         },
+    }
+}
+
+/// Walk up from a file to find the root `.erd` document.
+///
+/// Searches for `paper.erd` or `index.erd` in ancestor directories.
+fn find_root_document(file_path: &Path) -> Option<PathBuf> {
+    let mut dir = file_path.parent()?;
+    loop {
+        for name in &["paper.erd", "index.erd"] {
+            let candidate = dir.join(name);
+            if candidate.exists() && candidate != file_path {
+                return Some(candidate);
+            }
+        }
+        dir = dir.parent()?;
     }
 }
 

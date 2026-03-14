@@ -42,7 +42,10 @@ pub fn compile_to_tex(doc: &Document) -> String {
     // Build section label→title map for resolving ref`label` display text
     let mut section_titles: HashMap<String, String> = HashMap::new();
     for block in &doc.blocks {
-        if let Block::Section { title, .. } = block {
+        if let Block::Section { title, label, .. } = block {
+            if let Some(lbl) = label {
+                section_titles.insert(lbl.clone(), title.clone());
+            }
             section_titles.insert(slugify(title), title.clone());
         }
     }
@@ -154,8 +157,8 @@ pub fn compile_to_tex(doc: &Document) -> String {
     for block in &doc.blocks {
         writeln!(out).unwrap();
         match block {
-            Block::Section { level, title, .. } => {
-                write_section(&mut out, *level, title);
+            Block::Section { level, title, label, .. } => {
+                write_section(&mut out, *level, title, label.as_deref());
             }
             Block::Prose(fragments) => {
                 write_prose(&mut out, fragments, &section_titles);
@@ -212,17 +215,18 @@ pub fn compile_to_tex(doc: &Document) -> String {
     out
 }
 
-fn write_section(out: &mut String, level: u8, title: &str) {
+fn write_section(out: &mut String, level: u8, title: &str, label: Option<&str>) {
     let cmd = match level {
         1 => "section",
         2 => "subsection",
         3 => "subsubsection",
         _ => "paragraph",
     };
-    let slug = slugify(title);
     writeln!(out, "\\{}{{{}}}", cmd, escape_prose(title)).unwrap();
-    if !slug.is_empty() {
-        writeln!(out, "\\label{{{}}}", slug).unwrap();
+    // Prefer explicit label, fall back to slug
+    let lbl = label.map(|l| l.to_string()).unwrap_or_else(|| slugify(title));
+    if !lbl.is_empty() {
+        writeln!(out, "\\label{{{}}}", lbl).unwrap();
     }
 }
 
@@ -511,7 +515,10 @@ pub fn collect_labels(doc: &Document) -> HashSet<String> {
     let mut labels = HashSet::new();
     for block in &doc.blocks {
         match block {
-            Block::Section { title, .. } => {
+            Block::Section { title, label, .. } => {
+                if let Some(explicit) = label {
+                    labels.insert(explicit.clone());
+                }
                 let slug = slugify(title);
                 if !slug.is_empty() {
                     labels.insert(slug);
@@ -583,9 +590,17 @@ fn collect_refs_from_list(list: &List, refs: &mut Vec<String>) {
 
 /// Return labels referenced by `ref` tags that don't match any defined label.
 pub fn find_unresolved_refs(doc: &Document) -> Vec<String> {
-    let labels = collect_labels(doc);
+    find_unresolved_refs_against(doc, doc)
+}
+
+/// Check refs in `ref_doc` against labels defined in `label_doc`.
+///
+/// This allows resolving refs against a broader document (e.g., one with
+/// includes expanded) while only checking refs from the current file.
+pub fn find_unresolved_refs_against(label_doc: &Document, ref_doc: &Document) -> Vec<String> {
+    let labels = collect_labels(label_doc);
     let mut refs = Vec::new();
-    for block in &doc.blocks {
+    for block in &ref_doc.blocks {
         collect_refs_from_block(block, &mut refs);
     }
     let mut unresolved: Vec<String> = refs
@@ -1096,5 +1111,32 @@ mod tests {
         assert_eq!(slugify("The 2nd Law"), "the-2nd-law");
         assert_eq!(slugify("Earth and the Solar System"), "earth-and-the-solar-system");
         assert_eq!(slugify("  Leading spaces  "), "leading-spaces");
+    }
+
+    #[test]
+    fn native_label_resolves_ref() {
+        let src = "## Long Title label`short`\n\nSee ref`short`.";
+        let doc = parse_document(src).unwrap();
+        let unresolved = find_unresolved_refs(&doc);
+        assert!(unresolved.is_empty());
+    }
+
+    #[test]
+    fn legacy_backslash_label_resolves_ref() {
+        let src = "## Long Title \\label{short}\n\nSee ref`short`.";
+        let doc = parse_document(src).unwrap();
+        let unresolved = find_unresolved_refs(&doc);
+        assert!(unresolved.is_empty());
+    }
+
+    #[test]
+    fn label_stripped_from_section_title_in_tex() {
+        let src = "## Absolute Time label`absolute-time`";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\subsection{Absolute Time}"));
+        assert!(tex.contains("\\label{absolute-time}"));
+        // Title should not contain the label`...` tag
+        assert!(!tex.contains("label`"));
     }
 }

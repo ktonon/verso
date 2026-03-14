@@ -37,28 +37,28 @@
           "end": "$",
           "beginCaptures": { "1": { "name": "punctuation.definition.heading.erd" } },
           "name": "markup.heading.4.erd",
-          "patterns": [{ "include": "#quoted-string" }]
+          "patterns": [{ "include": "#tag-label" }, { "include": "#quoted-string" }]
         },
         {
           "begin": "^(#{3})\\s+",
           "end": "$",
           "beginCaptures": { "1": { "name": "punctuation.definition.heading.erd" } },
           "name": "markup.heading.3.erd",
-          "patterns": [{ "include": "#quoted-string" }]
+          "patterns": [{ "include": "#tag-label" }, { "include": "#quoted-string" }]
         },
         {
           "begin": "^(#{2})\\s+",
           "end": "$",
           "beginCaptures": { "1": { "name": "punctuation.definition.heading.erd" } },
           "name": "markup.heading.2.erd",
-          "patterns": [{ "include": "#quoted-string" }]
+          "patterns": [{ "include": "#tag-label" }, { "include": "#quoted-string" }]
         },
         {
           "begin": "^(#)\\s+",
           "end": "$",
           "beginCaptures": { "1": { "name": "punctuation.definition.heading.erd" } },
           "name": "markup.heading.1.erd",
-          "patterns": [{ "include": "#quoted-string" }]
+          "patterns": [{ "include": "#tag-label" }, { "include": "#quoted-string" }]
         }
       ]
     },
@@ -367,21 +367,35 @@
     },
 
     "tag-ref": {
-      "match": "(ref)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "match": "(ref)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
       "captures": {
         "1": { "name": "support.function.tag.ref.erd" },
         "2": { "name": "punctuation.definition.tag.begin.erd" },
         "3": { "name": "entity.name.tag.cross-ref.erd" },
-        "4": { "name": "punctuation.definition.tag.end.erd" }
+        "4": { "name": "punctuation.separator.pipe.erd" },
+        "5": { "name": "string.other.display-text.erd" },
+        "6": { "name": "punctuation.definition.tag.end.erd" }
       }
     },
 
     "tag-url": {
-      "match": "(url)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "match": "(url)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
       "captures": {
         "1": { "name": "support.function.tag.url.erd" },
         "2": { "name": "punctuation.definition.tag.begin.erd" },
         "3": { "name": "markup.underline.link.erd" },
+        "4": { "name": "punctuation.separator.pipe.erd" },
+        "5": { "name": "string.other.display-text.erd" },
+        "6": { "name": "punctuation.definition.tag.end.erd" }
+      }
+    },
+
+    "tag-label": {
+      "match": "(label)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": { "name": "support.function.tag.label.erd" },
+        "2": { "name": "punctuation.definition.tag.begin.erd" },
+        "3": { "name": "entity.name.tag.label.erd" },
         "4": { "name": "punctuation.definition.tag.end.erd" }
       }
     },

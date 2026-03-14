@@ -4,5 +4,9 @@ Gravity exceeds math`2*10^10c`.
 A citation cite`einstein1905` here.
 See claim`pythagorean` for details.
 Using tex`\alpha` for greek.
+A cross-ref ref`earth-and-the-solar-system|Hydrogen creation` here.
+A plain ref ref`some-label` here.
+Visit url`https://example.com|Example Site` now.
+## Absolute Time label`absolute-time`
 :dim v [L T^-1]
 :dim F [M L T^-2]

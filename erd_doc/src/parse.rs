@@ -111,10 +111,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         // Section heading
         if trimmed.starts_with('#') {
             let level = trimmed.chars().take_while(|&c| c == '#').count() as u8;
-            let title = trimmed[level as usize..].trim().to_string();
+            let raw_title = trimmed[level as usize..].trim();
+            let (title, label) = extract_section_label(raw_title);
             blocks.push(Block::Section {
                 level,
                 title,
+                label,
                 span: Span { line: i + 1 },
             });
             i += 1;
@@ -565,6 +567,43 @@ fn resolve_line(prose_text: &str, error_msg: &str, line_map: &[(usize, usize)]) 
     }
     // Fallback to first line of the block
     line_map.first().map_or(0, |&(_, ln)| ln)
+}
+
+/// Extract an optional `label`...`` tag from a section title.
+/// Returns (clean_title, optional_label).
+/// Also supports legacy `\label{...}` syntax for backward compatibility.
+fn extract_section_label(title: &str) -> (String, Option<String>) {
+    // Native syntax: label`...`
+    if let Some(start) = title.find("label`") {
+        let rest = &title[start + 6..];
+        if let Some(end) = rest.find('`') {
+            let label = rest[..end].to_string();
+            let before = title[..start].trim_end();
+            let after = rest[end + 1..].trim_start();
+            let clean = if after.is_empty() {
+                before.to_string()
+            } else {
+                format!("{} {}", before, after)
+            };
+            return (clean, Some(label));
+        }
+    }
+    // Legacy: \label{...}
+    if let Some(start) = title.find("\\label{") {
+        let rest = &title[start + 7..];
+        if let Some(end) = rest.find('}') {
+            let label = rest[..end].to_string();
+            let before = title[..start].trim_end();
+            let after = rest[end + 1..].trim_start();
+            let clean = if after.is_empty() {
+                before.to_string()
+            } else {
+                format!("{} {}", before, after)
+            };
+            return (clean, Some(label));
+        }
+    }
+    (title.to_string(), None)
 }
 
 /// A continuation line is indented (starts with whitespace).

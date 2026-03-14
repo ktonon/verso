@@ -39,6 +39,13 @@
         "path": "./snippets/erd.json"
       }
     ],
+    "configurationDefaults": {
+      "[erd]": {
+        "editor.tabSize": 3,
+        "editor.insertSpaces": false,
+        "editor.wordWrap": "on"
+      }
+    },
     "configuration": {
       "title": "ERD",
       "properties": {

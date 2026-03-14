@@ -63,6 +63,39 @@
 #          ^^^^^^ source.erd markup.raw.inline.tex.erd
 #                ^ source.erd punctuation.definition.tag.end.erd
 #                 ^^^^^^^^^^^^ source.erd
+>A cross-ref ref`earth-and-the-solar-system|Hydrogen creation` here.
+#^^^^^^^^^^^^ source.erd
+#            ^^^ source.erd support.function.tag.ref.erd
+#               ^ source.erd punctuation.definition.tag.begin.erd
+#                ^^^^^^^^^^^^^^^^^^^^^^^^^^ source.erd entity.name.tag.cross-ref.erd
+#                                          ^ source.erd punctuation.separator.pipe.erd
+#                                           ^^^^^^^^^^^^^^^^^ source.erd string.other.display-text.erd
+#                                                            ^ source.erd punctuation.definition.tag.end.erd
+#                                                             ^^^^^^^ source.erd
+>A plain ref ref`some-label` here.
+#^^^^^^^^^^^^ source.erd
+#            ^^^ source.erd support.function.tag.ref.erd
+#               ^ source.erd punctuation.definition.tag.begin.erd
+#                ^^^^^^^^^^ source.erd entity.name.tag.cross-ref.erd
+#                          ^ source.erd punctuation.definition.tag.end.erd
+#                           ^^^^^^^ source.erd
+>Visit url`https://example.com|Example Site` now.
+#^^^^^^ source.erd
+#      ^^^ source.erd support.function.tag.url.erd
+#         ^ source.erd punctuation.definition.tag.begin.erd
+#          ^^^^^^^^^^^^^^^^^^^ source.erd markup.underline.link.erd
+#                             ^ source.erd punctuation.separator.pipe.erd
+#                              ^^^^^^^^^^^^ source.erd string.other.display-text.erd
+#                                          ^ source.erd punctuation.definition.tag.end.erd
+#                                           ^^^^^^ source.erd
+>## Absolute Time label`absolute-time`
+#^^ source.erd markup.heading.2.erd punctuation.definition.heading.erd
+#  ^ source.erd markup.heading.2.erd
+#   ^^^^^^^^^^^^^^ source.erd markup.heading.2.erd
+#                 ^^^^^ source.erd markup.heading.2.erd support.function.tag.label.erd
+#                      ^ source.erd markup.heading.2.erd punctuation.definition.tag.begin.erd
+#                       ^^^^^^^^^^^^^ source.erd markup.heading.2.erd entity.name.tag.label.erd
+#                                    ^ source.erd markup.heading.2.erd punctuation.definition.tag.end.erd
 >:dim v [L T^-1]
 #^^^^ source.erd keyword.control.directive.dim.erd
 #    ^ source.erd
