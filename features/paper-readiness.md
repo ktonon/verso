@@ -13,7 +13,7 @@ This feature tracks closing those gaps.
 |---|---------|--------|
 | 1 | Document metadata (title, author, date, abstract) | completed |
 | 2 | Figures with captions and labels | completed |
-| 3 | Tables (markdown-style) | planned |
+| 3 | Tables (markdown-style) | completed |
 | 4 | Custom preamble / document class | planned |
 | 5 | Multi-file include | planned |
 | 6 | Unresolved ref diagnostics | planned |
@@ -195,6 +195,18 @@ Compiles to `\newpage`.
 - `block_has_refs` updated to check figure captions
 - VSCode grammar: `directive-figure` with key-value highlighting
 - Tests: 4 parse tests + 3 compile tests
+
+### M3: Tables (completed)
+
+- Added `Block::Table(Table)` with `title`, `columns`, `header`, `rows`, `label` fields and `ColumnAlign` enum to AST
+- Parser detects `:table` directive, parses pipe-delimited rows with header + separator + data rows
+- Separator row determines column alignment (`:---` left, `:---:` center, `---:` right)
+- Cells parsed for inline fragments (supports math, bold, etc.)
+- Optional `label:` key-value line
+- Compiler emits `\begin{table}[htbp]` with `\centering`, `\begin{tabular}{lcr}`, `\hline`, bold header cells
+- `block_has_refs` updated to check table cells
+- VSCode grammar: `directive-table` with pipe separator highlighting
+- Tests: 5 parse tests + 3 compile tests
 
 ## Verification
 

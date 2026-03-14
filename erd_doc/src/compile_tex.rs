@@ -1,4 +1,4 @@
-use crate::ast::{Block, Claim, Document, EnvKind, Environment, Figure, List, MathBlock, Proof, ProseFragment};
+use crate::ast::{Block, Claim, ColumnAlign, Document, EnvKind, Environment, Figure, List, MathBlock, Proof, ProseFragment, Table};
 use std::collections::{HashMap, HashSet};
 use erd_symbolic::ToTex;
 use std::fmt::Write;
@@ -160,6 +160,9 @@ pub fn compile_to_tex(doc: &Document) -> String {
             }
             Block::Figure(fig) => {
                 write_figure(&mut out, fig, &section_titles);
+            }
+            Block::Table(table) => {
+                write_table(&mut out, table, &section_titles);
             }
         }
     }
@@ -358,6 +361,44 @@ fn write_figure(out: &mut String, fig: &Figure, section_titles: &HashMap<String,
     writeln!(out, "\\end{{figure}}").unwrap();
 }
 
+fn write_table(out: &mut String, table: &Table, section_titles: &HashMap<String, String>) {
+    writeln!(out, "\\begin{{table}}[htbp]").unwrap();
+    writeln!(out, "\\centering").unwrap();
+    let col_spec: String = table.columns.iter().map(|a| match a {
+        ColumnAlign::Left => 'l',
+        ColumnAlign::Center => 'c',
+        ColumnAlign::Right => 'r',
+    }).collect();
+    writeln!(out, "\\begin{{tabular}}{{{}}}", col_spec).unwrap();
+    writeln!(out, "\\hline").unwrap();
+    // Header row
+    for (i, cell) in table.header.iter().enumerate() {
+        if i > 0 { write!(out, " & ").unwrap(); }
+        write!(out, "\\textbf{{").unwrap();
+        write_prose_fragments(out, cell, section_titles);
+        write!(out, "}}").unwrap();
+    }
+    writeln!(out, " \\\\").unwrap();
+    writeln!(out, "\\hline").unwrap();
+    // Data rows
+    for row in &table.rows {
+        for (i, cell) in row.iter().enumerate() {
+            if i > 0 { write!(out, " & ").unwrap(); }
+            write_prose_fragments(out, cell, section_titles);
+        }
+        writeln!(out, " \\\\").unwrap();
+    }
+    writeln!(out, "\\hline").unwrap();
+    writeln!(out, "\\end{{tabular}}").unwrap();
+    if let Some(title) = &table.title {
+        writeln!(out, "\\caption{{{}}}", escape_prose(title)).unwrap();
+    }
+    if let Some(label) = &table.label {
+        writeln!(out, "\\label{{tab:{}}}", label).unwrap();
+    }
+    writeln!(out, "\\end{{table}}").unwrap();
+}
+
 fn write_environment(out: &mut String, env: &Environment, section_titles: &HashMap<String, String>) {
     let name = env_kind_name(env.kind);
     if let Some(ref title) = env.title {
@@ -388,6 +429,10 @@ fn block_has_refs(block: &Block) -> bool {
         Block::List(list) => list_has_refs(list),
         Block::Environment(env) => fragments_have_refs(&env.body),
         Block::Figure(fig) => fig.caption.as_ref().map_or(false, |c| fragments_have_refs(c)),
+        Block::Table(table) => {
+            table.header.iter().any(|c| fragments_have_refs(c))
+                || table.rows.iter().any(|r| r.iter().any(|c| fragments_have_refs(c)))
+        }
         _ => false,
     }
 }
@@ -663,6 +708,37 @@ mod tests {
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textbf{\\hyperref[earth-and-the-solar-system]{Hydrogen creation}}"));
         assert!(tex.contains("\\textit{— abundant}"));
+    }
+
+    // Tables
+
+    #[test]
+    fn compile_table_full() {
+        let src = ":table Results\n  | A | B |\n  |:--|--:|\n  | 1 | 2 |";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\begin{table}[htbp]"));
+        assert!(tex.contains("\\begin{tabular}{lr}"));
+        assert!(tex.contains("\\textbf{A} & \\textbf{B}"));
+        assert!(tex.contains("1 & 2"));
+        assert!(tex.contains("\\caption{Results}"));
+        assert!(tex.contains("\\end{table}"));
+    }
+
+    #[test]
+    fn compile_table_with_label() {
+        let src = ":table T\n  | X |\n  |---|\n  | 1 |\n  label: tab-x";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\label{tab:tab-x}"));
+    }
+
+    #[test]
+    fn compile_table_no_title() {
+        let src = ":table\n  | X |\n  |---|\n  | 1 |";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(!tex.contains("\\caption"));
     }
 
     // Figures

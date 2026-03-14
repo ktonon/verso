@@ -350,6 +350,28 @@ Compiles to `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
 
 ---
 
+### Tables
+
+Tables use the `:table` directive with pipe-delimited rows:
+
+```
+:table Experimental Results
+  | Parameter | Value | Unit |
+  |-----------|-------|------|
+  | Mass      | 1.67  | kg   |
+  | Velocity  | 3.00  | m/s  |
+  label: tab-results
+```
+
+- The second row must be a separator (`|---|---|`) marking the header boundary.
+- Column alignment inferred from separator: `:---` left, `:---:` center, `---:` right. Default is left.
+- Cells support inline formatting (math, bold, etc.).
+- Optional `label:` line (prefixed with `tab:` in LaTeX).
+- Optional title after `:table` becomes `\caption{}`.
+- Compiles to `\begin{table}[htbp]` with `tabular`.
+
+---
+
 ### Theorem-like environments
 For theorems, lemmas, definitions, corollaries, and remarks:
 

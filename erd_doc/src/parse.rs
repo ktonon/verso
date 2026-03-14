@@ -1,6 +1,6 @@
 use crate::ast::{
-    Block, Claim, DimDecl, Document, EnvKind, Environment, Figure, List, ListItem, MathBlock,
-    Proof, ProofStep, ProseFragment, Span,
+    Block, Claim, ColumnAlign, DimDecl, Document, EnvKind, Environment, Figure, List, ListItem,
+    MathBlock, Proof, ProofStep, ProseFragment, Span, Table,
 };
 use crate::dim::Dimension;
 use erd_symbolic::parse_expr;
@@ -151,6 +151,77 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 label,
                 width,
                 span: Span { line: fig_line },
+            }));
+            continue;
+        }
+
+        // Table block
+        if trimmed.starts_with(":table") {
+            let title_text = trimmed[":table".len()..].trim();
+            let title = if title_text.is_empty() { None } else { Some(title_text.to_string()) };
+            let table_line = i + 1;
+            i += 1;
+
+            // Collect indented body lines
+            let mut body_lines: Vec<String> = Vec::new();
+            let mut label: Option<String> = None;
+            while i < lines.len() && is_continuation(&lines[i]) {
+                let l = lines[i].trim();
+                if let Some(val) = l.strip_prefix("label:") {
+                    label = Some(val.trim().to_string());
+                } else {
+                    body_lines.push(l.to_string());
+                }
+                i += 1;
+            }
+
+            // Need at least header + separator
+            if body_lines.len() < 2 {
+                return Err(ParseDocError {
+                    line: table_line,
+                    message: ":table requires header row and separator row".into(),
+                });
+            }
+
+            // Parse header row
+            let header = parse_table_row(&body_lines[0])?;
+            let num_cols = header.len();
+
+            // Parse separator row for alignment
+            let sep = &body_lines[1];
+            let sep_cells: Vec<&str> = sep.split('|')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if sep_cells.len() != num_cols || !sep_cells.iter().all(|s| s.chars().all(|c| c == '-' || c == ':')) {
+                return Err(ParseDocError {
+                    line: table_line + 1,
+                    message: ":table second row must be a separator (e.g. |---|---|)".into(),
+                });
+            }
+            let columns: Vec<ColumnAlign> = sep_cells.iter().map(|s| {
+                let left = s.starts_with(':');
+                let right = s.ends_with(':');
+                match (left, right) {
+                    (true, true) => ColumnAlign::Center,
+                    (false, true) => ColumnAlign::Right,
+                    _ => ColumnAlign::Left,
+                }
+            }).collect();
+
+            // Parse data rows
+            let mut rows: Vec<Vec<Vec<ProseFragment>>> = Vec::new();
+            for line in &body_lines[2..] {
+                rows.push(parse_table_row(line)?);
+            }
+
+            blocks.push(Block::Table(Table {
+                title,
+                columns,
+                header,
+                rows,
+                label,
+                span: Span { line: table_line },
             }));
             continue;
         }
@@ -571,6 +642,14 @@ fn parse_environment(
 }
 
 /// Parse `lhs = rhs` from a claim body string.
+fn parse_table_row(line: &str) -> Result<Vec<Vec<ProseFragment>>, ParseDocError> {
+    let cells: Vec<&str> = line.split('|')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect();
+    cells.iter().map(|c| parse_prose_fragments(c)).collect()
+}
+
 fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseDocError> {
     let eq_pos = body.find('=').ok_or_else(|| ParseDocError {
         line,
@@ -1800,6 +1879,69 @@ More prose here.
             }
             other => panic!("expected Figure, got {:?}", other),
         }
+    }
+
+    // Tables
+
+    #[test]
+    fn parse_table_basic() {
+        let src = ":table Results\n  | A | B |\n  |---|---|\n  | 1 | 2 |";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(table) => {
+                assert_eq!(table.title.as_deref(), Some("Results"));
+                assert_eq!(table.header.len(), 2);
+                assert_eq!(prose_to_string(&table.header[0]), "A");
+                assert_eq!(table.rows.len(), 1);
+                assert_eq!(prose_to_string(&table.rows[0][1]), "2");
+            }
+            other => panic!("expected Table, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_table_alignment() {
+        let src = ":table\n  | L | C | R |\n  |:--|:--:|--:|\n  | a | b | c |";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(table) => {
+                assert!(matches!(table.columns[0], ColumnAlign::Left));
+                assert!(matches!(table.columns[1], ColumnAlign::Center));
+                assert!(matches!(table.columns[2], ColumnAlign::Right));
+                assert!(table.title.is_none());
+            }
+            other => panic!("expected Table, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_table_with_label() {
+        let src = ":table T\n  | X |\n  |---|\n  | 1 |\n  label: tab-x";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(table) => {
+                assert_eq!(table.label.as_deref(), Some("tab-x"));
+            }
+            other => panic!("expected Table, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_table_cell_with_math() {
+        let src = ":table\n  | Expr |\n  |------|\n  | math`x**2` |";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(table) => {
+                assert!(table.rows[0][0].iter().any(|f| matches!(f, ProseFragment::Math(_))));
+            }
+            other => panic!("expected Table, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_table_missing_separator_error() {
+        let err = parse_document(":table T\n  | A |\n  | 1 |").unwrap_err();
+        assert!(err.message.contains("separator"));
     }
 
     #[test]

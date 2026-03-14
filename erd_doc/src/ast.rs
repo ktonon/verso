@@ -40,6 +40,8 @@ pub enum Block {
     Abstract(Vec<ProseFragment>),
     /// A figure: `:figure path` with optional caption, label, width
     Figure(Figure),
+    /// A table: `:table Title` with pipe-delimited rows
+    Table(Table),
 }
 
 /// A figure block.
@@ -50,6 +52,25 @@ pub struct Figure {
     pub label: Option<String>,
     pub width: f64,
     pub span: Span,
+}
+
+/// A table block.
+#[derive(Debug)]
+pub struct Table {
+    pub title: Option<String>,
+    pub columns: Vec<ColumnAlign>,
+    pub header: Vec<Vec<ProseFragment>>,
+    pub rows: Vec<Vec<Vec<ProseFragment>>>,
+    pub label: Option<String>,
+    pub span: Span,
+}
+
+/// Column alignment for tables.
+#[derive(Debug, Clone, Copy)]
+pub enum ColumnAlign {
+    Left,
+    Center,
+    Right,
 }
 
 /// A theorem-like environment block.

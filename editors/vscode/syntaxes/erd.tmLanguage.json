@@ -11,6 +11,7 @@
     { "include": "#directive-dim" },
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
+    { "include": "#directive-table" },
     { "include": "#directive-metadata" },
     { "include": "#directive-environment" },
     { "include": "#block-quote" },
@@ -160,6 +161,30 @@
             "2": { "name": "punctuation.separator.key-value.erd" },
             "3": { "name": "string.unquoted.value.erd" }
           }
+        }
+      ]
+    },
+
+    "directive-table": {
+      "begin": "^(:table)(?:\\s+(.+))?\\s*$",
+      "end": "^(?!\\s)|^\\s*$",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.table.erd" },
+        "2": { "name": "entity.name.section.table.erd" }
+      },
+      "name": "meta.block.table.erd",
+      "patterns": [
+        {
+          "match": "^\\s+(label)(:)\\s*(.*)$",
+          "captures": {
+            "1": { "name": "variable.other.key.erd" },
+            "2": { "name": "punctuation.separator.key-value.erd" },
+            "3": { "name": "string.unquoted.value.erd" }
+          }
+        },
+        {
+          "match": "(\\|)",
+          "name": "punctuation.separator.table.erd"
         }
       ]
     },
