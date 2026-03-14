@@ -1,10 +1,10 @@
 {
-  "name": "erd-lang",
-  "displayName": "ERD Language Support",
-  "description": "Language support for .erd documents — verified math papers",
+  "name": "verso-lang",
+  "displayName": "Verso Language Support",
+  "description": "Language support for .verso documents — verified math papers",
   "version": "0.1.0",
   "license": "MIT",
-  "publisher": "erd",
+  "publisher": "verso",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -16,51 +16,51 @@
   "contributes": {
     "languages": [
       {
-        "id": "erd",
+        "id": "verso",
         "extensions": [
-          ".erd"
+          ".verso"
         ],
         "aliases": [
-          "ERD",
-          "erd"
+          "Verso",
+          "verso"
         ],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "erd",
-        "scopeName": "source.erd",
-        "path": "./syntaxes/erd.tmLanguage.json"
+        "language": "verso",
+        "scopeName": "source.verso",
+        "path": "./syntaxes/verso.tmLanguage.json"
       }
     ],
     "snippets": [
       {
-        "language": "erd",
-        "path": "./snippets/erd.json"
+        "language": "verso",
+        "path": "./snippets/verso.json"
       }
     ],
     "configurationDefaults": {
-      "[erd]": {
+      "[verso]": {
         "editor.tabSize": 3,
         "editor.insertSpaces": false,
         "editor.wordWrap": "on"
       }
     },
     "configuration": {
-      "title": "ERD",
+      "title": "Verso",
       "properties": {
-        "erd.serverPath": {
+        "verso.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the erd_lsp binary. If empty, searches PATH and workspace target/release/."
+          "description": "Path to the verso_lsp binary. If empty, searches PATH and workspace target/release/."
         }
       }
     }
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "test": "vscode-tmgrammar-snap -g syntaxes/erd.tmLanguage.json tests/snap-*.erd",
+    "test": "vscode-tmgrammar-snap -g syntaxes/verso.tmLanguage.json tests/snap-*.verso",
     "package": "vsce package"
   },
   "dependencies": {

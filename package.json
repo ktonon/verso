@@ -19,7 +19,7 @@
 		"check": "cargo run --release -p verso_doc --bin verso_check --",
 		"compile": "cargo run --release -p verso_doc --bin verso_compile --",
 		"watch": "cargo run --release -p verso_doc --bin verso_watch --",
-		"vscode:install": "cargo build --release -p verso_doc --bin verso_lsp && cd editors/vscode && npx tsc -p ./ && npx @vscode/vsce package --allow-missing-repository && code --install-extension erd-lang-0.1.0.vsix --force",
+		"vscode:install": "cargo build --release -p verso_doc --bin verso_lsp && cd editors/vscode && npx tsc -p ./ && npx @vscode/vsce package --allow-missing-repository && code --install-extension verso-lang-0.1.0.vsix --force",
 		"test": "cargo test --workspace && npm run lint"
 	},
 	"devDependencies": {

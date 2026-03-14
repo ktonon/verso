@@ -11,7 +11,7 @@ let client: LanguageClient;
 
 function findServerPath(): string {
   // Check user setting first
-  const config = workspace.getConfiguration("erd");
+  const config = workspace.getConfiguration("verso");
   const configPath = config.get<string>("serverPath");
   if (configPath) {
     return configPath;
@@ -24,7 +24,7 @@ function findServerPath(): string {
       workspaceFolders[0].uri.fsPath,
       "target",
       "release",
-      "erd_lsp"
+      "verso_lsp"
     );
     if (fs.existsSync(candidate)) {
       return candidate;
@@ -32,7 +32,7 @@ function findServerPath(): string {
   }
 
   // Default: assume it's in PATH
-  return "erd_lsp";
+  return "verso_lsp";
 }
 
 export function activate(context: ExtensionContext) {
@@ -44,12 +44,12 @@ export function activate(context: ExtensionContext) {
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ scheme: "file", language: "erd" }],
+    documentSelector: [{ scheme: "file", language: "verso" }],
   };
 
   client = new LanguageClient(
-    "erd-lsp",
-    "ERD Language Server",
+    "verso-lsp",
+    "Verso Language Server",
     serverOptions,
     clientOptions
   );

@@ -1,111 +1,111 @@
 >The velocity math`v [L T^-1]` is measured.
-#^^^^^^^^^^^^^ source.erd
-#             ^^^^ source.erd support.function.tag.math.erd
-#                 ^ source.erd punctuation.definition.tag.begin.erd
-#                  ^^ source.erd meta.embedded.math.erd
-#                    ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.begin.erd
-#                     ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd support.type.dimension.erd
-#                      ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd
-#                       ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd support.type.dimension.erd
-#                        ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd keyword.operator.erd
-#                         ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd keyword.operator.erd
-#                          ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd constant.numeric.erd
-#                           ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.end.erd
-#                            ^ source.erd punctuation.definition.tag.end.erd
-#                             ^^^^^^^^^^^^^^ source.erd
+#^^^^^^^^^^^^^ source.verso
+#             ^^^^ source.verso support.function.tag.math.verso
+#                 ^ source.verso punctuation.definition.tag.begin.verso
+#                  ^^ source.verso meta.embedded.math.verso
+#                    ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
+#                     ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso support.type.dimension.verso
+#                      ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso
+#                       ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso support.type.dimension.verso
+#                        ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso keyword.operator.verso
+#                         ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso keyword.operator.verso
+#                          ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso constant.numeric.verso
+#                           ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
+#                            ^ source.verso punctuation.definition.tag.end.verso
+#                             ^^^^^^^^^^^^^^ source.verso
 >Speed is math`3*10^8 [m/s]`.
-#^^^^^^^^^ source.erd
-#         ^^^^ source.erd support.function.tag.math.erd
-#             ^ source.erd punctuation.definition.tag.begin.erd
-#              ^ source.erd meta.embedded.math.erd constant.numeric.erd
-#               ^ source.erd meta.embedded.math.erd keyword.operator.arithmetic.erd
-#                ^^ source.erd meta.embedded.math.erd constant.numeric.erd
-#                  ^ source.erd meta.embedded.math.erd keyword.operator.power.erd
-#                   ^ source.erd meta.embedded.math.erd constant.numeric.erd
-#                    ^ source.erd meta.embedded.math.erd
-#                     ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.begin.erd
-#                      ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd support.type.unit.erd
-#                       ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd keyword.operator.erd
-#                        ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd support.type.unit.erd
-#                         ^ source.erd meta.embedded.math.erd meta.bracket-annotation.erd punctuation.definition.bracket.end.erd
-#                          ^ source.erd punctuation.definition.tag.end.erd
-#                           ^^ source.erd
+#^^^^^^^^^ source.verso
+#         ^^^^ source.verso support.function.tag.math.verso
+#             ^ source.verso punctuation.definition.tag.begin.verso
+#              ^ source.verso meta.embedded.math.verso constant.numeric.verso
+#               ^ source.verso meta.embedded.math.verso keyword.operator.arithmetic.verso
+#                ^^ source.verso meta.embedded.math.verso constant.numeric.verso
+#                  ^ source.verso meta.embedded.math.verso keyword.operator.power.verso
+#                   ^ source.verso meta.embedded.math.verso constant.numeric.verso
+#                    ^ source.verso meta.embedded.math.verso
+#                     ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
+#                      ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso support.type.unit.verso
+#                       ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso keyword.operator.verso
+#                        ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso support.type.unit.verso
+#                         ^ source.verso meta.embedded.math.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
+#                          ^ source.verso punctuation.definition.tag.end.verso
+#                           ^^ source.verso
 >Gravity exceeds math`2*10^10c`.
-#^^^^^^^^^^^^^^^^ source.erd
-#                ^^^^ source.erd support.function.tag.math.erd
-#                    ^ source.erd punctuation.definition.tag.begin.erd
-#                     ^ source.erd meta.embedded.math.erd constant.numeric.erd
-#                      ^ source.erd meta.embedded.math.erd keyword.operator.arithmetic.erd
-#                       ^^ source.erd meta.embedded.math.erd constant.numeric.erd
-#                         ^ source.erd meta.embedded.math.erd keyword.operator.power.erd
-#                          ^^ source.erd meta.embedded.math.erd constant.numeric.erd
-#                            ^ source.erd meta.embedded.math.erd
-#                             ^ source.erd punctuation.definition.tag.end.erd
-#                              ^^ source.erd
+#^^^^^^^^^^^^^^^^ source.verso
+#                ^^^^ source.verso support.function.tag.math.verso
+#                    ^ source.verso punctuation.definition.tag.begin.verso
+#                     ^ source.verso meta.embedded.math.verso constant.numeric.verso
+#                      ^ source.verso meta.embedded.math.verso keyword.operator.arithmetic.verso
+#                       ^^ source.verso meta.embedded.math.verso constant.numeric.verso
+#                         ^ source.verso meta.embedded.math.verso keyword.operator.power.verso
+#                          ^^ source.verso meta.embedded.math.verso constant.numeric.verso
+#                            ^ source.verso meta.embedded.math.verso
+#                             ^ source.verso punctuation.definition.tag.end.verso
+#                              ^^ source.verso
 >A citation cite`einstein1905` here.
-#^^^^^^^^^^^ source.erd
-#           ^^^^ source.erd support.function.tag.cite.erd
-#               ^ source.erd punctuation.definition.tag.begin.erd
-#                ^^^^^^^^^^^^ source.erd string.other.citation.erd
-#                            ^ source.erd punctuation.definition.tag.end.erd
-#                             ^^^^^^^ source.erd
+#^^^^^^^^^^^ source.verso
+#           ^^^^ source.verso support.function.tag.cite.verso
+#               ^ source.verso punctuation.definition.tag.begin.verso
+#                ^^^^^^^^^^^^ source.verso string.other.citation.verso
+#                            ^ source.verso punctuation.definition.tag.end.verso
+#                             ^^^^^^^ source.verso
 >See claim`pythagorean` for details.
-#^^^^ source.erd
-#    ^^^^^ source.erd support.function.tag.claim.erd
-#         ^ source.erd punctuation.definition.tag.begin.erd
-#          ^^^^^^^^^^^ source.erd entity.name.tag.claim-ref.erd
-#                     ^ source.erd punctuation.definition.tag.end.erd
-#                      ^^^^^^^^^^^^^^ source.erd
+#^^^^ source.verso
+#    ^^^^^ source.verso support.function.tag.claim.verso
+#         ^ source.verso punctuation.definition.tag.begin.verso
+#          ^^^^^^^^^^^ source.verso entity.name.tag.claim-ref.verso
+#                     ^ source.verso punctuation.definition.tag.end.verso
+#                      ^^^^^^^^^^^^^^ source.verso
 >Using tex`\alpha` for greek.
-#^^^^^^ source.erd
-#      ^^^ source.erd support.function.tag.tex.erd
-#         ^ source.erd punctuation.definition.tag.begin.erd
-#          ^^^^^^ source.erd markup.raw.inline.tex.erd
-#                ^ source.erd punctuation.definition.tag.end.erd
-#                 ^^^^^^^^^^^^ source.erd
+#^^^^^^ source.verso
+#      ^^^ source.verso support.function.tag.tex.verso
+#         ^ source.verso punctuation.definition.tag.begin.verso
+#          ^^^^^^ source.verso markup.raw.inline.tex.verso
+#                ^ source.verso punctuation.definition.tag.end.verso
+#                 ^^^^^^^^^^^^ source.verso
 >A cross-ref ref`earth-and-the-solar-system|Hydrogen creation` here.
-#^^^^^^^^^^^^ source.erd
-#            ^^^ source.erd support.function.tag.ref.erd
-#               ^ source.erd punctuation.definition.tag.begin.erd
-#                ^^^^^^^^^^^^^^^^^^^^^^^^^^ source.erd entity.name.tag.cross-ref.erd
-#                                          ^ source.erd punctuation.separator.pipe.erd
-#                                           ^^^^^^^^^^^^^^^^^ source.erd string.other.display-text.erd
-#                                                            ^ source.erd punctuation.definition.tag.end.erd
-#                                                             ^^^^^^^ source.erd
+#^^^^^^^^^^^^ source.verso
+#            ^^^ source.verso support.function.tag.ref.verso
+#               ^ source.verso punctuation.definition.tag.begin.verso
+#                ^^^^^^^^^^^^^^^^^^^^^^^^^^ source.verso entity.name.tag.cross-ref.verso
+#                                          ^ source.verso punctuation.separator.pipe.verso
+#                                           ^^^^^^^^^^^^^^^^^ source.verso string.other.display-text.verso
+#                                                            ^ source.verso punctuation.definition.tag.end.verso
+#                                                             ^^^^^^^ source.verso
 >A plain ref ref`some-label` here.
-#^^^^^^^^^^^^ source.erd
-#            ^^^ source.erd support.function.tag.ref.erd
-#               ^ source.erd punctuation.definition.tag.begin.erd
-#                ^^^^^^^^^^ source.erd entity.name.tag.cross-ref.erd
-#                          ^ source.erd punctuation.definition.tag.end.erd
-#                           ^^^^^^^ source.erd
+#^^^^^^^^^^^^ source.verso
+#            ^^^ source.verso support.function.tag.ref.verso
+#               ^ source.verso punctuation.definition.tag.begin.verso
+#                ^^^^^^^^^^ source.verso entity.name.tag.cross-ref.verso
+#                          ^ source.verso punctuation.definition.tag.end.verso
+#                           ^^^^^^^ source.verso
 >Visit url`https://example.com|Example Site` now.
-#^^^^^^ source.erd
-#      ^^^ source.erd support.function.tag.url.erd
-#         ^ source.erd punctuation.definition.tag.begin.erd
-#          ^^^^^^^^^^^^^^^^^^^ source.erd markup.underline.link.erd
-#                             ^ source.erd punctuation.separator.pipe.erd
-#                              ^^^^^^^^^^^^ source.erd string.other.display-text.erd
-#                                          ^ source.erd punctuation.definition.tag.end.erd
-#                                           ^^^^^^ source.erd
+#^^^^^^ source.verso
+#      ^^^ source.verso support.function.tag.url.verso
+#         ^ source.verso punctuation.definition.tag.begin.verso
+#          ^^^^^^^^^^^^^^^^^^^ source.verso markup.underline.link.verso
+#                             ^ source.verso punctuation.separator.pipe.verso
+#                              ^^^^^^^^^^^^ source.verso string.other.display-text.verso
+#                                          ^ source.verso punctuation.definition.tag.end.verso
+#                                           ^^^^^^ source.verso
 >## Absolute Time label`absolute-time`
-#^^ source.erd markup.heading.2.erd punctuation.definition.heading.erd
-#  ^ source.erd markup.heading.2.erd
-#   ^^^^^^^^^^^^^^ source.erd markup.heading.2.erd
-#                 ^^^^^ source.erd markup.heading.2.erd support.function.tag.label.erd
-#                      ^ source.erd markup.heading.2.erd punctuation.definition.tag.begin.erd
-#                       ^^^^^^^^^^^^^ source.erd markup.heading.2.erd entity.name.tag.label.erd
-#                                    ^ source.erd markup.heading.2.erd punctuation.definition.tag.end.erd
+#^^ source.verso markup.heading.2.verso punctuation.definition.heading.verso
+#  ^ source.verso markup.heading.2.verso
+#   ^^^^^^^^^^^^^^ source.verso markup.heading.2.verso
+#                 ^^^^^ source.verso markup.heading.2.verso support.function.tag.label.verso
+#                      ^ source.verso markup.heading.2.verso punctuation.definition.tag.begin.verso
+#                       ^^^^^^^^^^^^^ source.verso markup.heading.2.verso entity.name.tag.label.verso
+#                                    ^ source.verso markup.heading.2.verso punctuation.definition.tag.end.verso
 >:dim v [L T^-1]
-#^^^^ source.erd keyword.control.directive.dim.erd
-#    ^ source.erd
-#     ^ source.erd variable.other.dim.erd
-#      ^ source.erd
-#       ^^^^^^^^ source.erd support.type.dimension.erd
+#^^^^ source.verso keyword.control.directive.dim.verso
+#    ^ source.verso
+#     ^ source.verso variable.other.dim.verso
+#      ^ source.verso
+#       ^^^^^^^^ source.verso support.type.dimension.verso
 >:dim F [M L T^-2]
-#^^^^ source.erd keyword.control.directive.dim.erd
-#    ^ source.erd
-#     ^ source.erd variable.other.dim.erd
-#      ^ source.erd
-#       ^^^^^^^^^^ source.erd support.type.dimension.erd
+#^^^^ source.verso keyword.control.directive.dim.verso
+#    ^ source.verso
+#     ^ source.verso variable.other.dim.verso
+#      ^ source.verso
+#       ^^^^^^^^^^ source.verso support.type.dimension.verso
 >

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-  "name": "ERD",
-  "scopeName": "source.erd",
+  "name": "Verso",
+  "scopeName": "source.verso",
   "patterns": [
     { "include": "#comment" },
     { "include": "#heading" },
@@ -26,7 +26,7 @@
   "repository": {
     "comment": {
       "match": "^%.*$",
-      "name": "comment.line.percentage.erd"
+      "name": "comment.line.percentage.verso"
     },
 
     "heading": {
@@ -34,29 +34,29 @@
         {
           "begin": "^(#{4})\\s+",
           "end": "$",
-          "beginCaptures": { "1": { "name": "punctuation.definition.heading.erd" } },
-          "name": "markup.heading.4.erd",
+          "beginCaptures": { "1": { "name": "punctuation.definition.heading.verso" } },
+          "name": "markup.heading.4.verso",
           "patterns": [{ "include": "#tag-label" }, { "include": "#quoted-string" }]
         },
         {
           "begin": "^(#{3})\\s+",
           "end": "$",
-          "beginCaptures": { "1": { "name": "punctuation.definition.heading.erd" } },
-          "name": "markup.heading.3.erd",
+          "beginCaptures": { "1": { "name": "punctuation.definition.heading.verso" } },
+          "name": "markup.heading.3.verso",
           "patterns": [{ "include": "#tag-label" }, { "include": "#quoted-string" }]
         },
         {
           "begin": "^(#{2})\\s+",
           "end": "$",
-          "beginCaptures": { "1": { "name": "punctuation.definition.heading.erd" } },
-          "name": "markup.heading.2.erd",
+          "beginCaptures": { "1": { "name": "punctuation.definition.heading.verso" } },
+          "name": "markup.heading.2.verso",
           "patterns": [{ "include": "#tag-label" }, { "include": "#quoted-string" }]
         },
         {
           "begin": "^(#)\\s+",
           "end": "$",
-          "beginCaptures": { "1": { "name": "punctuation.definition.heading.erd" } },
-          "name": "markup.heading.1.erd",
+          "beginCaptures": { "1": { "name": "punctuation.definition.heading.verso" } },
+          "name": "markup.heading.1.verso",
           "patterns": [{ "include": "#tag-label" }, { "include": "#quoted-string" }]
         }
       ]
@@ -66,12 +66,12 @@
       "begin": "^(```math)\\s*$",
       "end": "^(```)\\s*$",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.fenced.begin.erd" }
+        "1": { "name": "punctuation.definition.fenced.begin.verso" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.definition.fenced.end.erd" }
+        "1": { "name": "punctuation.definition.fenced.end.verso" }
       },
-      "name": "meta.block.math.erd",
+      "name": "meta.block.math.verso",
       "patterns": [
         { "include": "#math-expression" }
       ]
@@ -81,10 +81,10 @@
       "begin": "^(:claim)\\s+(\\S+)\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
-        "1": { "name": "keyword.control.directive.claim.erd" },
-        "2": { "name": "entity.name.tag.claim.erd" }
+        "1": { "name": "keyword.control.directive.claim.verso" },
+        "2": { "name": "entity.name.tag.claim.verso" }
       },
-      "name": "meta.block.claim.erd",
+      "name": "meta.block.claim.verso",
       "patterns": [
         { "include": "#claim-body" }
       ]
@@ -93,9 +93,9 @@
     "claim-body": {
       "match": "^\\s+(.+?)\\s*(=)\\s*(.+)$",
       "captures": {
-        "1": { "name": "meta.expression.lhs.erd", "patterns": [{ "include": "#math-expression" }] },
-        "2": { "name": "keyword.operator.equals.erd" },
-        "3": { "name": "meta.expression.rhs.erd", "patterns": [{ "include": "#math-expression" }] }
+        "1": { "name": "meta.expression.lhs.verso", "patterns": [{ "include": "#math-expression" }] },
+        "2": { "name": "keyword.operator.equals.verso" },
+        "3": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
       }
     },
 
@@ -103,10 +103,10 @@
       "begin": "^(:proof)\\s+(\\S+)\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
-        "1": { "name": "keyword.control.directive.proof.erd" },
-        "2": { "name": "entity.name.tag.proof.erd" }
+        "1": { "name": "keyword.control.directive.proof.verso" },
+        "2": { "name": "entity.name.tag.proof.verso" }
       },
-      "name": "meta.block.proof.erd",
+      "name": "meta.block.proof.verso",
       "patterns": [
         { "include": "#proof-step" }
       ]
@@ -117,16 +117,16 @@
         {
           "match": "^\\s+(=)\\s*(.+?)\\s*(;\\s*.+)?$",
           "captures": {
-            "1": { "name": "keyword.operator.proof-step.erd" },
-            "2": { "name": "meta.expression.erd", "patterns": [{ "include": "#math-expression" }] },
-            "3": { "name": "comment.line.justification.erd" }
+            "1": { "name": "keyword.operator.proof-step.verso" },
+            "2": { "name": "meta.expression.verso", "patterns": [{ "include": "#math-expression" }] },
+            "3": { "name": "comment.line.justification.verso" }
           }
         },
         {
           "match": "^\\s+(.+?)\\s*(;\\s*.+)?$",
           "captures": {
-            "1": { "name": "meta.expression.erd", "patterns": [{ "include": "#math-expression" }] },
-            "2": { "name": "comment.line.justification.erd" }
+            "1": { "name": "meta.expression.verso", "patterns": [{ "include": "#math-expression" }] },
+            "2": { "name": "comment.line.justification.verso" }
           }
         }
       ]
@@ -135,17 +135,17 @@
     "directive-dim": {
       "match": "^(:dim)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
       "captures": {
-        "1": { "name": "keyword.control.directive.dim.erd" },
-        "2": { "name": "variable.other.dim.erd" },
-        "3": { "name": "support.type.dimension.erd" }
+        "1": { "name": "keyword.control.directive.dim.verso" },
+        "2": { "name": "variable.other.dim.verso" },
+        "3": { "name": "support.type.dimension.verso" }
       }
     },
 
     "directive-bibliography": {
       "match": "^(:bibliography)\\s+(.+)$",
       "captures": {
-        "1": { "name": "keyword.control.directive.bibliography.erd" },
-        "2": { "name": "string.unquoted.path.erd" }
+        "1": { "name": "keyword.control.directive.bibliography.verso" },
+        "2": { "name": "string.unquoted.path.verso" }
       }
     },
 
@@ -153,17 +153,17 @@
       "begin": "^(:figure)\\s+(.+)$",
       "end": "^(?!\\s)|^\\s*$",
       "beginCaptures": {
-        "1": { "name": "keyword.control.directive.figure.erd" },
-        "2": { "name": "string.unquoted.path.erd" }
+        "1": { "name": "keyword.control.directive.figure.verso" },
+        "2": { "name": "string.unquoted.path.verso" }
       },
-      "name": "meta.block.figure.erd",
+      "name": "meta.block.figure.verso",
       "patterns": [
         {
           "match": "^\\s+(caption|label|width)(:)\\s*(.*)$",
           "captures": {
-            "1": { "name": "variable.other.key.erd" },
-            "2": { "name": "punctuation.separator.key-value.erd" },
-            "3": { "name": "string.unquoted.value.erd" }
+            "1": { "name": "variable.other.key.verso" },
+            "2": { "name": "punctuation.separator.key-value.verso" },
+            "3": { "name": "string.unquoted.value.verso" }
           }
         }
       ]
@@ -173,22 +173,22 @@
       "begin": "^(:table)(?:\\s+(.+))?\\s*$",
       "end": "^(?!\\s)|^\\s*$",
       "beginCaptures": {
-        "1": { "name": "keyword.control.directive.table.erd" },
-        "2": { "name": "entity.name.section.table.erd" }
+        "1": { "name": "keyword.control.directive.table.verso" },
+        "2": { "name": "entity.name.section.table.verso" }
       },
-      "name": "meta.block.table.erd",
+      "name": "meta.block.table.verso",
       "patterns": [
         {
           "match": "^\\s+(label)(:)\\s*(.*)$",
           "captures": {
-            "1": { "name": "variable.other.key.erd" },
-            "2": { "name": "punctuation.separator.key-value.erd" },
-            "3": { "name": "string.unquoted.value.erd" }
+            "1": { "name": "variable.other.key.verso" },
+            "2": { "name": "punctuation.separator.key-value.verso" },
+            "3": { "name": "string.unquoted.value.verso" }
           }
         },
         {
           "match": "(\\|)",
-          "name": "punctuation.separator.table.erd"
+          "name": "punctuation.separator.table.verso"
         }
       ]
     },
@@ -196,29 +196,29 @@
     "directive-toc": {
       "match": "^(:toc)\\s*$",
       "captures": {
-        "1": { "name": "keyword.control.directive.toc.erd" }
+        "1": { "name": "keyword.control.directive.toc.verso" }
       }
     },
 
     "directive-center": {
       "match": "^(:center)\\s*$",
       "captures": {
-        "1": { "name": "keyword.control.directive.center.erd" }
+        "1": { "name": "keyword.control.directive.center.verso" }
       }
     },
 
     "directive-pagebreak": {
       "match": "^(:pagebreak)\\s*$",
       "captures": {
-        "1": { "name": "keyword.control.directive.pagebreak.erd" }
+        "1": { "name": "keyword.control.directive.pagebreak.verso" }
       }
     },
 
     "directive-include": {
       "match": "^(:include)\\s+(.+)$",
       "captures": {
-        "1": { "name": "keyword.control.directive.include.erd" },
-        "2": { "name": "string.unquoted.path.erd" }
+        "1": { "name": "keyword.control.directive.include.verso" },
+        "2": { "name": "string.unquoted.path.verso" }
       }
     },
 
@@ -227,31 +227,31 @@
         {
           "match": "^(:title)\\s+(.+)$",
           "captures": {
-            "1": { "name": "keyword.control.directive.title.erd" },
-            "2": { "name": "entity.name.section.title.erd" }
+            "1": { "name": "keyword.control.directive.title.verso" },
+            "2": { "name": "entity.name.section.title.verso" }
           }
         },
         {
           "match": "^(:author)\\s+(.+)$",
           "captures": {
-            "1": { "name": "keyword.control.directive.author.erd" },
-            "2": { "name": "entity.name.tag.author.erd" }
+            "1": { "name": "keyword.control.directive.author.verso" },
+            "2": { "name": "entity.name.tag.author.verso" }
           }
         },
         {
           "match": "^(:date)\\s+(.+)$",
           "captures": {
-            "1": { "name": "keyword.control.directive.date.erd" },
-            "2": { "name": "entity.name.tag.date.erd" }
+            "1": { "name": "keyword.control.directive.date.verso" },
+            "2": { "name": "entity.name.tag.date.verso" }
           }
         },
         {
           "begin": "^(:abstract)\\s*$",
           "end": "^(?!\\s)|^\\s*$",
           "beginCaptures": {
-            "1": { "name": "keyword.control.directive.abstract.erd" }
+            "1": { "name": "keyword.control.directive.abstract.verso" }
           },
-          "name": "meta.block.abstract.erd",
+          "name": "meta.block.abstract.verso",
           "patterns": [
             { "include": "#prose-inline" }
           ]
@@ -263,10 +263,10 @@
       "begin": "^(:(?:theorem|lemma|definition|corollary|remark|example))(?:\\s+(.+))?\\s*$",
       "end": "^(?!\\s)|^\\s*$",
       "beginCaptures": {
-        "1": { "name": "keyword.control.directive.environment.erd" },
-        "2": { "name": "entity.name.section.environment.erd" }
+        "1": { "name": "keyword.control.directive.environment.verso" },
+        "2": { "name": "entity.name.section.environment.verso" }
       },
-      "name": "meta.block.environment.erd",
+      "name": "meta.block.environment.verso",
       "patterns": [
         { "include": "#prose-inline" }
       ]
@@ -275,26 +275,26 @@
     "block-quote": {
       "match": "^(>)\\s?(.*)$",
       "captures": {
-        "1": { "name": "punctuation.definition.quote.erd" },
-        "2": { "name": "markup.quote.erd", "patterns": [{ "include": "#prose-inline" }] }
+        "1": { "name": "punctuation.definition.quote.verso" },
+        "2": { "name": "markup.quote.verso", "patterns": [{ "include": "#prose-inline" }] }
       }
     },
 
     "list-bullet": {
       "match": "^(\\s*)(-)\\s+(.+)$",
       "captures": {
-        "1": { "name": "punctuation.whitespace.erd" },
-        "2": { "name": "punctuation.definition.list.begin.erd" },
-        "3": { "name": "meta.list.item.erd", "patterns": [{ "include": "#prose-inline" }] }
+        "1": { "name": "punctuation.whitespace.verso" },
+        "2": { "name": "punctuation.definition.list.begin.verso" },
+        "3": { "name": "meta.list.item.verso", "patterns": [{ "include": "#prose-inline" }] }
       }
     },
 
     "list-numbered": {
       "match": "^(\\s*)(\\d+\\.)\\s+(.+)$",
       "captures": {
-        "1": { "name": "punctuation.whitespace.erd" },
-        "2": { "name": "punctuation.definition.list.begin.erd" },
-        "3": { "name": "meta.list.item.erd", "patterns": [{ "include": "#prose-inline" }] }
+        "1": { "name": "punctuation.whitespace.verso" },
+        "2": { "name": "punctuation.definition.list.begin.verso" },
+        "3": { "name": "meta.list.item.verso", "patterns": [{ "include": "#prose-inline" }] }
       }
     },
 
@@ -317,93 +317,93 @@
     "tag-math": {
       "match": "(math)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.math.erd" },
-        "2": { "name": "punctuation.definition.tag.begin.erd" },
-        "3": { "name": "meta.embedded.math.erd", "patterns": [{ "include": "#math-expression" }] },
-        "4": { "name": "punctuation.definition.tag.end.erd" }
+        "1": { "name": "support.function.tag.math.verso" },
+        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "3": { "name": "meta.embedded.math.verso", "patterns": [{ "include": "#math-expression" }] },
+        "4": { "name": "punctuation.definition.tag.end.verso" }
       }
     },
 
     "tag-tex": {
       "match": "(tex)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.tex.erd" },
-        "2": { "name": "punctuation.definition.tag.begin.erd" },
-        "3": { "name": "markup.raw.inline.tex.erd" },
-        "4": { "name": "punctuation.definition.tag.end.erd" }
+        "1": { "name": "support.function.tag.tex.verso" },
+        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "3": { "name": "markup.raw.inline.tex.verso" },
+        "4": { "name": "punctuation.definition.tag.end.verso" }
       }
     },
 
     "tag-claim": {
       "match": "(claim)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.claim.erd" },
-        "2": { "name": "punctuation.definition.tag.begin.erd" },
-        "3": { "name": "entity.name.tag.claim-ref.erd" },
-        "4": { "name": "punctuation.definition.tag.end.erd" }
+        "1": { "name": "support.function.tag.claim.verso" },
+        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "3": { "name": "entity.name.tag.claim-ref.verso" },
+        "4": { "name": "punctuation.definition.tag.end.verso" }
       }
     },
 
     "tag-cite": {
       "match": "(cite)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.cite.erd" },
-        "2": { "name": "punctuation.definition.tag.begin.erd" },
-        "3": { "name": "string.other.citation.erd" },
-        "4": { "name": "punctuation.definition.tag.end.erd" }
+        "1": { "name": "support.function.tag.cite.verso" },
+        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "3": { "name": "string.other.citation.verso" },
+        "4": { "name": "punctuation.definition.tag.end.verso" }
       }
     },
 
     "tag-ref": {
       "match": "(ref)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
       "captures": {
-        "1": { "name": "support.function.tag.ref.erd" },
-        "2": { "name": "punctuation.definition.tag.begin.erd" },
-        "3": { "name": "entity.name.tag.cross-ref.erd" },
-        "4": { "name": "punctuation.separator.pipe.erd" },
-        "5": { "name": "string.other.display-text.erd" },
-        "6": { "name": "punctuation.definition.tag.end.erd" }
+        "1": { "name": "support.function.tag.ref.verso" },
+        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "3": { "name": "entity.name.tag.cross-ref.verso" },
+        "4": { "name": "punctuation.separator.pipe.verso" },
+        "5": { "name": "string.other.display-text.verso" },
+        "6": { "name": "punctuation.definition.tag.end.verso" }
       }
     },
 
     "tag-url": {
       "match": "(url)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
       "captures": {
-        "1": { "name": "support.function.tag.url.erd" },
-        "2": { "name": "punctuation.definition.tag.begin.erd" },
-        "3": { "name": "markup.underline.link.erd" },
-        "4": { "name": "punctuation.separator.pipe.erd" },
-        "5": { "name": "string.other.display-text.erd" },
-        "6": { "name": "punctuation.definition.tag.end.erd" }
+        "1": { "name": "support.function.tag.url.verso" },
+        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "3": { "name": "markup.underline.link.verso" },
+        "4": { "name": "punctuation.separator.pipe.verso" },
+        "5": { "name": "string.other.display-text.verso" },
+        "6": { "name": "punctuation.definition.tag.end.verso" }
       }
     },
 
     "tag-label": {
       "match": "(label)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.label.erd" },
-        "2": { "name": "punctuation.definition.tag.begin.erd" },
-        "3": { "name": "entity.name.tag.label.erd" },
-        "4": { "name": "punctuation.definition.tag.end.erd" }
+        "1": { "name": "support.function.tag.label.verso" },
+        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "3": { "name": "entity.name.tag.label.verso" },
+        "4": { "name": "punctuation.definition.tag.end.verso" }
       }
     },
 
     "quoted-string": {
       "match": "\"([^\"]*)\"",
-      "name": "markup.italic.quote.erd"
+      "name": "markup.italic.quote.verso"
     },
 
     "footnote": {
       "begin": "(\\^)(\\[)",
       "end": "(\\])",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.footnote.erd" },
-        "2": { "name": "punctuation.definition.footnote.begin.erd" }
+        "1": { "name": "punctuation.definition.footnote.verso" },
+        "2": { "name": "punctuation.definition.footnote.begin.verso" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.definition.footnote.end.erd" }
+        "1": { "name": "punctuation.definition.footnote.end.verso" }
       },
-      "name": "markup.other.footnote.erd",
+      "name": "markup.other.footnote.verso",
       "patterns": [
         { "include": "#prose-inline" }
       ]
@@ -413,17 +413,17 @@
       "begin": "(\\*{3})(?=\\S)",
       "end": "(\\*{3})",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.bold.italic.erd" }
+        "1": { "name": "punctuation.definition.bold.italic.verso" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.definition.bold.italic.erd" }
+        "1": { "name": "punctuation.definition.bold.italic.verso" }
       },
-      "name": "markup.bold.erd",
+      "name": "markup.bold.verso",
       "patterns": [
         {
           "begin": "(?<=\\*{3})",
           "end": "(?=\\*{3})",
-          "name": "markup.italic.erd",
+          "name": "markup.italic.verso",
           "patterns": [
             { "include": "#prose-inline" }
           ]
@@ -435,12 +435,12 @@
       "begin": "(\\*{2})(?=\\S)",
       "end": "(\\*{2})",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.bold.erd" }
+        "1": { "name": "punctuation.definition.bold.verso" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.definition.bold.erd" }
+        "1": { "name": "punctuation.definition.bold.verso" }
       },
-      "name": "markup.bold.erd",
+      "name": "markup.bold.verso",
       "patterns": [
         { "include": "#prose-inline" }
       ]
@@ -450,12 +450,12 @@
       "begin": "(\\*)(?=[^\\s*])",
       "end": "(\\*)(?!\\*)",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.italic.erd" }
+        "1": { "name": "punctuation.definition.italic.verso" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.definition.italic.erd" }
+        "1": { "name": "punctuation.definition.italic.verso" }
       },
-      "name": "markup.italic.erd",
+      "name": "markup.italic.verso",
       "patterns": [
         { "include": "#prose-inline" }
       ]
@@ -468,35 +468,35 @@
         },
         {
           "match": "\\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|exp|log|ln|abs|det|tr)\\b",
-          "name": "support.function.math.erd"
+          "name": "support.function.math.verso"
         },
         {
           "match": "\\b(pi|π)\\b",
-          "name": "constant.language.pi.erd"
+          "name": "constant.language.pi.verso"
         },
         {
           "match": "\\be\\b",
-          "name": "constant.language.euler.erd"
+          "name": "constant.language.euler.verso"
         },
         {
           "match": "\\b\\d[\\d_]*(\\.[\\d_]+)?",
-          "name": "constant.numeric.erd"
+          "name": "constant.numeric.verso"
         },
         {
           "match": "\\^",
-          "name": "keyword.operator.power.erd"
+          "name": "keyword.operator.power.verso"
         },
         {
           "match": "[+\\-*/=]",
-          "name": "keyword.operator.arithmetic.erd"
+          "name": "keyword.operator.arithmetic.verso"
         },
         {
           "match": "[()]",
-          "name": "punctuation.brackets.round.erd"
+          "name": "punctuation.brackets.round.verso"
         },
         {
           "match": "&",
-          "name": "keyword.operator.alignment.erd"
+          "name": "keyword.operator.alignment.verso"
         }
       ]
     },
@@ -505,39 +505,39 @@
       "begin": "(\\[)",
       "end": "(\\])",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.bracket.begin.erd" }
+        "1": { "name": "punctuation.definition.bracket.begin.verso" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.definition.bracket.end.erd" }
+        "1": { "name": "punctuation.definition.bracket.end.verso" }
       },
-      "name": "meta.bracket-annotation.erd",
+      "name": "meta.bracket-annotation.verso",
       "patterns": [
         {
           "comment": "Base dimension symbols: L, M, T, Theta, I, N, J",
           "match": "\\b(L|M|T|Theta|I|N|J)\\b",
-          "name": "support.type.dimension.erd"
+          "name": "support.type.dimension.verso"
         },
         {
           "comment": "SI derived units",
           "match": "\\b(Hz|Pa|Ohm)\\b",
-          "name": "support.type.unit.erd"
+          "name": "support.type.unit.verso"
         },
         {
           "comment": "SI base and derived unit symbols (single/multi-char)",
           "match": "\\b[pnμmckMGT]?(m|g|s|K|A|mol|cd|N|J|W|C|V)\\b",
-          "name": "support.type.unit.erd"
+          "name": "support.type.unit.verso"
         },
         {
           "match": "\\b(kg)\\b",
-          "name": "support.type.unit.erd"
+          "name": "support.type.unit.verso"
         },
         {
           "match": "\\b\\d+\\b",
-          "name": "constant.numeric.erd"
+          "name": "constant.numeric.verso"
         },
         {
           "match": "[\\^/\\*\\-]",
-          "name": "keyword.operator.erd"
+          "name": "keyword.operator.verso"
         }
       ]
     }
