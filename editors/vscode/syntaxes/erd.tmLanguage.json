@@ -13,6 +13,7 @@
     { "include": "#directive-figure" },
     { "include": "#directive-table" },
     { "include": "#directive-toc" },
+    { "include": "#directive-center" },
     { "include": "#directive-pagebreak" },
     { "include": "#directive-include" },
     { "include": "#directive-metadata" },
@@ -196,6 +197,13 @@
       "match": "^(:toc)\\s*$",
       "captures": {
         "1": { "name": "keyword.control.directive.toc.erd" }
+      }
+    },
+
+    "directive-center": {
+      "match": "^(:center)\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.center.erd" }
       }
     },
 

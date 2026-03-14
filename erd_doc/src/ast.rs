@@ -41,6 +41,8 @@ pub enum Block {
     Figure(Figure),
     /// A table: `:table Title` with pipe-delimited rows
     Table(Table),
+    /// Centered block: `:center` with indented body
+    Center(Vec<ProseFragment>),
     /// Page break: `:pagebreak`
     PageBreak,
     /// Table of contents: `:toc`

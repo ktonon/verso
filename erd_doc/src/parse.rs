@@ -182,6 +182,14 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        if trimmed.starts_with(":center") {
+            let center_line = i + 1;
+            i += 1;
+            let fragments = collect_indented_body(&lines, &mut i, center_line)?;
+            blocks.push(Block::Center(fragments));
+            continue;
+        }
+
         // Figure block
         if trimmed.starts_with(":figure") {
             let path = trimmed[":figure".len()..].trim().to_string();
@@ -2109,6 +2117,45 @@ More prose here.
             }
             other => panic!("expected Abstract, got {:?}", other),
         }
+    }
+
+    // Center
+
+    #[test]
+    fn parse_center() {
+        let src = ":center\n\tSome centered text.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Center(fragments) => {
+                assert!(fragments.iter().any(|f| matches!(f, ProseFragment::Text(_))));
+            }
+            other => panic!("expected Center, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_center_with_paragraph_break() {
+        let src = ":center\n\tFirst line.\n\n\tSecond line.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Center(fragments) => {
+                assert!(
+                    fragments.iter().any(|f| matches!(f, ProseFragment::ParBreak)),
+                    "expected ParBreak in center fragments: {:?}", fragments
+                );
+            }
+            other => panic!("expected Center, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_center_ends_on_outdent() {
+        let src = ":center\n\tCentered.\nNot centered.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::Center(_)));
+        assert!(matches!(&doc.blocks[1], Block::Prose(_)));
     }
 
     #[test]

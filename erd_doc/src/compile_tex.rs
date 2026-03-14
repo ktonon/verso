@@ -181,6 +181,12 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::BlockQuote(fragments) => {
                 write_block_quote(&mut out, fragments, &section_titles);
             }
+            Block::Center(fragments) => {
+                writeln!(out, "\\begin{{center}}").unwrap();
+                write_prose_fragments(&mut out, fragments, &section_titles);
+                writeln!(out).unwrap();
+                writeln!(out, "\\end{{center}}").unwrap();
+            }
             Block::Figure(fig) => {
                 write_figure(&mut out, fig, &section_titles);
             }
@@ -459,7 +465,7 @@ fn fragments_have_refs(fragments: &[ProseFragment]) -> bool {
 /// Check if a block contains any Ref prose fragments.
 fn block_has_refs(block: &Block) -> bool {
     match block {
-        Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) => fragments_have_refs(fragments),
+        Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) | Block::Center(fragments) => fragments_have_refs(fragments),
         Block::List(list) => list_has_refs(list),
         Block::Environment(env) => fragments_have_refs(&env.body),
         Block::Figure(fig) => fig.caption.as_ref().map_or(false, |c| fragments_have_refs(c)),
@@ -545,7 +551,7 @@ fn collect_refs_from_fragments(fragments: &[ProseFragment], refs: &mut Vec<Strin
 
 fn collect_refs_from_block(block: &Block, refs: &mut Vec<String>) {
     match block {
-        Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) => {
+        Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) | Block::Center(fragments) => {
             collect_refs_from_fragments(fragments, refs);
         }
         Block::List(list) => collect_refs_from_list(list, refs),
@@ -768,6 +774,17 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("$x$"));
+    }
+
+    // Center
+
+    #[test]
+    fn compile_center() {
+        let doc = parse_document(":center\n\tSome centered text.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\begin{center}"));
+        assert!(tex.contains("Some centered text."));
+        assert!(tex.contains("\\end{center}"));
     }
 
     // Phase 6: Block quotes, footnotes, comments
