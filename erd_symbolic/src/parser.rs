@@ -1279,4 +1279,10 @@ mod tests {
         // Number + dimension annotation should fail (leftover bracket)
         assert!(parse_expr("3 [L]").is_err());
     }
+
+    #[test]
+    fn parse_unknown_unit_is_error() {
+        // Unknown unit symbol should fail
+        assert!(parse_expr("3000 [kg/zm^3]").is_err());
+    }
 }

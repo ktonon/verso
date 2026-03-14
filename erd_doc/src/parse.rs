@@ -173,6 +173,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
         if trimmed.starts_with(":abstract") {
+            let abs_line = i + 1;
             i += 1;
             let mut body = String::new();
             while i < lines.len() && is_continuation(&lines[i]) {
@@ -185,7 +186,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             let fragments = if body.is_empty() {
                 Vec::new()
             } else {
-                parse_prose_fragments(&body)?
+                parse_prose_fragments(&body).map_err(|mut e| {
+                    if e.line == 0 { e.line = abs_line; }
+                    e
+                })?
             };
             blocks.push(Block::Abstract(fragments));
             continue;
@@ -237,7 +241,11 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             while i < lines.len() && is_continuation(&lines[i]) {
                 let kv = lines[i].trim();
                 if let Some(val) = kv.strip_prefix("caption:") {
-                    caption = Some(parse_prose_fragments(val.trim())?);
+                    let cap_line = i + 1;
+                    caption = Some(parse_prose_fragments(val.trim()).map_err(|mut e| {
+                        if e.line == 0 { e.line = cap_line; }
+                        e
+                    })?);
                 } else if let Some(val) = kv.strip_prefix("label:") {
                     label = Some(val.trim().to_string());
                 } else if let Some(val) = kv.strip_prefix("width:") {
@@ -470,6 +478,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
 
         // Block quote
         if trimmed.starts_with("> ") || trimmed == ">" {
+            let quote_line = i + 1;
             let mut quote_text = String::new();
             while i < lines.len() {
                 let l = lines[i].trim();
@@ -492,7 +501,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             let fragments = if quote_text.is_empty() {
                 Vec::new()
             } else {
-                parse_prose_fragments(&quote_text)?
+                parse_prose_fragments(&quote_text).map_err(|mut e| {
+                    if e.line == 0 { e.line = quote_line; }
+                    e
+                })?
             };
             blocks.push(Block::BlockQuote(fragments));
             continue;
@@ -507,6 +519,8 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
 
         // Prose line — collect consecutive non-special lines into a paragraph
         let mut prose_text = String::new();
+        // Map: (char_offset_in_prose_text, 1-based_line_number)
+        let mut line_map: Vec<(usize, usize)> = Vec::new();
         while i < lines.len() {
             let l = lines[i].trim();
             if l.is_empty()
@@ -523,16 +537,49 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if !prose_text.is_empty() {
                 prose_text.push(' ');
             }
+            line_map.push((prose_text.len(), i + 1));
             prose_text.push_str(l);
             i += 1;
         }
         if !prose_text.is_empty() {
-            let fragments = parse_prose_fragments(&prose_text)?;
+            let fragments = parse_prose_fragments(&prose_text).map_err(|mut e| {
+                if e.line == 0 {
+                    e.line = resolve_line(&prose_text, &e.message, &line_map);
+                }
+                e
+            })?;
             blocks.push(Block::Prose(fragments));
         }
     }
 
     Ok(Document { blocks })
+}
+
+/// Given a concatenated prose string, an error message, and a line map,
+/// find the 1-based line number where the error occurred.
+///
+/// The error message includes the inline content (e.g., `inline math`EXPR`: ...`).
+/// We extract `math`EXPR`` and find its byte offset in the prose text,
+/// then map that offset to the original source line.
+fn resolve_line(prose_text: &str, error_msg: &str, line_map: &[(usize, usize)]) -> usize {
+    // Extract the inline tag from the error message: "inline math`...`:" or "inline tex`...`:"
+    let offset = if let Some(start) = error_msg.find("math`") {
+        let tag_in_msg = &error_msg[start..];
+        // Find in the prose text
+        prose_text.find(tag_in_msg.split("`:").next().unwrap_or(tag_in_msg))
+    } else {
+        None
+    };
+    if let Some(off) = offset {
+        // Find the last line_map entry whose offset <= off
+        for &(char_off, line_num) in line_map.iter().rev() {
+            if char_off <= off {
+                return line_num;
+            }
+        }
+    }
+    // Fallback to first line of the block
+    line_map.first().map_or(0, |&(_, ln)| ln)
 }
 
 /// A continuation line is indented (starts with whitespace).
@@ -623,7 +670,11 @@ fn parse_list(lines: &[&str], i: &mut usize) -> Result<List, ParseDocError> {
         // If at our indent level with a marker, it's a new item
         if line_indent == base_indent && is_list_marker(trimmed) {
             let content = strip_marker(trimmed);
-            let fragments = parse_prose_fragments(content)?;
+            let item_line = *i + 1;
+            let fragments = parse_prose_fragments(content).map_err(|mut e| {
+                if e.line == 0 { e.line = item_line; }
+                e
+            })?;
             items.push(ListItem {
                 fragments,
                 children: None,
@@ -733,7 +784,10 @@ fn parse_environment(
     let body = if body_text.is_empty() {
         Vec::new()
     } else {
-        parse_prose_fragments(&body_text)?
+        parse_prose_fragments(&body_text).map_err(|mut e| {
+            if e.line == 0 { e.line = span.line; }
+            e
+        })?
     };
 
     Ok(Environment {
@@ -2345,6 +2399,20 @@ More prose here.
         // math`c [m/s]` should fail: variable with unit
         let result = parse_document("Value is math`c [m/s]`.");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_inline_math_unknown_unit_is_error() {
+        let result = parse_document("about math`3000 [kg/zm^3]`.");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_inline_math_error_reports_correct_line() {
+        // Error in inline math on line 3 of a multi-line prose block
+        let src = "First line of prose.\nSecond line continues.\nThird has math`3000 [kg/zm^3]` here.";
+        let err = parse_document(src).unwrap_err();
+        assert_eq!(err.line, 3, "error should point to line 3, got {}", err.line);
     }
 
     #[test]
