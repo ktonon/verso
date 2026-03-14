@@ -65,7 +65,7 @@ pub fn resolve_includes(
     Ok(out)
 }
 
-/// Parse an `.erd` file, resolving `:include` directives.
+/// Parse an `.verso` file, resolving `:include` directives.
 pub fn parse_document_from_file(path: &std::path::Path) -> Result<Document, ParseDocError> {
     let src = std::fs::read_to_string(path).map_err(|e| ParseDocError {
         line: 0,
@@ -80,7 +80,7 @@ pub fn parse_document_from_file(path: &std::path::Path) -> Result<Document, Pars
     parse_document(&resolved)
 }
 
-/// Parse an `.erd` document from source text.
+/// Parse an `.verso` document from source text.
 pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
     let mut blocks = Vec::new();
     let lines: Vec<&str> = src.lines().collect();
@@ -2303,9 +2303,9 @@ More prose here.
     fn parse_include_basic() {
         let dir = std::env::temp_dir().join("erd_test_include_basic");
         let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("main.erd"), "# Main\n\n:include sub.erd\n\nEnd.").unwrap();
-        std::fs::write(dir.join("sub.erd"), "Sub content.").unwrap();
-        let doc = parse_document_from_file(&dir.join("main.erd")).unwrap();
+        std::fs::write(dir.join("main.verso"), "# Main\n\n:include sub.verso\n\nEnd.").unwrap();
+        std::fs::write(dir.join("sub.verso"), "Sub content.").unwrap();
+        let doc = parse_document_from_file(&dir.join("main.verso")).unwrap();
         // Should have: Section, Prose("Sub content."), Prose("End.")
         assert!(doc.blocks.len() >= 3);
         assert!(matches!(&doc.blocks[0], Block::Section { .. }));
@@ -2316,9 +2316,9 @@ More prose here.
     fn parse_include_circular_error() {
         let dir = std::env::temp_dir().join("erd_test_include_circular");
         let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("a.erd"), ":include b.erd").unwrap();
-        std::fs::write(dir.join("b.erd"), ":include a.erd").unwrap();
-        let err = parse_document_from_file(&dir.join("a.erd")).unwrap_err();
+        std::fs::write(dir.join("a.verso"), ":include b.verso").unwrap();
+        std::fs::write(dir.join("b.verso"), ":include a.verso").unwrap();
+        let err = parse_document_from_file(&dir.join("a.verso")).unwrap_err();
         assert!(err.message.contains("circular"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2327,9 +2327,9 @@ More prose here.
     fn parse_include_missing_file_error() {
         let dir = std::env::temp_dir().join("erd_test_include_missing");
         let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("main.erd"), ":include nonexistent.erd").unwrap();
-        let err = parse_document_from_file(&dir.join("main.erd")).unwrap_err();
-        assert!(err.message.contains("nonexistent.erd"));
+        std::fs::write(dir.join("main.verso"), ":include nonexistent.verso").unwrap();
+        let err = parse_document_from_file(&dir.join("main.verso")).unwrap_err();
+        assert!(err.message.contains("nonexistent.verso"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2337,10 +2337,10 @@ More prose here.
     fn parse_include_nested() {
         let dir = std::env::temp_dir().join("erd_test_include_nested");
         let _ = std::fs::create_dir_all(dir.join("sub"));
-        std::fs::write(dir.join("main.erd"), ":include sub/a.erd").unwrap();
-        std::fs::write(dir.join("sub/a.erd"), ":include b.erd").unwrap();
-        std::fs::write(dir.join("sub/b.erd"), "Nested content.").unwrap();
-        let doc = parse_document_from_file(&dir.join("main.erd")).unwrap();
+        std::fs::write(dir.join("main.verso"), ":include sub/a.verso").unwrap();
+        std::fs::write(dir.join("sub/a.verso"), ":include b.verso").unwrap();
+        std::fs::write(dir.join("sub/b.verso"), "Nested content.").unwrap();
+        let doc = parse_document_from_file(&dir.join("main.verso")).unwrap();
         match &doc.blocks[0] {
             Block::Prose(fragments) => {
                 assert_eq!(prose_to_string(fragments), "Nested content.");

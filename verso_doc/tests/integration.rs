@@ -10,7 +10,7 @@ fn load_fixture(name: &str) -> String {
 
 #[test]
 fn basic_algebra_all_pass() {
-    let src = load_fixture("basic_algebra.erd");
+    let src = load_fixture("basic_algebra.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     for r in &report.results {
@@ -26,7 +26,7 @@ fn basic_algebra_all_pass() {
 
 #[test]
 fn trig_identities_all_pass() {
-    let src = load_fixture("trig_identities.erd");
+    let src = load_fixture("trig_identities.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     for r in &report.results {
@@ -42,7 +42,7 @@ fn trig_identities_all_pass() {
 
 #[test]
 fn should_fail_detects_wrong_claim() {
-    let src = load_fixture("should_fail.erd");
+    let src = load_fixture("should_fail.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     assert_eq!(report.fail_count(), 1);
@@ -51,7 +51,7 @@ fn should_fail_detects_wrong_claim() {
 
 #[test]
 fn proof_chain_passes() {
-    let src = load_fixture("proof_chain.erd");
+    let src = load_fixture("proof_chain.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     for r in &report.results {
@@ -68,7 +68,7 @@ fn proof_chain_passes() {
 
 #[test]
 fn full_document_passes() {
-    let src = load_fixture("full_document.erd");
+    let src = load_fixture("full_document.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     for r in &report.results {
@@ -85,7 +85,7 @@ fn full_document_passes() {
 
 #[test]
 fn full_document_compiles_to_tex() {
-    let src = load_fixture("full_document.erd");
+    let src = load_fixture("full_document.verso");
     let doc = parse_document(&src).unwrap();
     let tex = compile_to_tex(&doc);
 
@@ -101,7 +101,7 @@ fn full_document_compiles_to_tex() {
 
 #[test]
 fn numerical_fallback_passes() {
-    let src = load_fixture("numerical_fallback.erd");
+    let src = load_fixture("numerical_fallback.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     for r in &report.results {
@@ -126,7 +126,7 @@ fn numerical_fallback_passes() {
 
 #[test]
 fn dimensional_analysis_passes() {
-    let src = load_fixture("dimensional.erd");
+    let src = load_fixture("dimensional.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     assert_eq!(report.pass_count(), 3);
@@ -150,7 +150,7 @@ fn dimensional_analysis_passes() {
 
 #[test]
 fn dimensional_mismatch_detected() {
-    let src = load_fixture("dim_fail.erd");
+    let src = load_fixture("dim_fail.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     // The claim x = t fails symbolically AND dimensionally
@@ -166,7 +166,7 @@ fn dimensional_mismatch_detected() {
 
 #[test]
 fn unit_annotations_pass_dim_check() {
-    let src = load_fixture("units.erd");
+    let src = load_fixture("units.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     for r in &report.results {
@@ -191,7 +191,7 @@ fn unit_annotations_pass_dim_check() {
 #[test]
 fn no_dim_declarations_skips_dim_check() {
     // Documents without :dim blocks should have dim_outcome = None
-    let src = load_fixture("basic_algebra.erd");
+    let src = load_fixture("basic_algebra.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     for r in &report.results {

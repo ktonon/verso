@@ -1,12 +1,12 @@
 use verso_symbolic::{Dimension, Expr};
 
-/// A parsed `.erd` document.
+/// A parsed `.verso` document.
 #[derive(Debug)]
 pub struct Document {
     pub blocks: Vec<Block>,
 }
 
-/// A top-level block in an `.erd` document.
+/// A top-level block in an `.verso` document.
 #[derive(Debug)]
 pub enum Block {
     /// Section heading (level 1 = `#`, level 2 = `##`, etc.)

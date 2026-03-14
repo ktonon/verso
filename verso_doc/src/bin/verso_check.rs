@@ -6,9 +6,9 @@ use std::path::Path;
 use std::process;
 
 #[derive(Parser)]
-#[command(name = "erd_check", about = "Verify claims in .erd documents")]
+#[command(name = "verso_check", about = "Verify claims in .verso documents")]
 struct Cli {
-    /// .erd files to check
+    /// .verso files to check
     #[arg(required = true)]
     files: Vec<String>,
 }

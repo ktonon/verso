@@ -206,13 +206,13 @@ fn line_range(line: usize) -> Range {
     }
 }
 
-/// Walk up from a file to find the root `.erd` document.
+/// Walk up from a file to find the root `.verso` document.
 ///
-/// Searches for `paper.erd` or `index.erd` in ancestor directories.
+/// Searches for `paper.verso` or `index.verso` in ancestor directories.
 fn find_root_document(file_path: &Path) -> Option<PathBuf> {
     let mut dir = file_path.parent()?;
     loop {
-        for name in &["paper.erd", "index.erd"] {
+        for name in &["paper.verso", "index.verso"] {
             let candidate = dir.join(name);
             if candidate.exists() && candidate != file_path {
                 return Some(candidate);

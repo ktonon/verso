@@ -8,9 +8,9 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 #[derive(Parser)]
-#[command(name = "erd_watch", about = "Watch .erd files and re-verify on save")]
+#[command(name = "verso_watch", about = "Watch .verso files and re-verify on save")]
 struct Cli {
-    /// .erd files to watch
+    /// .verso files to watch
     #[arg(required = true)]
     files: Vec<String>,
 }

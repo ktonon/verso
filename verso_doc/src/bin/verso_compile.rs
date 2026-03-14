@@ -6,9 +6,9 @@ use std::path::Path;
 use std::process;
 
 #[derive(Parser)]
-#[command(name = "erd_compile", about = "Compile .erd documents to LaTeX")]
+#[command(name = "verso_compile", about = "Compile .verso documents to LaTeX")]
 struct Cli {
-    /// .erd file to compile
+    /// .verso file to compile
     file: String,
 
     /// Output file (default: stdout)
