@@ -111,21 +111,12 @@ Add markdown-style table syntax.
 
 ---
 
-### M4: Custom preamble / document class
+### M4: Default preamble
 
-Allow users to override the document class and add custom LaTeX packages.
-
-**Syntax:**
-```
-:class revtex4-2 [aps,prl,twocolumn]
-:usepackage siunitx
-:usepackage pgfplots [compat=1.18]
-```
+The compiler generates a complete LaTeX preamble with sensible defaults (11pt article, geometry, microtype, etc.). Documents do not specify packages — erd chooses reasonable defaults. Conditional packages (hyperref, graphicx, wrapfig) are included only when needed.
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Block::DocumentClass`, `Block::UsePackage`
-- `erd_doc/src/parse.rs` — detect `:class` and `:usepackage` directives
-- `erd_doc/src/compile_tex.rs` — replace default `\documentclass{article}`, append user packages to preamble
+- `erd_doc/src/compile_tex.rs` — hardcoded default preamble with all standard packages and layout settings
 
 ---
 
@@ -222,15 +213,13 @@ Compiles to `\newpage`.
 - VSCode grammar: `directive-include` rule
 - Tests: 4 tests (basic, circular error, missing file error, nested includes)
 
-### M4: Custom preamble / document class (completed)
+### M4: Default preamble (completed)
 
-- Added `Block::DocumentClass { name, options }` and `Block::UsePackage { name, options }` to AST
-- `parse_name_with_options` helper parses `name [options]` syntax
-- Parser detects `:class` and `:usepackage` directives
-- Compiler uses first `:class` to override default `\documentclass{article}`, appends all `:usepackage` to preamble
-- Options rendered in `[...]` for both `\documentclass` and `\usepackage`
-- VSCode grammar: `directive-class` and `directive-usepackage` rules
-- Tests: 6 parse tests + 3 compile tests
+- Compiler generates a complete default preamble: 11pt article, geometry, fontenc, inputenc, lmodern, microtype, amsmath, amsthm, xcolor, framed, bookmark
+- Conditional packages: hyperref (when refs/urls used), graphicx + wrapfig (when figures present)
+- Layout defaults: no parindent, 6pt parskip, 3em emergencystretch, tocdepth 3
+- Removed `:class` and `:usepackage` directives — erd chooses reasonable defaults
+- Tests: 1 compile test for default preamble
 
 ### M3: Tables (completed)
 

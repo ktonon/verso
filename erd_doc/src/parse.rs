@@ -182,35 +182,6 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Document class
-        if trimmed.starts_with(":class") {
-            let rest = trimmed[":class".len()..].trim();
-            if rest.is_empty() {
-                return Err(ParseDocError {
-                    line: i + 1,
-                    message: ":class requires a document class name".into(),
-                });
-            }
-            let (name, options) = parse_name_with_options(rest);
-            blocks.push(Block::DocumentClass { name, options });
-            i += 1;
-            continue;
-        }
-        // Use package
-        if trimmed.starts_with(":usepackage") {
-            let rest = trimmed[":usepackage".len()..].trim();
-            if rest.is_empty() {
-                return Err(ParseDocError {
-                    line: i + 1,
-                    message: ":usepackage requires a package name".into(),
-                });
-            }
-            let (name, options) = parse_name_with_options(rest);
-            blocks.push(Block::UsePackage { name, options });
-            i += 1;
-            continue;
-        }
-
         // Figure block
         if trimmed.starts_with(":figure") {
             let path = trimmed[":figure".len()..].trim().to_string();
@@ -873,17 +844,6 @@ fn parse_environment(
 }
 
 /// Parse `lhs = rhs` from a claim body string.
-/// Parse `name [options]` — returns (name, Some(options)) or (name, None).
-fn parse_name_with_options(s: &str) -> (String, Option<String>) {
-    if let Some(bracket_start) = s.find('[') {
-        let name = s[..bracket_start].trim().to_string();
-        let opts = s[bracket_start + 1..].trim_end_matches(']').trim().to_string();
-        (name, Some(opts))
-    } else {
-        (s.to_string(), None)
-    }
-}
-
 fn parse_table_row(line: &str) -> Result<Vec<Vec<ProseFragment>>, ParseDocError> {
     let cells: Vec<&str> = line.split('|')
         .map(|s| s.trim())
@@ -2205,68 +2165,6 @@ More prose here.
             }
             other => panic!("expected Figure, got {:?}", other),
         }
-    }
-
-    // Document class and packages
-
-    #[test]
-    fn parse_document_class() {
-        let doc = parse_document(":class revtex4-2 [aps,prl,twocolumn]").unwrap();
-        match &doc.blocks[0] {
-            Block::DocumentClass { name, options } => {
-                assert_eq!(name, "revtex4-2");
-                assert_eq!(options.as_deref(), Some("aps,prl,twocolumn"));
-            }
-            other => panic!("expected DocumentClass, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_document_class_no_options() {
-        let doc = parse_document(":class article").unwrap();
-        match &doc.blocks[0] {
-            Block::DocumentClass { name, options } => {
-                assert_eq!(name, "article");
-                assert!(options.is_none());
-            }
-            other => panic!("expected DocumentClass, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_usepackage() {
-        let doc = parse_document(":usepackage pgfplots [compat=1.18]").unwrap();
-        match &doc.blocks[0] {
-            Block::UsePackage { name, options } => {
-                assert_eq!(name, "pgfplots");
-                assert_eq!(options.as_deref(), Some("compat=1.18"));
-            }
-            other => panic!("expected UsePackage, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_usepackage_no_options() {
-        let doc = parse_document(":usepackage siunitx").unwrap();
-        match &doc.blocks[0] {
-            Block::UsePackage { name, options } => {
-                assert_eq!(name, "siunitx");
-                assert!(options.is_none());
-            }
-            other => panic!("expected UsePackage, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_class_empty_error() {
-        let err = parse_document(":class").unwrap_err();
-        assert!(err.message.contains(":class requires"));
-    }
-
-    #[test]
-    fn parse_usepackage_empty_error() {
-        let err = parse_document(":usepackage").unwrap_err();
-        assert!(err.message.contains(":usepackage requires"));
     }
 
     // Table of contents

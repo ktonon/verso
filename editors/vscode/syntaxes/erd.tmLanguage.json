@@ -15,8 +15,6 @@
     { "include": "#directive-toc" },
     { "include": "#directive-pagebreak" },
     { "include": "#directive-include" },
-    { "include": "#directive-class" },
-    { "include": "#directive-usepackage" },
     { "include": "#directive-metadata" },
     { "include": "#directive-environment" },
     { "include": "#block-quote" },
@@ -213,24 +211,6 @@
       "captures": {
         "1": { "name": "keyword.control.directive.include.erd" },
         "2": { "name": "string.unquoted.path.erd" }
-      }
-    },
-
-    "directive-class": {
-      "match": "^(:class)\\s+(\\S+)(?:\\s+(\\[.*\\]))?\\s*$",
-      "captures": {
-        "1": { "name": "keyword.control.directive.class.erd" },
-        "2": { "name": "entity.name.type.class.erd" },
-        "3": { "name": "string.other.options.erd" }
-      }
-    },
-
-    "directive-usepackage": {
-      "match": "^(:usepackage)\\s+(\\S+)(?:\\s+(\\[.*\\]))?\\s*$",
-      "captures": {
-        "1": { "name": "keyword.control.directive.usepackage.erd" },
-        "2": { "name": "entity.name.type.package.erd" },
-        "3": { "name": "string.other.options.erd" }
       }
     },
 

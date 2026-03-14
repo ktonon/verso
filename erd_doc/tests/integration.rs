@@ -89,7 +89,7 @@ fn full_document_compiles_to_tex() {
     let doc = parse_document(&src).unwrap();
     let tex = compile_to_tex(&doc);
 
-    assert!(tex.contains("\\documentclass{article}"));
+    assert!(tex.contains("\\documentclass[11pt]{article}"));
     assert!(tex.contains("\\section{Trigonometric Identities}"));
     assert!(tex.contains("$\\sin{x}^{2} + \\cos{x}^{2}$"));
     assert!(tex.contains("\\eqref{eq:pythagorean}"));

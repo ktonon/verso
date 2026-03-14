@@ -389,21 +389,18 @@ Split a document across multiple `.erd` files:
 
 ---
 
-### Document class and packages
+### Default preamble
 
-Override the default `article` document class or add custom LaTeX packages:
+The compiler automatically generates a LaTeX preamble with sensible defaults:
 
-```
-:class revtex4-2 [aps,prl,twocolumn]
-:usepackage siunitx
-:usepackage pgfplots [compat=1.18]
-```
+- `\documentclass[11pt]{article}` with `geometry`, `fontenc`, `inputenc`, `lmodern`, `microtype`
+- Math support: `amsmath`, `amsthm`
+- Styling: `xcolor`, `framed`, `bookmark`
+- `hyperref` (with colored links) is included when the document uses `ref` or `url` tags
+- `graphicx` and `wrapfig` are included when the document contains figures
+- Layout: no paragraph indent, 6pt paragraph skip, 3-level TOC depth
 
-- `:class name [options]` replaces the default `\documentclass{article}`.
-- `:usepackage name [options]` adds `\usepackage[options]{name}` to the preamble.
-- Options in square brackets are optional.
-- Multiple `:usepackage` directives are supported.
-- `amsmath` and `amsthm` are always included automatically.
+Documents do not need to specify packages — erd chooses reasonable defaults.
 
 ---
 

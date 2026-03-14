@@ -68,40 +68,34 @@ pub fn compile_to_tex(doc: &Document) -> String {
 
     // Check if document uses ref tags (to conditionally include hyperref)
     let has_refs = doc.blocks.iter().any(|b| block_has_refs(b));
+    let has_figures = doc.blocks.iter().any(|b| matches!(b, Block::Figure(_)));
 
-    // Document class
-    let custom_class = doc.blocks.iter().find_map(|b| match b {
-        Block::DocumentClass { name, options } => Some((name.as_str(), options.as_deref())),
-        _ => None,
-    });
-    if let Some((name, opts)) = custom_class {
-        if let Some(o) = opts {
-            writeln!(out, "\\documentclass[{}]{{{}}}", o, name).unwrap();
-        } else {
-            writeln!(out, "\\documentclass{{{}}}", name).unwrap();
-        }
-    } else {
-        writeln!(out, "\\documentclass{{article}}").unwrap();
-    }
+    // Preamble: document class and packages
+    writeln!(out, "\\documentclass[11pt]{{article}}").unwrap();
+    writeln!(out, "\\usepackage[margin=1in]{{geometry}}").unwrap();
+    writeln!(out, "\\usepackage[T1]{{fontenc}}").unwrap();
+    writeln!(out, "\\usepackage[utf8]{{inputenc}}").unwrap();
+    writeln!(out, "\\usepackage{{lmodern}}").unwrap();
+    writeln!(out, "\\usepackage{{microtype}}").unwrap();
     writeln!(out, "\\usepackage{{amsmath}}").unwrap();
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
+    writeln!(out, "\\usepackage{{xcolor}}").unwrap();
+    writeln!(out, "\\usepackage{{framed}}").unwrap();
+    writeln!(out, "\\usepackage{{bookmark}}").unwrap();
     if has_refs {
-        writeln!(out, "\\usepackage[hidelinks]{{hyperref}}").unwrap();
+        writeln!(out, "\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{{hyperref}}").unwrap();
     }
-    let has_figures = doc.blocks.iter().any(|b| matches!(b, Block::Figure(_)));
     if has_figures {
         writeln!(out, "\\usepackage{{graphicx}}").unwrap();
+        writeln!(out, "\\usepackage{{wrapfig}}").unwrap();
     }
-    // User packages
-    for block in &doc.blocks {
-        if let Block::UsePackage { name, options } = block {
-            if let Some(o) = options {
-                writeln!(out, "\\usepackage[{}]{{{}}}", o, name).unwrap();
-            } else {
-                writeln!(out, "\\usepackage{{{}}}", name).unwrap();
-            }
-        }
-    }
+
+    // Layout defaults
+    writeln!(out).unwrap();
+    writeln!(out, "\\setlength{{\\parindent}}{{0pt}}").unwrap();
+    writeln!(out, "\\setlength{{\\parskip}}{{6pt plus 2pt minus 1pt}}").unwrap();
+    writeln!(out, "\\setlength{{\\emergencystretch}}{{3em}}").unwrap();
+    writeln!(out, "\\setcounter{{tocdepth}}{{3}}").unwrap();
 
     // Title block in preamble
     if let Some(t) = title {
@@ -170,8 +164,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
                 write_proof(&mut out, proof);
             }
             Block::Dim(_) => {}
-            Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_)
-            | Block::DocumentClass { .. } | Block::UsePackage { .. } => {}
+            Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_) => {}
             Block::PageBreak => {
                 writeln!(out, "\\newpage").unwrap();
             }
@@ -671,7 +664,7 @@ mod tests {
 ";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
-        assert!(tex.contains("\\documentclass{article}"));
+        assert!(tex.contains("\\documentclass[11pt]{article}"));
         assert!(tex.contains("\\usepackage{amsmath}"));
         assert!(tex.contains("\\begin{document}"));
         assert!(tex.contains("\\end{document}"));
@@ -822,7 +815,7 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\hyperref[newtons-laws]{Newton's Laws}"));
-        assert!(tex.contains("\\usepackage[hidelinks]{hyperref}"));
+        assert!(tex.contains("\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"));
     }
 
     #[test]
@@ -844,7 +837,7 @@ mod tests {
     fn compile_no_hyperref_without_refs() {
         let doc = parse_document("# My Section\n\nJust prose.").unwrap();
         let tex = compile_to_tex(&doc);
-        assert!(!tex.contains("\\usepackage[hidelinks]{hyperref}"));
+        assert!(!tex.contains("\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"));
     }
 
     #[test]
@@ -856,32 +849,20 @@ mod tests {
         assert!(tex.contains("\\textit{— abundant}"));
     }
 
-    // Document class and packages
+    // Default preamble
 
     #[test]
-    fn compile_custom_class() {
-        let src = ":class revtex4-2 [aps,prl]\nSome text.";
-        let doc = parse_document(src).unwrap();
-        let tex = compile_to_tex(&doc);
-        assert!(tex.contains("\\documentclass[aps,prl]{revtex4-2}"));
-        assert!(!tex.contains("\\documentclass{article}"));
-    }
-
-    #[test]
-    fn compile_default_class() {
+    fn compile_default_preamble() {
         let src = "Just prose.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
-        assert!(tex.contains("\\documentclass{article}"));
-    }
-
-    #[test]
-    fn compile_usepackage() {
-        let src = ":usepackage siunitx\n:usepackage pgfplots [compat=1.18]\nText.";
-        let doc = parse_document(src).unwrap();
-        let tex = compile_to_tex(&doc);
-        assert!(tex.contains("\\usepackage{siunitx}"));
-        assert!(tex.contains("\\usepackage[compat=1.18]{pgfplots}"));
+        assert!(tex.contains("\\documentclass[11pt]{article}"));
+        assert!(tex.contains("\\usepackage[margin=1in]{geometry}"));
+        assert!(tex.contains("\\usepackage{amsmath}"));
+        assert!(tex.contains("\\usepackage{microtype}"));
+        assert!(tex.contains("\\usepackage{lmodern}"));
+        assert!(tex.contains("\\setlength{\\parindent}{0pt}"));
+        assert!(tex.contains("\\setlength{\\parskip}{6pt plus 2pt minus 1pt}"));
     }
 
     // Tables
@@ -1049,7 +1030,7 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\url{https://example.com}"));
-        assert!(tex.contains("\\usepackage[hidelinks]{hyperref}"));
+        assert!(tex.contains("\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"));
     }
 
     #[test]
