@@ -37,6 +37,8 @@ Front matter directives define the document's title, authors, date, and abstract
 These can appear anywhere in the source but always compile to the LaTeX preamble
 and front matter.
 
+Single-line title:
+
 ```
 :title Quantum Corrections to the Classical Limit
 :author Alice Smith
@@ -47,15 +49,27 @@ and front matter.
   in the semiclassical regime.
 ```
 
+Multiline title (indented body, each line becomes a line break in the title):
+
+```
+:title
+	Quantum Corrections to the Classical Limit:
+	A Novel Approach
+:author Alice Smith
+:date
+```
+
 | Directive | LaTeX output | Notes |
 |-----------|-------------|-------|
-| `:title text` | `\title{text}` | Required for `\maketitle` |
+| `:title text` | `\title{text}` | Single-line title |
+| `:title` + indented body | `\title{line1 \\\\ line2}` | Multiline title |
 | `:author name` | `\author{name}` | Multiple authors joined with `\and` |
-| `:date text` | `\date{text}` | Optional; omitted → no date |
+| `:date YYYY-MM-DD` | `\date{March 14, 2026}` | ISO dates are formatted automatically |
+| `:date` | `\date{\today}` | No value → today's date |
 | `:abstract` | `\begin{abstract}...\end{abstract}` | Indented body, supports inline formatting |
 
 When any of `:title`, `:author`, or `:date` is present, `\maketitle` is emitted
-after `\begin{document}`.
+after `\begin{document}`. If `:date` is omitted entirely, LaTeX defaults to today's date.
 
 ---
 
@@ -70,6 +84,18 @@ after `\begin{document}`.
 
 Identical to markdown. Compiles to `\section`, `\subsection`, `\subsubsection`,
 `\paragraph` in LaTeX.
+
+#### Section labels
+
+Headings automatically generate labels from the slugified title (lowercase,
+hyphens for spaces). For explicit labels, use `label` backticks:
+
+```
+## Absolute Time label`absolute-time`
+```
+
+The label tag is stripped from the rendered heading title. If no `label` tag
+is present, the slug is used (e.g., `## Newton's Laws` → `\label{newtons-laws}`).
 
 ---
 
@@ -183,12 +209,7 @@ ref`earth-and-the-solar-system|Hydrogen creation in planets and moons`
 
 Compiles to `\hyperref[earth-and-the-solar-system]{Hydrogen creation in planets and moons}`.
 
-Headings automatically generate labels:
-
-```
-## Newton's Laws     →  \label{newtons-laws}
-## The 2nd Law       →  \label{the-2nd-law}
-```
+See [Section labels](#section-labels) for how heading labels are generated.
 
 ---
 
@@ -451,7 +472,20 @@ appropriate `\newtheorem` declarations in the preamble.
 
 ---
 
-### Block quotes 
+### Centered blocks
+
+```
+:center
+	url`https://github.com/example/repo`
+```
+
+Indented body is centered on the page. Supports inline formatting. Compiles to
+`\begin{center}` ... `\end{center}`.
+
+---
+
+### Block quotes
+
 ```
 > This is a block quote, useful for stating results from other sources
 > or providing extended remarks.

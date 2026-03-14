@@ -51,20 +51,20 @@ pub fn compile_to_tex(doc: &Document) -> String {
     }
 
     // Collect metadata
-    let mut title: Option<&str> = None;
+    let mut title_lines: Option<&Vec<String>> = None;
     let mut authors: Vec<&str> = Vec::new();
-    let mut date: Option<&str> = None;
+    let mut date: Option<Option<&str>> = None; // None = no :date, Some(None) = :date with no value, Some(Some(d)) = :date d
     let mut abstract_fragments: Option<&Vec<ProseFragment>> = None;
     for block in &doc.blocks {
         match block {
-            Block::Title(t) => title = Some(t),
+            Block::Title(lines) => title_lines = Some(lines),
             Block::Author(a) => authors.push(a),
-            Block::Date(d) => date = Some(d),
+            Block::Date(d) => date = Some(d.as_deref()),
             Block::Abstract(frags) => abstract_fragments = Some(frags),
             _ => {}
         }
     }
-    let has_metadata = title.is_some() || !authors.is_empty() || date.is_some();
+    let has_metadata = title_lines.is_some() || !authors.is_empty() || date.is_some();
 
     // Check if document uses ref tags (to conditionally include hyperref)
     let has_refs = doc.blocks.iter().any(|b| block_has_refs(b));
@@ -95,9 +95,13 @@ pub fn compile_to_tex(doc: &Document) -> String {
     writeln!(out, "\\setcounter{{tocdepth}}{{3}}").unwrap();
 
     // Title block in preamble
-    if let Some(t) = title {
+    if let Some(lines) = title_lines {
         writeln!(out).unwrap();
-        writeln!(out, "\\title{{{}}}", escape_prose(t)).unwrap();
+        let title_tex = lines.iter()
+            .map(|l| escape_prose(l))
+            .collect::<Vec<_>>()
+            .join(" \\\\\n");
+        writeln!(out, "\\title{{{}}}", title_tex).unwrap();
     }
     if !authors.is_empty() {
         let joined = authors.iter()
@@ -106,8 +110,10 @@ pub fn compile_to_tex(doc: &Document) -> String {
             .join(" \\and ");
         writeln!(out, "\\author{{{}}}", joined).unwrap();
     }
-    if let Some(d) = date {
-        writeln!(out, "\\date{{{}}}", d).unwrap();
+    match date {
+        Some(Some(d)) => writeln!(out, "\\date{{{}}}", format_date(d)).unwrap(),
+        Some(None) => writeln!(out, "\\date{{\\today}}").unwrap(),
+        None => {} // no :date directive — LaTeX defaults to \today
     }
 
     // Collect used environment kinds for \newtheorem declarations
@@ -229,6 +235,30 @@ fn write_section(out: &mut String, level: u8, title: &str, label: Option<&str>) 
 fn write_prose(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
     write_prose_fragments(out, fragments, section_titles);
     writeln!(out).unwrap();
+}
+
+/// Format a date string for LaTeX output.
+/// Recognizes ISO format `YYYY-MM-DD` and formats as "Month DD, YYYY".
+/// Other values are passed through as-is.
+fn format_date(s: &str) -> String {
+    let parts: Vec<&str> = s.split('-').collect();
+    if parts.len() == 3 {
+        if let (Ok(year), Ok(month), Ok(day)) = (
+            parts[0].parse::<u32>(),
+            parts[1].parse::<u32>(),
+            parts[2].parse::<u32>(),
+        ) {
+            let month_name = match month {
+                1 => "January", 2 => "February", 3 => "March",
+                4 => "April", 5 => "May", 6 => "June",
+                7 => "July", 8 => "August", 9 => "September",
+                10 => "October", 11 => "November", 12 => "December",
+                _ => return s.to_string(),
+            };
+            return format!("{} {}, {}", month_name, day, year);
+        }
+    }
+    s.to_string()
 }
 
 /// Escape prose text for LaTeX: `~` → `\textasciitilde{}`, paired `"` → ``` `` ''' ```.
@@ -950,6 +980,38 @@ mod tests {
         assert!(tex.contains("\\begin{abstract}"));
         assert!(tex.contains("Some abstract text."));
         assert!(tex.contains("\\end{abstract}"));
+    }
+
+    #[test]
+    fn compile_multiline_title() {
+        let src = ":title\n\tLine One\n\tLine Two";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\title{Line One \\\\\nLine Two}"));
+    }
+
+    #[test]
+    fn compile_date_iso_format() {
+        let src = ":title T\n:date 2026-03-14";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\date{March 14, 2026}"));
+    }
+
+    #[test]
+    fn compile_date_no_value_uses_today() {
+        let src = ":title T\n:date";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\date{\\today}"));
+    }
+
+    #[test]
+    fn compile_no_date_directive_omits_date() {
+        let src = ":title T";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(!tex.contains("\\date"));
     }
 
     #[test]

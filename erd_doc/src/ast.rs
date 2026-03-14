@@ -29,12 +29,12 @@ pub enum Block {
     Environment(Environment),
     /// A block quote: lines starting with `> `.
     BlockQuote(Vec<ProseFragment>),
-    /// Document title: `:title text`
-    Title(String),
+    /// Document title: `:title text` or multiline with indented body
+    Title(Vec<String>),
     /// Document author: `:author name`
     Author(String),
-    /// Document date: `:date text`
-    Date(String),
+    /// Document date: `:date YYYY-MM-DD` or `:date` for today
+    Date(Option<String>),
     /// Document abstract: `:abstract` with indented body
     Abstract(Vec<ProseFragment>),
     /// A figure: `:figure path` with optional caption, label, width

@@ -141,13 +141,31 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         if trimmed.starts_with(":title") {
             let text = trimmed[":title".len()..].trim().to_string();
             if text.is_empty() {
-                return Err(ParseDocError {
-                    line: i + 1,
-                    message: ":title requires text".into(),
-                });
+                // Multiline title: collect indented lines
+                i += 1;
+                let mut title_lines = Vec::new();
+                while i < lines.len() {
+                    let line = lines[i];
+                    if line.trim().is_empty() {
+                        break;
+                    } else if is_continuation(line) {
+                        title_lines.push(line.trim().to_string());
+                        i += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if title_lines.is_empty() {
+                    return Err(ParseDocError {
+                        line: i,
+                        message: ":title requires text".into(),
+                    });
+                }
+                blocks.push(Block::Title(title_lines));
+            } else {
+                blocks.push(Block::Title(vec![text]));
+                i += 1;
             }
-            blocks.push(Block::Title(text));
-            i += 1;
             continue;
         }
         if trimmed.starts_with(":author") {
@@ -164,13 +182,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
         if trimmed.starts_with(":date") {
             let text = trimmed[":date".len()..].trim().to_string();
-            if text.is_empty() {
-                return Err(ParseDocError {
-                    line: i + 1,
-                    message: ":date requires a value".into(),
-                });
-            }
-            blocks.push(Block::Date(text));
+            blocks.push(Block::Date(if text.is_empty() { None } else { Some(text) }));
             i += 1;
             continue;
         }
@@ -2045,7 +2057,19 @@ More prose here.
     #[test]
     fn parse_title() {
         let doc = parse_document(":title My Great Paper").unwrap();
-        assert!(matches!(&doc.blocks[0], Block::Title(t) if t == "My Great Paper"));
+        assert!(matches!(&doc.blocks[0], Block::Title(t) if t == &["My Great Paper"]));
+    }
+
+    #[test]
+    fn parse_title_multiline() {
+        let src = ":title\n\tThe Two-Medium Model:\n\tA Narrative Framework";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Title(lines) => {
+                assert_eq!(lines, &["The Two-Medium Model:", "A Narrative Framework"]);
+            }
+            other => panic!("expected Title, got {:?}", other),
+        }
     }
 
     #[test]
@@ -2065,7 +2089,13 @@ More prose here.
     #[test]
     fn parse_date() {
         let doc = parse_document(":date 2026-03-13").unwrap();
-        assert!(matches!(&doc.blocks[0], Block::Date(d) if d == "2026-03-13"));
+        assert!(matches!(&doc.blocks[0], Block::Date(Some(d)) if d == "2026-03-13"));
+    }
+
+    #[test]
+    fn parse_date_no_value_defaults_to_none() {
+        let doc = parse_document(":date").unwrap();
+        assert!(matches!(&doc.blocks[0], Block::Date(None)));
     }
 
     #[test]
@@ -2160,7 +2190,7 @@ More prose here.
 
     #[test]
     fn parse_title_empty_error() {
-        let err = parse_document(":title").unwrap_err();
+        let err = parse_document(":title\n\nSome body.").unwrap_err();
         assert!(err.message.contains(":title requires"));
     }
 
