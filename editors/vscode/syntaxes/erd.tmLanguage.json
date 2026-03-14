@@ -10,6 +10,7 @@
     { "include": "#directive-proof" },
     { "include": "#directive-dim" },
     { "include": "#directive-bibliography" },
+    { "include": "#directive-figure" },
     { "include": "#directive-metadata" },
     { "include": "#directive-environment" },
     { "include": "#block-quote" },
@@ -141,6 +142,26 @@
         "1": { "name": "keyword.control.directive.bibliography.erd" },
         "2": { "name": "string.unquoted.path.erd" }
       }
+    },
+
+    "directive-figure": {
+      "begin": "^(:figure)\\s+(.+)$",
+      "end": "^(?!\\s)|^\\s*$",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.figure.erd" },
+        "2": { "name": "string.unquoted.path.erd" }
+      },
+      "name": "meta.block.figure.erd",
+      "patterns": [
+        {
+          "match": "^\\s+(caption|label|width)(:)\\s*(.*)$",
+          "captures": {
+            "1": { "name": "variable.other.key.erd" },
+            "2": { "name": "punctuation.separator.key-value.erd" },
+            "3": { "name": "string.unquoted.value.erd" }
+          }
+        }
+      ]
     },
 
     "directive-metadata": {

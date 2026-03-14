@@ -1,4 +1,4 @@
-use crate::ast::{Block, Claim, Document, EnvKind, Environment, List, MathBlock, Proof, ProseFragment};
+use crate::ast::{Block, Claim, Document, EnvKind, Environment, Figure, List, MathBlock, Proof, ProseFragment};
 use std::collections::{HashMap, HashSet};
 use erd_symbolic::ToTex;
 use std::fmt::Write;
@@ -71,6 +71,10 @@ pub fn compile_to_tex(doc: &Document) -> String {
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
     if has_refs {
         writeln!(out, "\\usepackage{{hyperref}}").unwrap();
+    }
+    let has_figures = doc.blocks.iter().any(|b| matches!(b, Block::Figure(_)));
+    if has_figures {
+        writeln!(out, "\\usepackage{{graphicx}}").unwrap();
     }
 
     // Title block in preamble
@@ -153,6 +157,9 @@ pub fn compile_to_tex(doc: &Document) -> String {
             }
             Block::BlockQuote(fragments) => {
                 write_block_quote(&mut out, fragments, &section_titles);
+            }
+            Block::Figure(fig) => {
+                write_figure(&mut out, fig, &section_titles);
             }
         }
     }
@@ -336,6 +343,21 @@ fn write_block_quote(out: &mut String, fragments: &[ProseFragment], section_titl
     writeln!(out, "\\end{{quote}}").unwrap();
 }
 
+fn write_figure(out: &mut String, fig: &Figure, section_titles: &HashMap<String, String>) {
+    writeln!(out, "\\begin{{figure}}[htbp]").unwrap();
+    writeln!(out, "\\centering").unwrap();
+    writeln!(out, "\\includegraphics[width={}\\textwidth]{{{}}}", fig.width, fig.path).unwrap();
+    if let Some(cap) = &fig.caption {
+        write!(out, "\\caption{{").unwrap();
+        write_prose_fragments(out, cap, section_titles);
+        writeln!(out, "}}").unwrap();
+    }
+    if let Some(label) = &fig.label {
+        writeln!(out, "\\label{{fig:{}}}", label).unwrap();
+    }
+    writeln!(out, "\\end{{figure}}").unwrap();
+}
+
 fn write_environment(out: &mut String, env: &Environment, section_titles: &HashMap<String, String>) {
     let name = env_kind_name(env.kind);
     if let Some(ref title) = env.title {
@@ -365,6 +387,7 @@ fn block_has_refs(block: &Block) -> bool {
         Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) => fragments_have_refs(fragments),
         Block::List(list) => list_has_refs(list),
         Block::Environment(env) => fragments_have_refs(&env.body),
+        Block::Figure(fig) => fig.caption.as_ref().map_or(false, |c| fragments_have_refs(c)),
         _ => false,
     }
 }
@@ -640,6 +663,40 @@ mod tests {
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textbf{\\hyperref[earth-and-the-solar-system]{Hydrogen creation}}"));
         assert!(tex.contains("\\textit{— abundant}"));
+    }
+
+    // Figures
+
+    #[test]
+    fn compile_figure_full() {
+        let src = ":figure plots/energy.pdf\n  caption: Energy levels.\n  label: fig-energy\n  width: 0.8";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\usepackage{graphicx}"));
+        assert!(tex.contains("\\begin{figure}[htbp]"));
+        assert!(tex.contains("\\centering"));
+        assert!(tex.contains("\\includegraphics[width=0.8\\textwidth]{plots/energy.pdf}"));
+        assert!(tex.contains("\\caption{Energy levels.}"));
+        assert!(tex.contains("\\label{fig:fig-energy}"));
+        assert!(tex.contains("\\end{figure}"));
+    }
+
+    #[test]
+    fn compile_figure_path_only() {
+        let src = ":figure img.png";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\includegraphics[width=1\\textwidth]{img.png}"));
+        assert!(!tex.contains("\\caption"));
+        assert!(!tex.contains("\\label{fig:"));
+    }
+
+    #[test]
+    fn compile_no_graphicx_without_figures() {
+        let src = "Just prose.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(!tex.contains("graphicx"));
     }
 
     // Document metadata

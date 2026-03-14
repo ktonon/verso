@@ -328,7 +328,29 @@ Compiles to `\cite{einstein1905}`. Multiple keys: `cite`einstein1905,dirac1928``
 
 ---
 
-### Theorem-like environments 
+### Figures
+
+Include images with optional captions, labels, and width control:
+
+```
+:figure plots/energy-levels.pdf
+  caption: Energy levels of the hydrogen atom.
+  label: fig-energy-levels
+  width: 0.8
+```
+
+| Property | Default | Notes |
+|----------|---------|-------|
+| `caption:` | (none) | Supports inline formatting (math, bold, etc.) |
+| `label:` | (none) | Prefixed with `fig:` in LaTeX |
+| `width:` | `1.0` | Fraction of `\textwidth` |
+
+Compiles to `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`.
+`\usepackage{graphicx}` is added conditionally when figures are present.
+
+---
+
+### Theorem-like environments
 For theorems, lemmas, definitions, corollaries, and remarks:
 
 ```

@@ -38,6 +38,18 @@ pub enum Block {
     Date(String),
     /// Document abstract: `:abstract` with indented body
     Abstract(Vec<ProseFragment>),
+    /// A figure: `:figure path` with optional caption, label, width
+    Figure(Figure),
+}
+
+/// A figure block.
+#[derive(Debug)]
+pub struct Figure {
+    pub path: String,
+    pub caption: Option<Vec<ProseFragment>>,
+    pub label: Option<String>,
+    pub width: f64,
+    pub span: Span,
 }
 
 /// A theorem-like environment block.

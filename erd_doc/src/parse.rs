@@ -1,6 +1,6 @@
 use crate::ast::{
-    Block, Claim, DimDecl, Document, EnvKind, Environment, List, ListItem, MathBlock, Proof,
-    ProofStep, ProseFragment, Span,
+    Block, Claim, DimDecl, Document, EnvKind, Environment, Figure, List, ListItem, MathBlock,
+    Proof, ProofStep, ProseFragment, Span,
 };
 use crate::dim::Dimension;
 use erd_symbolic::parse_expr;
@@ -114,6 +114,44 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 parse_prose_fragments(&body)?
             };
             blocks.push(Block::Abstract(fragments));
+            continue;
+        }
+
+        // Figure block
+        if trimmed.starts_with(":figure") {
+            let path = trimmed[":figure".len()..].trim().to_string();
+            if path.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":figure requires a file path".into(),
+                });
+            }
+            let fig_line = i + 1;
+            i += 1;
+            let mut caption: Option<Vec<ProseFragment>> = None;
+            let mut label: Option<String> = None;
+            let mut width: f64 = 1.0;
+            while i < lines.len() && is_continuation(&lines[i]) {
+                let kv = lines[i].trim();
+                if let Some(val) = kv.strip_prefix("caption:") {
+                    caption = Some(parse_prose_fragments(val.trim())?);
+                } else if let Some(val) = kv.strip_prefix("label:") {
+                    label = Some(val.trim().to_string());
+                } else if let Some(val) = kv.strip_prefix("width:") {
+                    width = val.trim().parse::<f64>().map_err(|_| ParseDocError {
+                        line: i + 1,
+                        message: "invalid width value".into(),
+                    })?;
+                }
+                i += 1;
+            }
+            blocks.push(Block::Figure(Figure {
+                path,
+                caption,
+                label,
+                width,
+                span: Span { line: fig_line },
+            }));
             continue;
         }
 
@@ -1712,6 +1750,56 @@ More prose here.
     fn parse_title_empty_error() {
         let err = parse_document(":title").unwrap_err();
         assert!(err.message.contains(":title requires"));
+    }
+
+    // Figures
+
+    #[test]
+    fn parse_figure_basic() {
+        let src = ":figure plots/energy.pdf\n  caption: Energy levels.\n  label: fig-energy\n  width: 0.8";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Figure(fig) => {
+                assert_eq!(fig.path, "plots/energy.pdf");
+                assert_eq!(prose_to_string(fig.caption.as_ref().unwrap()), "Energy levels.");
+                assert_eq!(fig.label.as_deref(), Some("fig-energy"));
+                assert!((fig.width - 0.8).abs() < 1e-6);
+            }
+            other => panic!("expected Figure, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_figure_path_only() {
+        let doc = parse_document(":figure img.png").unwrap();
+        match &doc.blocks[0] {
+            Block::Figure(fig) => {
+                assert_eq!(fig.path, "img.png");
+                assert!(fig.caption.is_none());
+                assert!(fig.label.is_none());
+                assert!((fig.width - 1.0).abs() < 1e-6);
+            }
+            other => panic!("expected Figure, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_figure_empty_path_error() {
+        let err = parse_document(":figure").unwrap_err();
+        assert!(err.message.contains(":figure requires"));
+    }
+
+    #[test]
+    fn parse_figure_caption_with_math() {
+        let src = ":figure plot.pdf\n  caption: Energy math`mc**2` shown.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Figure(fig) => {
+                let cap = fig.caption.as_ref().unwrap();
+                assert!(cap.iter().any(|f| matches!(f, ProseFragment::Math(_))));
+            }
+            other => panic!("expected Figure, got {:?}", other),
+        }
     }
 
     #[test]

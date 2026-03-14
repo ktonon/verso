@@ -12,7 +12,7 @@ This feature tracks closing those gaps.
 | M | Feature | Status |
 |---|---------|--------|
 | 1 | Document metadata (title, author, date, abstract) | completed |
-| 2 | Figures with captions and labels | planned |
+| 2 | Figures with captions and labels | completed |
 | 3 | Tables (markdown-style) | planned |
 | 4 | Custom preamble / document class | planned |
 | 5 | Multi-file include | planned |
@@ -181,6 +181,20 @@ Compiles to `\newpage`.
 - `\begin{abstract}...\end{abstract}` emitted with full inline formatting support
 - VSCode grammar: added `directive-metadata` with patterns for all four directives
 - Tests: 7 parse tests + 3 compile tests
+
+## Verification
+
+### M2: Figures (completed)
+
+- Added `Block::Figure(Figure)` with `path`, `caption`, `label`, `width` fields to AST
+- Parser detects `:figure path` directive, collects key-value body lines (`caption:`, `label:`, `width:`)
+- Caption parsed for inline fragments (supports math, bold, etc.)
+- Width defaults to 1.0 (full `\textwidth`)
+- Compiler emits `\begin{figure}[htbp]` with `\centering`, `\includegraphics`, optional `\caption` and `\label{fig:...}`
+- `\usepackage{graphicx}` conditionally added when figures present
+- `block_has_refs` updated to check figure captions
+- VSCode grammar: `directive-figure` with key-value highlighting
+- Tests: 4 parse tests + 3 compile tests
 
 ## Verification
 
