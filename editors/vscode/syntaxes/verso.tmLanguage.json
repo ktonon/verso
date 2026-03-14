@@ -232,6 +232,22 @@
           }
         },
         {
+          "begin": "^(:title)\\s*$",
+          "end": "^(?!\\s|$)",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.directive.title.verso" }
+          },
+          "name": "meta.block.title.verso",
+          "patterns": [
+            {
+              "match": "^\\s+(.+)$",
+              "captures": {
+                "1": { "name": "entity.name.section.title.verso" }
+              }
+            }
+          ]
+        },
+        {
           "match": "^(:author)\\s+(.+)$",
           "captures": {
             "1": { "name": "keyword.control.directive.author.verso" },
@@ -239,7 +255,7 @@
           }
         },
         {
-          "match": "^(:date)\\s+(.+)$",
+          "match": "^(:date)\\s*(.*)$",
           "captures": {
             "1": { "name": "keyword.control.directive.date.verso" },
             "2": { "name": "entity.name.tag.date.verso" }
