@@ -12,3 +12,5 @@ data_training/
 target/
 erd_app/build-date.ts
 erd_viewer/pkg/
+editors/vscode/out/
+editors/vscode/*.vsix
