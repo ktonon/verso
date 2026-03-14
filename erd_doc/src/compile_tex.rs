@@ -68,7 +68,6 @@ pub fn compile_to_tex(doc: &Document) -> String {
 
     // Check if document uses ref tags (to conditionally include hyperref)
     let has_refs = doc.blocks.iter().any(|b| block_has_refs(b));
-    let has_figures = doc.blocks.iter().any(|b| matches!(b, Block::Figure(_)));
 
     // Preamble: document class and packages
     writeln!(out, "\\documentclass[11pt]{{article}}").unwrap();
@@ -81,14 +80,12 @@ pub fn compile_to_tex(doc: &Document) -> String {
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
     writeln!(out, "\\usepackage{{xcolor}}").unwrap();
     writeln!(out, "\\usepackage{{framed}}").unwrap();
-    writeln!(out, "\\usepackage{{bookmark}}").unwrap();
     if has_refs {
         writeln!(out, "\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{{hyperref}}").unwrap();
     }
-    if has_figures {
-        writeln!(out, "\\usepackage{{graphicx}}").unwrap();
-        writeln!(out, "\\usepackage{{wrapfig}}").unwrap();
-    }
+    writeln!(out, "\\usepackage{{bookmark}}").unwrap();
+    writeln!(out, "\\usepackage{{graphicx}}").unwrap();
+    writeln!(out, "\\usepackage{{wrapfig}}").unwrap();
 
     // Layout defaults
     writeln!(out).unwrap();
@@ -920,14 +917,6 @@ mod tests {
         assert!(tex.contains("\\includegraphics[width=1\\textwidth]{img.png}"));
         assert!(!tex.contains("\\caption"));
         assert!(!tex.contains("\\label{fig:"));
-    }
-
-    #[test]
-    fn compile_no_graphicx_without_figures() {
-        let src = "Just prose.";
-        let doc = parse_document(src).unwrap();
-        let tex = compile_to_tex(&doc);
-        assert!(!tex.contains("graphicx"));
     }
 
     // Document metadata
