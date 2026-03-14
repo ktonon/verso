@@ -1,2 +1,2 @@
 [workspace]
-members = ["erd_doc", "erd_symbolic", "erd_training"]
+members = ["verso_doc", "verso_symbolic", "verso_training"]
