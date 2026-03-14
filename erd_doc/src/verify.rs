@@ -1,5 +1,5 @@
 use crate::ast::{Block, Claim, Document, Proof, Span};
-use crate::dim::{check_claim_dim, DimEnv, DimOutcome};
+use crate::dim::{check_claim_dim, collect_units, DimEnv, DimOutcome};
 use crate::eval::spot_check;
 use erd_symbolic::{Expr, RuleSet, simplify};
 
@@ -31,6 +31,8 @@ pub struct VerificationResult {
     pub outcome: Outcome,
     /// Result of dimensional analysis (None if no :dim declarations in document).
     pub dim_outcome: Option<DimOutcome>,
+    /// Unit annotations found in the claim expressions.
+    pub units: Vec<String>,
 }
 
 impl VerificationResult {
@@ -100,11 +102,16 @@ fn verify_claim(
 ) -> VerificationResult {
     let outcome = check_equal(&claim.lhs, &claim.rhs, rules);
     let dim_outcome = dim_env.map(|env| check_claim_dim(&claim.lhs, &claim.rhs, env));
+    let mut units = collect_units(&claim.lhs);
+    units.extend(collect_units(&claim.rhs));
+    units.sort();
+    units.dedup();
     VerificationResult {
         name: claim.name.clone(),
         span: claim.span,
         outcome,
         dim_outcome,
+        units,
     }
 }
 
@@ -144,6 +151,7 @@ fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
                     step_span: to.span,
                 },
                 dim_outcome: None,
+                units: Vec::new(),
             };
         }
     }
@@ -155,6 +163,7 @@ fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
             steps: proof.steps.len(),
         },
         dim_outcome: None,
+        units: Vec::new(),
     }
 }
 
@@ -315,6 +324,21 @@ mod tests {
             "multi-step proof should pass: {:?}",
             report.results
         );
+    }
+
+    #[test]
+    fn verify_claim_collects_units() {
+        let src = ":claim unit_conv\n  1000 [m] = 1 [km]";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.results[0].units, vec!["km", "m"]);
+    }
+
+    #[test]
+    fn verify_claim_no_units_is_empty() {
+        let doc = parse_document(":claim trivial\n  x = x").unwrap();
+        let report = verify_document(&doc);
+        assert!(report.results[0].units.is_empty());
     }
 
     #[test]

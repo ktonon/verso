@@ -597,6 +597,38 @@ mod tests {
     }
 
     #[test]
+    fn display_quantity() {
+        use crate::unit::Unit;
+        use crate::dim::Dimension;
+        let km = Unit {
+            dimension: Dimension::parse("[L]").unwrap(),
+            scale: 1000.0,
+            display: "km".to_string(),
+        };
+        let e = quantity(constant(1.0), km);
+        assert_eq!(format!("{}", e), "1 [km]");
+    }
+
+    #[test]
+    fn collect_units_from_quantity() {
+        use crate::unit::Unit;
+        use crate::dim::Dimension;
+        let km = Unit {
+            dimension: Dimension::parse("[L]").unwrap(),
+            scale: 1000.0,
+            display: "km".to_string(),
+        };
+        let e = quantity(constant(1.0), km);
+        assert_eq!(e.collect_units(), vec!["km"]);
+    }
+
+    #[test]
+    fn collect_units_empty_for_scalar() {
+        let e = scalar("x");
+        assert!(e.collect_units().is_empty());
+    }
+
+    #[test]
     fn display_nested() {
         // x^2 + 2x + 1
         let e = add(

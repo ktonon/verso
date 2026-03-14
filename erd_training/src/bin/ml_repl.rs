@@ -4,9 +4,11 @@ use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
+use erd_symbolic::dim::Dimension;
 use erd_symbolic::fmt::fmt_colored;
 use erd_symbolic::parse_expr;
-use erd_symbolic::{simplify_with_trace, RuleSet, TraceStep};
+use erd_symbolic::unit::base_si_display;
+use erd_symbolic::{simplify_with_trace, Expr, RuleSet, TraceStep};
 use erd_training::ml_simplify::MLSimplifier;
 
 #[derive(Parser)]
@@ -15,13 +17,16 @@ struct Args {
     checkpoint: String,
     #[arg(long, default_value = "ndarray")]
     device: String,
+    /// Show the resolver engine used (beam/ml) after each result
+    #[arg(long, short)]
+    verbose: bool,
 }
 
 fn main() {
     let args = Args::parse();
     match args.device.as_str() {
-        "wgpu" => run::<Wgpu>(args),
-        _ => run::<NdArray>(args),
+        "wgpu" => run::<Wgpu>(&args),
+        _ => run::<NdArray>(&args),
     }
 }
 
@@ -38,7 +43,7 @@ enum HistoryMode {
     Inputs,
 }
 
-fn run<B: burn::prelude::Backend>(args: Args) {
+fn run<B: burn::prelude::Backend>(args: &Args) {
     println!("Loading model from {}...", args.checkpoint);
     let device = B::Device::default();
     let simplifier = MLSimplifier::<B>::load(&args.checkpoint, device);
@@ -109,6 +114,7 @@ fn run<B: burn::prelude::Backend>(args: Args) {
 
                 match parse_expr(input) {
                     Ok(expr) => {
+                        let input_dim = expr.first_unit().map(|u| u.dimension.clone());
                         let (simplified, trace, engine) = match mode {
                             Mode::Hybrid => {
                                 if show_debug {
@@ -182,11 +188,13 @@ fn run<B: burn::prelude::Backend>(args: Args) {
                             print_trace(&trace);
                         }
 
-                        println!(
-                            "{}  \x1b[90m[{}]\x1b[0m\n",
-                            fmt_colored(&simplified),
-                            engine
-                        );
+                        let unit_suffix = format_unit_suffix(&simplified, input_dim.as_ref());
+                        let engine_suffix = if args.verbose {
+                            format!("  \x1b[90m[{}]\x1b[0m", engine)
+                        } else {
+                            String::new()
+                        };
+                        println!("{}{}{}\n", fmt_colored(&simplified), unit_suffix, engine_suffix);
                         record_result(&mut result_history, &mut rl, history_mode, &simplified);
                     }
                     Err(err) => {
@@ -198,6 +206,24 @@ fn run<B: burn::prelude::Backend>(args: Args) {
             Err(_) => break,
         }
     }
+}
+
+/// Build a unit suffix for the simplified result.
+///
+/// When the input had unit annotations (Quantity nodes), the simplifier folds
+/// them into plain rationals by multiplying in the SI scale. We recover the
+/// base SI unit from the input dimension and display it.
+/// E.g., `4 [km]` → simplified `4000` → displayed `4000 [m]`.
+fn format_unit_suffix(simplified: &Expr, input_dim: Option<&Dimension>) -> String {
+    let dim = match input_dim {
+        Some(d) => d,
+        None => return String::new(),
+    };
+    // If the simplified expr still has units, the formatter shows them already
+    if simplified.first_unit().is_some() {
+        return String::new();
+    }
+    format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
 }
 
 fn print_trace(trace: &[TraceStep]) {

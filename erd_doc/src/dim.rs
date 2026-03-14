@@ -232,6 +232,11 @@ fn collect_undeclared_inner(expr: &Expr, env: &DimEnv, out: &mut Vec<String>) {
     }
 }
 
+/// Collect all unit display names from Quantity nodes in an expression.
+pub fn collect_units(expr: &Expr) -> Vec<String> {
+    expr.collect_units()
+}
+
 /// Try to extract an integer value from an expression.
 fn expr_as_integer(expr: &Expr) -> Option<i32> {
     match expr {
@@ -447,6 +452,38 @@ mod tests {
         let lhs = parse_expr("F").unwrap();
         let rhs = parse_expr("10 [N]").unwrap();
         assert!(check_claim_dim(&lhs, &rhs, &env).passed());
+    }
+
+    #[test]
+    fn collect_units_from_quantity() {
+        let expr = parse_expr("1000 [m]").unwrap();
+        let units = collect_units(&expr);
+        assert_eq!(units, vec!["m"]);
+    }
+
+    #[test]
+    fn collect_units_from_both_sides() {
+        let lhs = parse_expr("1000 [m]").unwrap();
+        let rhs = parse_expr("1 [km]").unwrap();
+        let mut units = collect_units(&lhs);
+        units.extend(collect_units(&rhs));
+        units.sort();
+        units.dedup();
+        assert_eq!(units, vec!["km", "m"]);
+    }
+
+    #[test]
+    fn collect_units_empty_for_pure_expr() {
+        let expr = parse_expr("x + y").unwrap();
+        let units = collect_units(&expr);
+        assert!(units.is_empty());
+    }
+
+    #[test]
+    fn collect_units_compound() {
+        let expr = parse_expr("3*10^8 [m/s]").unwrap();
+        let units = collect_units(&expr);
+        assert_eq!(units, vec!["m/s"]);
     }
 
     #[test]

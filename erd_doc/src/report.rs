@@ -13,6 +13,13 @@ impl<'a> fmt::Display for ReportFormatter<'a> {
 
         for result in &self.report.results {
             write_result(f, result)?;
+            if !result.units.is_empty() {
+                writeln!(
+                    f,
+                    "    \x1b[36munits: {}\x1b[0m",
+                    result.units.join(", ")
+                )?;
+            }
             if let Some(ref dim) = result.dim_outcome {
                 write_dim_outcome(f, dim)?;
             }

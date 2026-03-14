@@ -1,7 +1,10 @@
+use crate::dim::Dimension;
+use crate::expr::Expr;
 use crate::fmt::fmt_colored;
 use crate::parser::parse_expr;
 use crate::rule::RuleSet;
 use crate::search;
+use crate::unit::base_si_display;
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
@@ -55,6 +58,7 @@ pub fn run() -> Result<(), ReadlineError> {
 
                 match parse_expr(input) {
                     Ok(expr) => {
+                        let input_dim = expr.first_unit().map(|u| u.dimension.clone());
                         if show_trace {
                             let (simplified, trace) =
                                 search::simplify_with_trace(&expr, &RuleSet::full());
@@ -94,7 +98,8 @@ pub fn run() -> Result<(), ReadlineError> {
                             record_result(&mut result_history, &mut rl, history_mode, &simplified);
                         } else {
                             let simplified = search::simplify(&expr, &RuleSet::full());
-                            println!("{}\n", fmt_colored(&simplified));
+                            let unit_suffix = format_unit_suffix(&simplified, input_dim.as_ref());
+                            println!("{}{}\n", fmt_colored(&simplified), unit_suffix);
                             record_result(&mut result_history, &mut rl, history_mode, &simplified);
                         }
                     }
@@ -138,6 +143,18 @@ fn record_result(
     if history_mode == HistoryMode::Results {
         let _ = rl.add_history_entry(rendered);
     }
+}
+
+fn format_unit_suffix(simplified: &Expr, input_dim: Option<&Dimension>) -> String {
+    let dim = match input_dim {
+        Some(d) => d,
+        None => return String::new(),
+    };
+    // If the simplified expr still has units, the formatter shows them already
+    if simplified.first_unit().is_some() {
+        return String::new();
+    }
+    format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
 }
 
 fn reload_history(rl: &mut DefaultEditor, entries: &[String]) {

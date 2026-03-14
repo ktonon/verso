@@ -294,9 +294,80 @@ impl Unit {
     }
 }
 
+impl Unit {
+    /// Given a unit symbol (e.g., "km", "kN"), return the base SI unit string
+    /// for the same dimension (e.g., "m", "N").
+    pub fn base_si_for_symbol(symbol: &str) -> Option<String> {
+        let (dim, _) = lookup_unit(symbol)?;
+        Some(base_si_display(&dim))
+    }
+}
+
 impl fmt::Display for Unit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.display)
+    }
+}
+
+/// Build the base SI unit string for a dimension.
+///
+/// Prefers named derived units (N, J, W, Pa, Hz, C, V, Ohm) when the dimension
+/// matches exactly. Otherwise constructs from base SI units (m, kg, s, K, A, mol, cd).
+pub fn base_si_display(dim: &Dimension) -> String {
+    if dim.is_dimensionless() {
+        return "1".to_string();
+    }
+
+    // Check derived units first
+    for entry in DERIVED_UNITS {
+        let mut d = Dimension::dimensionless();
+        for &(base, exp) in entry.dimension {
+            d = d.mul(&Dimension::single(base, exp));
+        }
+        if d == *dim {
+            return entry.symbol.to_string();
+        }
+    }
+
+    // Build from base SI units
+    let base_sym = |b: &BaseDim| -> &str {
+        match b {
+            BaseDim::L => "m",
+            BaseDim::M => "kg",
+            BaseDim::T => "s",
+            BaseDim::Theta => "K",
+            BaseDim::I => "A",
+            BaseDim::N => "mol",
+            BaseDim::J => "cd",
+        }
+    };
+
+    let mut num = Vec::new();
+    let mut den = Vec::new();
+    for (&b, &e) in dim.exponents() {
+        let sym = base_sym(&b);
+        if e > 0 {
+            if e == 1 {
+                num.push(sym.to_string());
+            } else {
+                num.push(format!("{}^{}", sym, e));
+            }
+        } else {
+            let abs = -e;
+            if abs == 1 {
+                den.push(sym.to_string());
+            } else {
+                den.push(format!("{}^{}", sym, abs));
+            }
+        }
+    }
+
+    if num.is_empty() {
+        format!("1/{}", den.join("*"))
+    } else if den.is_empty() {
+        num.join("*")
+    } else {
+        format!("{}/{}", num.join("*"), den.join("*"))
     }
 }
 
@@ -453,6 +524,32 @@ mod tests {
         let (val, unit) = best_prefix(1.5e6, "Hz");
         assert_eq!(unit, "MHz");
         assert!((val - 1.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn base_si_for_prefixed_base() {
+        assert_eq!(Unit::base_si_for_symbol("km").unwrap(), "m");
+        assert_eq!(Unit::base_si_for_symbol("mg").unwrap(), "kg");
+        assert_eq!(Unit::base_si_for_symbol("ns").unwrap(), "s");
+    }
+
+    #[test]
+    fn base_si_for_derived() {
+        assert_eq!(Unit::base_si_for_symbol("N").unwrap(), "N");
+        assert_eq!(Unit::base_si_for_symbol("kN").unwrap(), "N");
+        assert_eq!(Unit::base_si_for_symbol("MHz").unwrap(), "Hz");
+    }
+
+    #[test]
+    fn base_si_for_base_unit() {
+        assert_eq!(Unit::base_si_for_symbol("m").unwrap(), "m");
+        assert_eq!(Unit::base_si_for_symbol("s").unwrap(), "s");
+        assert_eq!(Unit::base_si_for_symbol("kg").unwrap(), "kg");
+    }
+
+    #[test]
+    fn base_si_unknown_returns_none() {
+        assert!(Unit::base_si_for_symbol("xyz").is_none());
     }
 
     #[test]

@@ -149,6 +149,50 @@ impl Expr {
         }
     }
 
+    /// Collect all unit display names from Quantity nodes in this expression.
+    pub fn collect_units(&self) -> Vec<String> {
+        let mut units = Vec::new();
+        self.collect_units_inner(&mut units);
+        units.sort();
+        units.dedup();
+        units
+    }
+
+    fn collect_units_inner(&self, out: &mut Vec<String>) {
+        match self {
+            Expr::Quantity(inner, unit) => {
+                out.push(unit.display.clone());
+                inner.collect_units_inner(out);
+            }
+            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+                a.collect_units_inner(out);
+                b.collect_units_inner(out);
+            }
+            Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => {
+                inner.collect_units_inner(out);
+            }
+            Expr::FnN(_, args) => {
+                for arg in args {
+                    arg.collect_units_inner(out);
+                }
+            }
+            Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => {}
+        }
+    }
+
+    /// Return the first Unit found in the expression tree, if any.
+    pub fn first_unit(&self) -> Option<&Unit> {
+        match self {
+            Expr::Quantity(_, unit) => Some(unit),
+            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+                a.first_unit().or_else(|| b.first_unit())
+            }
+            Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => inner.first_unit(),
+            Expr::FnN(_, args) => args.iter().find_map(|a| a.first_unit()),
+            Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => None,
+        }
+    }
+
     pub fn precedence(&self) -> u8 {
         match self {
             Expr::Rational(_)
