@@ -477,7 +477,7 @@
           "name": "constant.language.euler.erd"
         },
         {
-          "match": "\\b\\d+(\\.\\d+)?",
+          "match": "\\b\\d[\\d_]*(\\.[\\d_]+)?",
           "name": "constant.numeric.erd"
         },
         {

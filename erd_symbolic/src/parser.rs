@@ -79,6 +79,9 @@ fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
                 if c.is_ascii_digit() {
                     s.push(c);
                     chars.next();
+                } else if c == '_' {
+                    // Skip visual separators (e.g. 1_000_000)
+                    chars.next();
                 } else if c == '.' {
                     dot_count += 1;
                     if dot_count > 1 {
@@ -1284,5 +1287,23 @@ mod tests {
     fn parse_unknown_unit_is_error() {
         // Unknown unit symbol should fail
         assert!(parse_expr("3000 [kg/zm^3]").is_err());
+    }
+
+    #[test]
+    fn parse_underscore_in_number() {
+        let e = parse_expr("1_000_000").unwrap();
+        assert_eq!(e, constant(1_000_000.0));
+    }
+
+    #[test]
+    fn parse_underscore_in_decimal() {
+        let e = parse_expr("1_000.5").unwrap();
+        assert_eq!(e, constant(1_000.5));
+    }
+
+    #[test]
+    fn parse_underscore_in_expression() {
+        let e = parse_expr("2 * 1_000").unwrap();
+        assert_eq!(e, mul(constant(2.0), constant(1_000.0)));
     }
 }
