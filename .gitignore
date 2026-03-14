@@ -1,16 +1,6 @@
-dist/
-env.sh
 node_modules/
-public/*.webm
-public/*.webp
-public/erd_viewer*
-scripts/.cdk-outputs.json
-__pycache__/
-*.egg-info/
 checkpoints/
 data_training/
 target/
-erd_app/build-date.ts
-erd_viewer/pkg/
 editors/vscode/out/
 editors/vscode/*.vsix

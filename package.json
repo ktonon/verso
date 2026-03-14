@@ -1,7 +1,7 @@
 {
-	"name": "emergent-rung-dynamics",
+	"name": "verso",
 	"version": "0.1.0",
-	"description": "Provisional implementation of Emergent Rung Model Space",
+	"description": "Verso — verifiable source for scientific papers",
 	"type": "module",
 	"scripts": {
 		"build:data:round1": "cargo run --release --bin gen_data -- --count 10000 --seed 42 --min-complexity 3 --max-complexity 12",

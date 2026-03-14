@@ -413,14 +413,14 @@ fn simplify(expr: &Expr, model: &SimplificationModel<B>, rules: &RuleSet) -> Exp
 
 ### Rust Components
 
-**erd_symbolic** (rule engine):
+**verso_symbolic** (rule engine):
 1. **Tokenizer**: `Expr → Vec<Token>` and reverse, with De Bruijn variable canonicalization
 2. **Position mapper**: pre-order index ↔ AST path, `subexpr_at()` and `replace_subexpr()`
 3. **Random expression generator**: for training data, with configurable depth/type distributions
 4. **Randomized beam search**: shuffled rule order, stochastic beam selection, multi-run
 5. **Trace exporter**: serialize traces with position annotations to JSONL
 
-**erd_training** (ML pipeline):
+**verso_training** (ML pipeline):
 1. **Data loader**: read JSONL files, create Burn Dataset + Batcher with padding
 2. **Model definition**: transformer encoder-decoder (Burn Module)
 3. **Supervised training loop**: cross-entropy with cosine LR schedule
@@ -569,8 +569,8 @@ RL training automatically resumes from `rl_best.mpk` if it exists, restoring epo
 | **M1** | Tokenizer + position mapper | Rust: `Expr ↔ tokens`, AST path ↔ pre-order index, De Bruijn canonicalization | **Done** — `token.rs` |
 | **M2** | Randomized beam search | Rust: shuffled rule order, stochastic selection, multi-run traces | **Done** — `random_search.rs` |
 | **M3** | Training data generator | Rust: random AST + trace export to JSON with position annotations | **Done** — `gen_expr.rs`, `training_data.rs`, `bin/gen_data.rs` |
-| **M4** | Supervised baseline model | Rust: Burn transformer encoder-decoder trained on beam search traces | **Done** — `erd_training/src/model.rs`, `train.rs` |
-| **M5** | Sequence validation harness | Rust: apply predicted action sequences, compute reward via direct function calls | **Done** — `validate.rs`, `erd_training/src/evaluate.rs` |
-| **M6** | Self-play training | Rust: REINFORCE with Burn autograd and direct validation | **Done** — `erd_training/src/rl_train.rs` |
+| **M4** | Supervised baseline model | Rust: Burn transformer encoder-decoder trained on beam search traces | **Done** — `verso_training/src/model.rs`, `train.rs` |
+| **M5** | Sequence validation harness | Rust: apply predicted action sequences, compute reward via direct function calls | **Done** — `validate.rs`, `verso_training/src/evaluate.rs` |
+| **M6** | Self-play training | Rust: REINFORCE with Burn autograd and direct validation | **Done** — `verso_training/src/rl_train.rs` |
 | **M7** | ~~ONNX inference~~ | Native Rust inference — free with Burn (no export needed) | **Done** |
-| **M8** | Production integration | Rust: ML simplify with beam search fallback | **Done** — `erd_training/src/ml_simplify.rs`, `bin/ml_repl.rs` |
+| **M8** | Production integration | Rust: ML simplify with beam search fallback | **Done** — `verso_training/src/ml_simplify.rs`, `bin/ml_repl.rs` |
