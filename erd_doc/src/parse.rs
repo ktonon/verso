@@ -61,6 +61,62 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // Document metadata
+        if trimmed.starts_with(":title") {
+            let text = trimmed[":title".len()..].trim().to_string();
+            if text.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":title requires text".into(),
+                });
+            }
+            blocks.push(Block::Title(text));
+            i += 1;
+            continue;
+        }
+        if trimmed.starts_with(":author") {
+            let text = trimmed[":author".len()..].trim().to_string();
+            if text.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":author requires a name".into(),
+                });
+            }
+            blocks.push(Block::Author(text));
+            i += 1;
+            continue;
+        }
+        if trimmed.starts_with(":date") {
+            let text = trimmed[":date".len()..].trim().to_string();
+            if text.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":date requires a value".into(),
+                });
+            }
+            blocks.push(Block::Date(text));
+            i += 1;
+            continue;
+        }
+        if trimmed.starts_with(":abstract") {
+            i += 1;
+            let mut body = String::new();
+            while i < lines.len() && is_continuation(&lines[i]) {
+                if !body.is_empty() {
+                    body.push(' ');
+                }
+                body.push_str(lines[i].trim());
+                i += 1;
+            }
+            let fragments = if body.is_empty() {
+                Vec::new()
+            } else {
+                parse_prose_fragments(&body)?
+            };
+            blocks.push(Block::Abstract(fragments));
+            continue;
+        }
+
         // Claim block
         if trimmed.starts_with(":claim") {
             let name = trimmed[":claim".len()..].trim().to_string();
@@ -1595,6 +1651,67 @@ More prose here.
             }
             _ => panic!("expected Prose"),
         }
+    }
+
+    // Document metadata
+
+    #[test]
+    fn parse_title() {
+        let doc = parse_document(":title My Great Paper").unwrap();
+        assert!(matches!(&doc.blocks[0], Block::Title(t) if t == "My Great Paper"));
+    }
+
+    #[test]
+    fn parse_author() {
+        let doc = parse_document(":author Alice Smith").unwrap();
+        assert!(matches!(&doc.blocks[0], Block::Author(a) if a == "Alice Smith"));
+    }
+
+    #[test]
+    fn parse_multiple_authors() {
+        let doc = parse_document(":author Alice Smith\n:author Bob Jones").unwrap();
+        assert_eq!(doc.blocks.len(), 2);
+        assert!(matches!(&doc.blocks[0], Block::Author(a) if a == "Alice Smith"));
+        assert!(matches!(&doc.blocks[1], Block::Author(a) if a == "Bob Jones"));
+    }
+
+    #[test]
+    fn parse_date() {
+        let doc = parse_document(":date 2026-03-13").unwrap();
+        assert!(matches!(&doc.blocks[0], Block::Date(d) if d == "2026-03-13"));
+    }
+
+    #[test]
+    fn parse_abstract() {
+        let src = ":abstract\n  We present a novel approach\n  to computing corrections.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Abstract(fragments) => {
+                assert_eq!(
+                    prose_to_string(fragments),
+                    "We present a novel approach to computing corrections."
+                );
+            }
+            other => panic!("expected Abstract, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_abstract_with_inline_math() {
+        let src = ":abstract\n  We study math`x**2 + 1` in detail.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Abstract(fragments) => {
+                assert!(fragments.iter().any(|f| matches!(f, ProseFragment::Math(_))));
+            }
+            other => panic!("expected Abstract, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_title_empty_error() {
+        let err = parse_document(":title").unwrap_err();
+        assert!(err.message.contains(":title requires"));
     }
 
     #[test]

@@ -31,6 +31,34 @@ either structural (headings, directives) or content (prose, math, claims, proofs
 
 ---
 
+### Document metadata
+
+Front matter directives define the document's title, authors, date, and abstract.
+These can appear anywhere in the source but always compile to the LaTeX preamble
+and front matter.
+
+```
+:title Quantum Corrections to the Classical Limit
+:author Alice Smith
+:author Bob Jones
+:date 2026-03-13
+:abstract
+  We present a novel approach to computing quantum corrections
+  in the semiclassical regime.
+```
+
+| Directive | LaTeX output | Notes |
+|-----------|-------------|-------|
+| `:title text` | `\title{text}` | Required for `\maketitle` |
+| `:author name` | `\author{name}` | Multiple authors joined with `\and` |
+| `:date text` | `\date{text}` | Optional; omitted → no date |
+| `:abstract` | `\begin{abstract}...\end{abstract}` | Indented body, supports inline formatting |
+
+When any of `:title`, `:author`, or `:date` is present, `\maketitle` is emitted
+after `\begin{document}`.
+
+---
+
 ### Headings
 
 ```

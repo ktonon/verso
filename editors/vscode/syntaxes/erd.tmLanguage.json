@@ -10,6 +10,7 @@
     { "include": "#directive-proof" },
     { "include": "#directive-dim" },
     { "include": "#directive-bibliography" },
+    { "include": "#directive-metadata" },
     { "include": "#directive-environment" },
     { "include": "#block-quote" },
     { "include": "#list-bullet" },
@@ -140,6 +141,43 @@
         "1": { "name": "keyword.control.directive.bibliography.erd" },
         "2": { "name": "string.unquoted.path.erd" }
       }
+    },
+
+    "directive-metadata": {
+      "patterns": [
+        {
+          "match": "^(:title)\\s+(.+)$",
+          "captures": {
+            "1": { "name": "keyword.control.directive.title.erd" },
+            "2": { "name": "entity.name.section.title.erd" }
+          }
+        },
+        {
+          "match": "^(:author)\\s+(.+)$",
+          "captures": {
+            "1": { "name": "keyword.control.directive.author.erd" },
+            "2": { "name": "entity.name.tag.author.erd" }
+          }
+        },
+        {
+          "match": "^(:date)\\s+(.+)$",
+          "captures": {
+            "1": { "name": "keyword.control.directive.date.erd" },
+            "2": { "name": "entity.name.tag.date.erd" }
+          }
+        },
+        {
+          "begin": "^(:abstract)\\s*$",
+          "end": "^(?!\\s)|^\\s*$",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.directive.abstract.erd" }
+          },
+          "name": "meta.block.abstract.erd",
+          "patterns": [
+            { "include": "#prose-inline" }
+          ]
+        }
+      ]
     },
 
     "directive-environment": {

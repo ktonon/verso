@@ -30,6 +30,14 @@ pub enum Block {
     Environment(Environment),
     /// A block quote: lines starting with `> `.
     BlockQuote(Vec<ProseFragment>),
+    /// Document title: `:title text`
+    Title(String),
+    /// Document author: `:author name`
+    Author(String),
+    /// Document date: `:date text`
+    Date(String),
+    /// Document abstract: `:abstract` with indented body
+    Abstract(Vec<ProseFragment>),
 }
 
 /// A theorem-like environment block.

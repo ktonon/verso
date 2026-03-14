@@ -47,6 +47,22 @@ pub fn compile_to_tex(doc: &Document) -> String {
         }
     }
 
+    // Collect metadata
+    let mut title: Option<&str> = None;
+    let mut authors: Vec<&str> = Vec::new();
+    let mut date: Option<&str> = None;
+    let mut abstract_fragments: Option<&Vec<ProseFragment>> = None;
+    for block in &doc.blocks {
+        match block {
+            Block::Title(t) => title = Some(t),
+            Block::Author(a) => authors.push(a),
+            Block::Date(d) => date = Some(d),
+            Block::Abstract(frags) => abstract_fragments = Some(frags),
+            _ => {}
+        }
+    }
+    let has_metadata = title.is_some() || !authors.is_empty() || date.is_some();
+
     // Check if document uses ref tags (to conditionally include hyperref)
     let has_refs = doc.blocks.iter().any(|b| block_has_refs(b));
 
@@ -55,6 +71,22 @@ pub fn compile_to_tex(doc: &Document) -> String {
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
     if has_refs {
         writeln!(out, "\\usepackage{{hyperref}}").unwrap();
+    }
+
+    // Title block in preamble
+    if let Some(t) = title {
+        writeln!(out).unwrap();
+        writeln!(out, "\\title{{{}}}", escape_prose(t)).unwrap();
+    }
+    if !authors.is_empty() {
+        let joined = authors.iter()
+            .map(|a| escape_prose(a))
+            .collect::<Vec<_>>()
+            .join(" \\and ");
+        writeln!(out, "\\author{{{}}}", joined).unwrap();
+    }
+    if let Some(d) = date {
+        writeln!(out, "\\date{{{}}}", d).unwrap();
     }
 
     // Collect used environment kinds for \newtheorem declarations
@@ -79,6 +111,19 @@ pub fn compile_to_tex(doc: &Document) -> String {
     writeln!(out).unwrap();
     writeln!(out, "\\begin{{document}}").unwrap();
 
+    if has_metadata {
+        writeln!(out).unwrap();
+        writeln!(out, "\\maketitle").unwrap();
+    }
+
+    if let Some(frags) = abstract_fragments {
+        writeln!(out).unwrap();
+        writeln!(out, "\\begin{{abstract}}").unwrap();
+        write_prose_fragments(&mut out, frags, &section_titles);
+        writeln!(out).unwrap();
+        writeln!(out, "\\end{{abstract}}").unwrap();
+    }
+
     for block in &doc.blocks {
         writeln!(out).unwrap();
         match block {
@@ -94,7 +139,8 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Proof(proof) => {
                 write_proof(&mut out, proof);
             }
-            Block::Dim(_) => {} // metadata, no LaTeX output
+            Block::Dim(_) => {}
+            Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_) => {}
             Block::List(list) => {
                 write_list(&mut out, list, &section_titles);
             }
@@ -316,7 +362,7 @@ fn fragments_have_refs(fragments: &[ProseFragment]) -> bool {
 /// Check if a block contains any Ref prose fragments.
 fn block_has_refs(block: &Block) -> bool {
     match block {
-        Block::Prose(fragments) | Block::BlockQuote(fragments) => fragments_have_refs(fragments),
+        Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) => fragments_have_refs(fragments),
         Block::List(list) => list_has_refs(list),
         Block::Environment(env) => fragments_have_refs(&env.body),
         _ => false,
@@ -594,6 +640,40 @@ mod tests {
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\textbf{\\hyperref[earth-and-the-solar-system]{Hydrogen creation}}"));
         assert!(tex.contains("\\textit{— abundant}"));
+    }
+
+    // Document metadata
+
+    #[test]
+    fn compile_full_metadata() {
+        let src = ":title My Paper\n:author Alice\n:author Bob\n:date 2026\n:abstract\n  Some abstract text.\n\nBody here.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\title{My Paper}"));
+        assert!(tex.contains("\\author{Alice \\and Bob}"));
+        assert!(tex.contains("\\date{2026}"));
+        assert!(tex.contains("\\maketitle"));
+        assert!(tex.contains("\\begin{abstract}"));
+        assert!(tex.contains("Some abstract text."));
+        assert!(tex.contains("\\end{abstract}"));
+    }
+
+    #[test]
+    fn compile_no_metadata_no_maketitle() {
+        let src = "Just some prose.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(!tex.contains("\\maketitle"));
+    }
+
+    #[test]
+    fn compile_abstract_with_math() {
+        let src = ":title T\n:abstract\n  We study math`x**2`.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("\\begin{abstract}"));
+        assert!(tex.contains("$x^{2}$"));
+        assert!(tex.contains("\\end{abstract}"));
     }
 
     #[test]

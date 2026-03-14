@@ -11,7 +11,7 @@ This feature tracks closing those gaps.
 
 | M | Feature | Status |
 |---|---------|--------|
-| 1 | Document metadata (title, author, date, abstract) | planned |
+| 1 | Document metadata (title, author, date, abstract) | completed |
 | 2 | Figures with captions and labels | planned |
 | 3 | Tables (markdown-style) | planned |
 | 4 | Custom preamble / document class | planned |
@@ -172,7 +172,15 @@ Compiles to `\newpage`.
 
 ## Implementation Notes
 
-*(to be filled in as milestones are completed)*
+### M1: Document metadata (completed)
+
+- Added `Block::Title`, `Block::Author`, `Block::Date`, `Block::Abstract` to AST
+- Parser handles `:title`, `:author`, `:date` as single-line directives; `:abstract` collects indented continuation lines and parses inline fragments
+- Compiler collects all metadata blocks in a first pass, emits `\title{}`, `\author{}` (joined with `\and`), `\date{}` in preamble
+- `\maketitle` emitted after `\begin{document}` when any metadata present
+- `\begin{abstract}...\end{abstract}` emitted with full inline formatting support
+- VSCode grammar: added `directive-metadata` with patterns for all four directives
+- Tests: 7 parse tests + 3 compile tests
 
 ## Verification
 
