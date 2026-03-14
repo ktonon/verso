@@ -91,16 +91,16 @@ Planets form through accretion in protoplanetary disks.
 ### Phase 1: Section labels and ref tag (M1)
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `ProseFragment::Ref { label, display: Option<String> }`
-- `erd_doc/src/parse.rs` — add `"ref"` to `find_tagged_backtick` tag list; parse
+- `verso_doc/src/ast.rs` — add `ProseFragment::Ref { label, display: Option<String> }`
+- `verso_doc/src/parse.rs` — add `"ref"` to `find_tagged_backtick` tag list; parse
   `ref`label`` and `ref`label|text`` (split on first `|`)
-- `erd_doc/src/compile_tex.rs`:
+- `verso_doc/src/compile_tex.rs`:
   - Add `slugify(title) -> String` function
   - Headings emit `\label{slug}` after `\section{Title}`
   - Build section label→title map for auto-resolving ref display text
   - `Ref` compiles to `\hyperref[label]{text}`
   - Add `\usepackage{hyperref}` to preamble when refs are present
-- `erd_doc/src/report.rs` — handle `Ref` in `prose_to_string` if needed
+- `verso_doc/src/report.rs` — handle `Ref` in `prose_to_string` if needed
 
 **Design decisions:**
 - No `sec:` prefix on labels — matches user's LaTeX convention directly
@@ -139,5 +139,5 @@ Planets form through accretion in protoplanetary disks.
 ## Verification
 
 ```bash
-cargo test --package erd_doc
+cargo test --package verso_doc
 ```

@@ -9,12 +9,12 @@ code folding, and snippets.
 ## Current State (Audit)
 
 The extension currently provides:
-- **LSP client** connecting to `erd_lsp` for diagnostics (parse errors, claim verification, dimensional analysis)
-- **File association** for `.erd` files
+- **LSP client** connecting to `verso_lsp` for diagnostics (parse errors, claim verification, dimensional analysis)
+- **File association** for `.verso` files
 - **Minimal language config** with bracket/paren auto-closing
 
 What's missing or broken:
-- **No syntax highlighting** — `.erd` files render as plain text
+- **No syntax highlighting** — `.verso` files render as plain text
 - **Wrong comment syntax** — configured as `//` but ERD uses `%`
 - **No code folding** — blocks, environments, lists can't be collapsed
 - **Missing bracket pairs** — no `{ }` matching
@@ -50,7 +50,7 @@ Fix incorrect settings and add missing features to `language-configuration.json`
 - Add `wordPattern` for ERD identifiers
 
 **Tests:**
-- Manual: open `.erd` file, verify `Cmd+/` inserts `% ` not `// `
+- Manual: open `.verso` file, verify `Cmd+/` inserts `% ` not `// `
 - Manual: verify `{` auto-closes to `}`
 - Manual: verify folding arrows appear on claims, proofs, environments
 
@@ -70,20 +70,20 @@ Create a TextMate grammar for block-level syntax highlighting.
 
 | ERD construct | TextMate scope |
 |--------------|----------------|
-| `# Heading` | `markup.heading.N.erd` (N=1-4) |
-| `% comment` | `comment.line.percentage.erd` |
-| `:claim name` | `keyword.control.directive.erd` + `entity.name.tag.erd` |
-| `:proof name` | `keyword.control.directive.erd` + `entity.name.tag.erd` |
-| `:dim var [dims]` | `keyword.control.directive.erd` + `variable.other.erd` + `support.type.erd` |
-| `:bibliography path` | `keyword.control.directive.erd` + `string.unquoted.erd` |
-| `:theorem Title` | `keyword.control.directive.erd` + `entity.name.section.erd` |
+| `# Heading` | `markup.heading.N.verso` (N=1-4) |
+| `% comment` | `comment.line.percentage.verso` |
+| `:claim name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
+| `:proof name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
+| `:dim var [dims]` | `keyword.control.directive.verso` + `variable.other.verso` + `support.type.verso` |
+| `:bibliography path` | `keyword.control.directive.verso` + `string.unquoted.verso` |
+| `:theorem Title` | `keyword.control.directive.verso` + `entity.name.section.verso` |
 | (same for `:lemma`, `:definition`, `:corollary`, `:remark`, `:example`) | same pattern |
-| ` ```math ` | `punctuation.definition.fenced.erd` |
-| `> block quote` | `markup.quote.erd` |
-| `- list item` | `markup.list.unnumbered.erd` |
-| `1. list item` | `markup.list.numbered.erd` |
-| `= step` (in proofs) | `keyword.operator.proof-step.erd` |
-| `; justification` | `comment.line.justification.erd` |
+| ` ```math ` | `punctuation.definition.fenced.verso` |
+| `> block quote` | `markup.quote.verso` |
+| `- list item` | `markup.list.unnumbered.verso` |
+| `1. list item` | `markup.list.numbered.verso` |
+| `= step` (in proofs) | `keyword.operator.proof-step.verso` |
+| `; justification` | `comment.line.justification.verso` |
 
 **Design decisions:**
 - Use standard TextMate scope naming conventions so existing color themes work out of the box
@@ -92,7 +92,7 @@ Create a TextMate grammar for block-level syntax highlighting.
 - Grammar is a single JSON file using `patterns` and `repository` for organization
 
 **Tests:**
-- Manual: open an `.erd` file and verify headings, directives, and comments are colored
+- Manual: open an `.verso` file and verify headings, directives, and comments are colored
 - Verify grammar loads without errors in Developer Tools console
 
 **Estimated scope:** ~200 lines.
@@ -110,22 +110,22 @@ Extend the grammar with inline highlighting within prose and math contexts.
 
 | ERD construct | TextMate scope |
 |--------------|----------------|
-| `` math`...` `` | `markup.inline.math.erd` (tag: `support.function.tag.erd`, content: `meta.embedded.math.erd`) |
-| `` tex`...` `` | `markup.inline.tex.erd` |
-| `` claim`...` `` | `markup.inline.claim-ref.erd` |
-| `` cite`...` `` | `markup.inline.citation.erd` |
-| `**bold**` | `markup.bold.erd` |
-| `*italic*` | `markup.italic.erd` |
-| `^[footnote]` | `markup.other.footnote.erd` |
+| `` math`...` `` | `markup.inline.math.verso` (tag: `support.function.tag.verso`, content: `meta.embedded.math.verso`) |
+| `` tex`...` `` | `markup.inline.tex.verso` |
+| `` claim`...` `` | `markup.inline.claim-ref.verso` |
+| `` cite`...` `` | `markup.inline.citation.verso` |
+| `**bold**` | `markup.bold.verso` |
+| `*italic*` | `markup.italic.verso` |
+| `^[footnote]` | `markup.other.footnote.verso` |
 | Claim body expressions | operators, numbers, functions, variables |
 
 **Expression sub-grammar (inside claims, proofs, math blocks):**
-- Numbers: `constant.numeric.erd`
-- Operators (`+`, `-`, `*`, `/`, `**`, `^`, `=`): `keyword.operator.erd`
-- Known functions (`sin`, `cos`, `sqrt`, etc.): `support.function.math.erd`
-- Constants (`pi`, `e`): `constant.language.erd`
-- Variables: `variable.other.erd`
-- Parentheses/brackets: `punctuation.erd`
+- Numbers: `constant.numeric.verso`
+- Operators (`+`, `-`, `*`, `/`, `**`, `^`, `=`): `keyword.operator.verso`
+- Known functions (`sin`, `cos`, `sqrt`, etc.): `support.function.math.verso`
+- Constants (`pi`, `e`): `constant.language.verso`
+- Variables: `variable.other.verso`
+- Parentheses/brackets: `punctuation.verso`
 
 **Design decisions:**
 - Expression highlighting is shared between claims, proofs, and math blocks via a `#math-expression` repository rule
@@ -181,6 +181,6 @@ adds convenience features. Each phase is independently shippable.
 
 After each phase:
 1. Run `npm run vscode:install` to rebuild and reinstall
-2. Open an `.erd` file (e.g. `erd_doc/tests/fixtures/dimensional.erd`)
+2. Open an `.verso` file (e.g. `verso_doc/tests/fixtures/dimensional.verso`)
 3. Verify the feature works as described in the phase tests
 4. Check Developer Tools console for grammar/extension errors

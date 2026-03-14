@@ -29,7 +29,7 @@ These components predate the paper-writing pivot and are no longer part of verso
 
 | Component | What it is | Why keep |
 |-----------|-----------|----------|
-| `erd_training/` | ML-based symbolic solver (burn) | Learned simplification for the expression engine |
+| `verso_training/` | ML-based symbolic solver (burn) | Learned simplification for the expression engine |
 | `data_training/` | Training datasets (JSONL) | Training data for symbolic solver |
 | `checkpoints/` | Model checkpoints | Trained solver weights |
 | `docs/ml-design.md` | ML architecture docs | Documents solver design |
@@ -42,45 +42,45 @@ These components predate the paper-writing pivot and are no longer part of verso
 
 **Clean up from root `Cargo.toml`:**
 - Remove workspace members: `erd_model`, `erd_viewer`
-- Keep: `erd_doc`, `erd_symbolic`, `erd_training` (all renamed in Phase 1)
+- Keep: `verso_doc`, `verso_symbolic`, `verso_training` (all renamed in Phase 1)
 
 ### Phase 1: Rename crates and binaries
 
 | Before | After |
 |--------|-------|
-| `erd_symbolic/` | `verso_symbolic/` |
-| `erd_doc/` | `verso_doc/` |
-| `erd_training/` | `verso_training/` |
-| Cargo workspace member `erd_symbolic` | `verso_symbolic` |
-| Cargo workspace member `erd_doc` | `verso_doc` |
-| Cargo workspace member `erd_training` | `verso_training` |
-| `erd_doc` depends on `erd_symbolic` | `verso_doc` depends on `verso_symbolic` |
-| `erd_training` depends on `erd_symbolic` | `verso_training` depends on `verso_symbolic` |
-| Binary `erd_check` | `verso_check` |
-| Binary `erd_compile` | `verso_compile` |
-| Binary `erd_watch` | `verso_watch` |
-| Binary `erd_lsp` | `verso_lsp` |
-| Binary `repl` (in erd_symbolic) | `repl` (in verso_symbolic) |
+| `verso_symbolic/` | `verso_symbolic/` |
+| `verso_doc/` | `verso_doc/` |
+| `verso_training/` | `verso_training/` |
+| Cargo workspace member `verso_symbolic` | `verso_symbolic` |
+| Cargo workspace member `verso_doc` | `verso_doc` |
+| Cargo workspace member `verso_training` | `verso_training` |
+| `verso_doc` depends on `verso_symbolic` | `verso_doc` depends on `verso_symbolic` |
+| `verso_training` depends on `verso_symbolic` | `verso_training` depends on `verso_symbolic` |
+| Binary `verso_check` | `verso_check` |
+| Binary `verso_compile` | `verso_compile` |
+| Binary `verso_watch` | `verso_watch` |
+| Binary `verso_lsp` | `verso_lsp` |
+| Binary `repl` (in verso_symbolic) | `repl` (in verso_symbolic) |
 
 **Files to update:**
 - `Cargo.toml` (workspace members)
-- `erd_symbolic/Cargo.toml` → `verso_symbolic/Cargo.toml`
-- `erd_doc/Cargo.toml` → `verso_doc/Cargo.toml` (name + dependency)
-- All `use erd_symbolic::` → `use verso_symbolic::` in erd_doc source
-- Binary source files in `erd_doc/src/bin/` (rename `erd_*.rs` → `verso_*.rs`)
+- `verso_symbolic/Cargo.toml` → `verso_symbolic/Cargo.toml`
+- `verso_doc/Cargo.toml` → `verso_doc/Cargo.toml` (name + dependency)
+- All `use verso_symbolic::` → `use verso_symbolic::` in verso_doc source
+- Binary source files in `verso_doc/src/bin/` (rename `erd_*.rs` → `verso_*.rs`)
 - `[[bin]]` sections in Cargo.toml if explicit
 
 ### Phase 2: Rename file extension
 
 | Before | After |
 |--------|-------|
-| `.erd` | `.verso` |
+| `.verso` | `.verso` |
 
 **Files to update:**
-- All `.erd` test fixture files in `editors/vscode/tests/`
+- All `.verso` test fixture files in `editors/vscode/tests/`
 - Test snapshot files (`*.erd.snap` → `*.verso.snap`)
-- Feature docs referencing `.erd` files
-- `package.json` scripts referencing `.erd`
+- Feature docs referencing `.verso` files
+- `package.json` scripts referencing `.verso`
 
 ### Phase 3: Rename VSCode extension
 
@@ -91,14 +91,14 @@ These components predate the paper-writing pivot and are no longer part of verso
 | Publisher: `erd` | `verso` |
 | Display name: `ERD Language Support` | `Verso Language Support` |
 | Config key: `erd.serverPath` | `verso.serverPath` |
-| Scope root: `source.erd` | `source.verso` |
-| LSP binary: `erd_lsp` | `verso_lsp` |
+| Scope root: `source.verso` | `source.verso` |
+| LSP binary: `verso_lsp` | `verso_lsp` |
 | VSIX file: `erd-lang-0.1.0.vsix` | `verso-lang-0.1.0.vsix` |
 
 **Files to update:**
 - `editors/vscode/package.json` — name, displayName, publisher, license, language ID, file extensions, config keys
 - `editors/vscode/src/extension.ts` — config namespace, language ID, client name, binary name
-- `editors/vscode/syntaxes/erd.tmLanguage.json` → `verso.tmLanguage.json` — scope name, all `*.erd` scopes (133+ occurrences)
+- `editors/vscode/syntaxes/erd.tmLanguage.json` → `verso.tmLanguage.json` — scope name, all `*.verso` scopes (133+ occurrences)
 - `editors/vscode/snippets/erd.json` → `verso.json`
 - Grammar reference in package.json (path to tmLanguage file)
 - Snippet reference in package.json (path to snippet file)
@@ -112,13 +112,13 @@ These components predate the paper-writing pivot and are no longer part of verso
 
 ### Phase 5: Rename feature docs
 
-- `features/erd-syntax.md` → `features/verso-syntax.md`
+- `features/verso-syntax.md` → `features/verso-syntax.md`
 - Update all content references from "ERD" to "Verso" in feature files
 - Update `features/README.md` index
 
 ### Phase 6: Update tmm repo
 
-- Rename all `.erd` files to `.verso` in `src/erd/` → `src/verso/`
+- Rename all `.verso` files to `.verso` in `src/erd/` → `src/verso/`
 - Update `package.json` scripts to reference verso binaries
 - Update any erd references in build scripts
 
@@ -128,8 +128,8 @@ These components predate the paper-writing pivot and are no longer part of verso
 - The `before-verso` tag marks the last commit before any rename work
 - `Cargo.lock` will auto-regenerate after crate renames
 - After Phase 3, the old VSCode extension should be uninstalled before installing the new one
-- `erd_symbolic` is the core algebra engine — depended on by both `verso_doc` and `verso_training`, so it becomes `verso_symbolic`
-- `erd_training` provides the learned symbolic solver — it stays as `verso_training`
+- `verso_symbolic` is the core algebra engine — depended on by both `verso_doc` and `verso_training`, so it becomes `verso_symbolic`
+- `verso_training` provides the learned symbolic solver — it stays as `verso_training`
 
 ## Verification
 

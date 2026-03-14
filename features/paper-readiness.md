@@ -39,9 +39,9 @@ Add directives for front matter that compile to standard LaTeX title block.
 ```
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Block::Title`, `Block::Author`, `Block::Date`, `Block::Abstract`
-- `erd_doc/src/parse.rs` — detect `:title`, `:author`, `:date`, `:abstract` directives
-- `erd_doc/src/compile_tex.rs` — emit `\title{}`, `\author{}`, `\date{}`, `\begin{abstract}...\end{abstract}`, `\maketitle`
+- `verso_doc/src/ast.rs` — add `Block::Title`, `Block::Author`, `Block::Date`, `Block::Abstract`
+- `verso_doc/src/parse.rs` — detect `:title`, `:author`, `:date`, `:abstract` directives
+- `verso_doc/src/compile_tex.rs` — emit `\title{}`, `\author{}`, `\date{}`, `\begin{abstract}...\end{abstract}`, `\maketitle`
 
 **Design decisions:**
 - Multiple `:author` directives are joined with `\and`
@@ -72,9 +72,9 @@ Add a figure directive for including images with captions and labels.
 ```
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Block::Figure { path, caption, label, width }`
-- `erd_doc/src/parse.rs` — detect `:figure` directive, parse key-value body
-- `erd_doc/src/compile_tex.rs` — emit `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
+- `verso_doc/src/ast.rs` — add `Block::Figure { path, caption, label, width }`
+- `verso_doc/src/parse.rs` — detect `:figure` directive, parse key-value body
+- `verso_doc/src/compile_tex.rs` — emit `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
 
 **Design decisions:**
 - `\usepackage{graphicx}` added conditionally
@@ -100,9 +100,9 @@ Add markdown-style table syntax.
 ```
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Block::Table { title, rows, label }`
-- `erd_doc/src/parse.rs` — detect `:table` directive, parse `|`-delimited rows
-- `erd_doc/src/compile_tex.rs` — emit `\begin{table}[htbp]` with `tabular`
+- `verso_doc/src/ast.rs` — add `Block::Table { title, rows, label }`
+- `verso_doc/src/parse.rs` — detect `:table` directive, parse `|`-delimited rows
+- `verso_doc/src/compile_tex.rs` — emit `\begin{table}[htbp]` with `tabular`
 
 **Design decisions:**
 - Second row must be separator (`|---|---|`) to mark header
@@ -116,13 +116,13 @@ Add markdown-style table syntax.
 The compiler generates a complete LaTeX preamble with sensible defaults (11pt article, geometry, microtype, etc.). Documents do not specify packages — erd chooses reasonable defaults. Conditional packages (hyperref, graphicx, wrapfig) are included only when needed.
 
 **Key files:**
-- `erd_doc/src/compile_tex.rs` — hardcoded default preamble with all standard packages and layout settings
+- `verso_doc/src/compile_tex.rs` — hardcoded default preamble with all standard packages and layout settings
 
 ---
 
 ### M5: Multi-file include
 
-Allow splitting a document across multiple `.erd` files.
+Allow splitting a document across multiple `.verso` files.
 
 **Syntax:**
 ```
@@ -143,8 +143,8 @@ Allow splitting a document across multiple `.erd` files.
 Add warnings when `ref`label`` doesn't match any section or labeled block.
 
 **Key files:**
-- `erd_doc/src/compile_tex.rs` or a new `lint.rs` — collect all labels, check all refs
-- `erd_doc/src/bin/erd_lsp.rs` — emit diagnostics for unresolved refs
+- `verso_doc/src/compile_tex.rs` or a new `lint.rs` — collect all labels, check all refs
+- `verso_doc/src/bin/verso_lsp.rs` — emit diagnostics for unresolved refs
 
 ---
 
@@ -208,8 +208,8 @@ Compiles to `\newpage`.
 - Added `resolve_includes()` function: recursively expands `:include path` lines, resolving paths relative to including file
 - Added `parse_document_from_file()` entry point that resolves includes then parses
 - Circular include detection via `seen` path set
-- Updated `erd_compile`, `erd_check`, `erd_watch` binaries to use `parse_document_from_file`
-- `erd_lsp` stays with `parse_document` (receives text from editor, not file path)
+- Updated `verso_compile`, `verso_check`, `verso_watch` binaries to use `parse_document_from_file`
+- `verso_lsp` stays with `parse_document` (receives text from editor, not file path)
 - VSCode grammar: `directive-include` rule
 - Tests: 4 tests (basic, circular error, missing file error, nested includes)
 
@@ -237,5 +237,5 @@ Compiles to `\newpage`.
 
 ```bash
 npm test                            # full test suite
-npm run compile -- file.erd         # compile and inspect LaTeX output
+npm run compile -- file.verso         # compile and inspect LaTeX output
 ```

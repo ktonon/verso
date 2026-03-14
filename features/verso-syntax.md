@@ -1,9 +1,9 @@
-# ERD Markup Syntax
+# Verso Markup Syntax
 
 ## Goal
 
-Define and implement the full ERD markup language — a document format for writing
-physics papers with machine-verified mathematics. ERD borrows from markdown where
+Define and implement the full Verso markup language — a document format for writing
+physics papers with machine-verified mathematics. Verso borrows from markdown where
 conventions align, but is its own language, not a superset.
 
 ## Milestones
@@ -19,14 +19,14 @@ conventions align, but is its own language, not a superset.
 
 ## Syntax Reference
 
-This section documents the intended ERD syntax, both what exists today and what
+This section documents the intended Verso syntax, both what exists today and what
 is planned. Items marked **(planned)** are not yet implemented.
 
 ---
 
 ### Document structure
 
-An ERD document is a sequence of blocks separated by blank lines. Blocks are
+An Verso document is a sequence of blocks separated by blank lines. Blocks are
 either structural (headings, directives) or content (prose, math, claims, proofs).
 
 ---
@@ -132,13 +132,13 @@ Within prose, the following inline constructs are recognized:
 
 #### Inline math
 
-Use `math` backticks for expressions that ERD can parse, verify, and render:
+Use `math` backticks for expressions that Verso can parse, verify, and render:
 
 ```
 The identity math`sin(x)^2 + cos(x)^2` equals one.
 ```
 
-The expression is parsed by erd_symbolic, so it uses expression syntax (not LaTeX).
+The expression is parsed by verso_symbolic, so it uses expression syntax (not LaTeX).
 It compiles to LaTeX via the `ToTex` trait.
 
 #### Raw LaTeX
@@ -182,7 +182,7 @@ Bold-italic can be written as `***text***` **(planned)**.
 
 Certain characters in prose text are automatically converted for correct LaTeX output:
 
-| ERD source | LaTeX output | Notes |
+| Verso source | LaTeX output | Notes |
 |------------|-------------|-------|
 | `~` | `\textasciitilde{}` | Tilde (not a non-breaking space) |
 | `"text"` | `` ``text'' `` | Smart quotes (paired `"` converted) |
@@ -215,7 +215,7 @@ See [Section labels](#section-labels) for how heading labels are generated.
 
 ### Claims
 
-A claim is a named equation that ERD verifies. Verification checks that
+A claim is a named equation that Verso verifies. Verification checks that
 `simplify(lhs - rhs) == 0`, falling back to numerical spot-check if symbolic
 simplification doesn't reach zero.
 
@@ -226,7 +226,7 @@ simplification doesn't reach zero.
 
 - The body must be indented.
 - Exactly one `=` separates the left-hand side from the right-hand side.
-- Both sides use erd_symbolic expression syntax.
+- Both sides use verso_symbolic expression syntax.
 - Compiles to a numbered LaTeX equation with `\label{eq:name}`.
 
 ---
@@ -246,7 +246,7 @@ of steps is verified. Justifications are optional annotations after `;`.
 - The first step has no leading `=`.
 - Subsequent steps begin with `=` (stripped by the parser).
 - Justifications after `;` name a rule. If a named rule exists in `RuleSet::full()`,
-  ERD first checks whether that specific rule transforms the previous step into the
+  Verso first checks whether that specific rule transforms the previous step into the
   current one.
 - Compiles to a LaTeX `align*` environment.
 
@@ -254,7 +254,7 @@ of steps is verified. Justifications are optional annotations after `;`.
 
 ### Dimension declarations
 
-Declare the physical dimensions of a variable. When present, ERD checks that both
+Declare the physical dimensions of a variable. When present, Verso checks that both
 sides of every claim have matching dimensions.
 
 ```
@@ -282,7 +282,7 @@ p = mv
 ```
 ````
 
-- Each line is a separate expression, parsed by erd_symbolic.
+- Each line is a separate expression, parsed by verso_symbolic.
 - Compiles to a LaTeX `gather*` (un-numbered) or `align*` environment.
 - Not verified — use `:claim` for equations that should be checked.
 
@@ -395,7 +395,7 @@ Compiles to `\newpage`.
 
 ### Multi-file include
 
-Split a document across multiple `.erd` files:
+Split a document across multiple `.verso` files:
 
 ```
 :include chapters/introduction.erd
@@ -517,10 +517,10 @@ Consistent with LaTeX comment convention.
 
 ### Expression syntax
 
-Expressions inside `math` backticks, claims, and proofs use erd_symbolic syntax,
+Expressions inside `math` backticks, claims, and proofs use verso_symbolic syntax,
 not LaTeX. Key differences from LaTeX:
 
-| ERD expression | LaTeX equivalent | Notes |
+| Verso expression | LaTeX equivalent | Notes |
 |---------------|-----------------|-------|
 | `x^2` | `x^{2}` | Power (exponent) |
 | `x^(a+b)` | `x^{a+b}` | Parenthesized exponent |
@@ -582,14 +582,14 @@ Dimensional analysis uses the unit's implied dimension:
 
 ---
 
-## What ERD is not
+## What Verso is not
 
-- **Not a superset of markdown.** ERD borrows `#` headings, prose paragraphs,
+- **Not a superset of markdown.** Verso borrows `#` headings, prose paragraphs,
   `**bold**`, `*italic*`, and list syntax from markdown. Other markdown features
   (HTML blocks, reference links, tables, images) are not supported.
 - **Not LaTeX.** The source format is designed to be readable and writable without
   LaTeX knowledge. LaTeX is a compilation target.
-- **Not a general-purpose document format.** ERD is purpose-built for physics and
+- **Not a general-purpose document format.** Verso is purpose-built for physics and
   mathematics papers with verified claims.
 
 ## Implementation Notes
@@ -657,13 +657,13 @@ Dimensional analysis uses the unit's implied dimension:
 Extend `ProseFragment` and the prose parser to handle bold and italic.
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Bold(Vec<ProseFragment>)`, `Italic(Vec<ProseFragment>)` variants
-- `erd_doc/src/parse.rs` — extend `parse_prose_fragments` to detect `**...**` and `*...*`
+- `verso_doc/src/ast.rs` — add `Bold(Vec<ProseFragment>)`, `Italic(Vec<ProseFragment>)` variants
+- `verso_doc/src/parse.rs` — extend `parse_prose_fragments` to detect `**...**` and `*...*`
   - Parse outermost delimiters first; inner content is recursively parsed for nested tags
   - `***text***` produces `Bold([Italic([Text("text")])])`
   - Edge case: `*` inside `math` backticks must not trigger italic (tags take precedence)
-- `erd_doc/src/compile_tex.rs` — `Bold` → `\textbf{...}`, `Italic` → `\textit{...}`
-- `erd_doc/src/report.rs` — may need minor update for fragment display
+- `verso_doc/src/compile_tex.rs` — `Bold` → `\textbf{...}`, `Italic` → `\textit{...}`
+- `verso_doc/src/report.rs` — may need minor update for fragment display
 
 **Tests:**
 - Parse `**bold**` in prose → `Bold([Text("bold")])`
@@ -682,13 +682,13 @@ Extend `ProseFragment` and the prose parser to handle bold and italic.
 Add bullet and numbered list blocks to the parser.
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Block::List { ordered: bool, items: Vec<ListItem> }` and
+- `verso_doc/src/ast.rs` — add `Block::List { ordered: bool, items: Vec<ListItem> }` and
   `ListItem { fragments: Vec<ProseFragment>, children: Option<List> }` for nesting
-- `erd_doc/src/parse.rs` — detect lines starting with `- ` or `N. ` at the block level;
+- `verso_doc/src/parse.rs` — detect lines starting with `- ` or `N. ` at the block level;
   collect consecutive list lines; determine nesting by indentation depth (2-space increments)
   - A list terminates on blank line, heading, or directive
   - List items support inline formatting (bold, italic, math, cite, etc.)
-- `erd_doc/src/compile_tex.rs` — `itemize`/`enumerate` environments with `\item`
+- `verso_doc/src/compile_tex.rs` — `itemize`/`enumerate` environments with `\item`
 
 **Design decisions:**
 - Mixed ordered/unordered at the same level is an error
@@ -712,12 +712,12 @@ Add bullet and numbered list blocks to the parser.
 Add fenced `math` blocks for displayed equations that don't need verification.
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Block::MathBlock { exprs: Vec<Expr>, aligned: bool }`
-- `erd_doc/src/parse.rs` — detect ` ```math ` opening fence; collect lines until closing
+- `verso_doc/src/ast.rs` — add `Block::MathBlock { exprs: Vec<Expr>, aligned: bool }`
+- `verso_doc/src/parse.rs` — detect ` ```math ` opening fence; collect lines until closing
   ` ``` `; parse each line as an expression via `parse_expr`
   - Lines containing `&` set `aligned: true` (for `align*` output)
   - Empty lines within the block are preserved as visual breaks
-- `erd_doc/src/compile_tex.rs` — `aligned` → `\begin{align*}`, otherwise `\begin{gather*}`
+- `verso_doc/src/compile_tex.rs` — `aligned` → `\begin{align*}`, otherwise `\begin{gather*}`
 
 **Design decisions:**
 - Math blocks are not verified (no claim name, no pass/fail)
@@ -741,11 +741,11 @@ Add fenced `math` blocks for displayed equations that don't need verification.
 Add `cite` inline tag and `:bibliography` directive.
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `ProseFragment::Cite(Vec<String>)` (multiple keys),
+- `verso_doc/src/ast.rs` — add `ProseFragment::Cite(Vec<String>)` (multiple keys),
   `Block::Bibliography { path: String }`
-- `erd_doc/src/parse.rs` — add `"cite"` to the tag list in `find_tagged_backtick`;
+- `verso_doc/src/parse.rs` — add `"cite"` to the tag list in `find_tagged_backtick`;
   parse comma-separated keys; detect `:bibliography` directive
-- `erd_doc/src/compile_tex.rs` — `Cite` → `\cite{key1,key2}`;
+- `verso_doc/src/compile_tex.rs` — `Cite` → `\cite{key1,key2}`;
   `Bibliography` → `\bibliographystyle{plain}\n\bibliography{path}`
   (strip `.bib` extension from path)
 
@@ -770,12 +770,12 @@ Add `cite` inline tag and `:bibliography` directive.
 Add `:theorem`, `:definition`, `:lemma`, `:corollary`, `:remark`, `:example` directives.
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Block::Environment { kind: EnvKind, title: Option<String>, body: Vec<ProseFragment> }`
+- `verso_doc/src/ast.rs` — add `Block::Environment { kind: EnvKind, title: Option<String>, body: Vec<ProseFragment> }`
   and `EnvKind` enum
-- `erd_doc/src/parse.rs` — detect `:theorem`, `:definition`, etc. at block level;
+- `verso_doc/src/parse.rs` — detect `:theorem`, `:definition`, etc. at block level;
   title is the rest of the directive line; body is indented continuation lines
   (parsed for inline fragments)
-- `erd_doc/src/compile_tex.rs` — emit `\newtheorem` declarations in preamble (once per
+- `verso_doc/src/compile_tex.rs` — emit `\newtheorem` declarations in preamble (once per
   kind used); emit `\begin{theorem}[Title]` ... `\end{theorem}`
 
 **Design decisions:**
@@ -800,13 +800,13 @@ Add `:theorem`, `:definition`, `:lemma`, `:corollary`, `:remark`, `:example` dir
 Add remaining prose-level constructs.
 
 **Key files:**
-- `erd_doc/src/ast.rs` — add `Block::BlockQuote(Vec<ProseFragment>)`,
+- `verso_doc/src/ast.rs` — add `Block::BlockQuote(Vec<ProseFragment>)`,
   `ProseFragment::Footnote(Vec<ProseFragment>)`
-- `erd_doc/src/parse.rs`:
+- `verso_doc/src/parse.rs`:
   - Block quotes: lines starting with `> ` collected into a block; content parsed for fragments
   - Footnotes: detect `^[` in prose fragment parsing; find matching `]`; recursively parse inner content
   - Comments: lines starting with `%` skipped entirely (before any other block detection)
-- `erd_doc/src/compile_tex.rs` — `BlockQuote` → `\begin{quote}...\end{quote}`,
+- `verso_doc/src/compile_tex.rs` — `BlockQuote` → `\begin{quote}...\end{quote}`,
   `Footnote` → `\footnote{...}`
 
 **Design decisions:**
@@ -840,8 +840,8 @@ theorem bodies, etc. — so Phase 1 should land first).
 ## Verification
 
 ```bash
-npm run check -- file.erd           # verify claims and dimensions
-npm run compile -- file.erd         # compile to LaTeX
-npm run watch -- file.erd           # re-verify on save
+npm run check -- file.verso           # verify claims and dimensions
+npm run compile -- file.verso         # compile to LaTeX
+npm run watch -- file.verso           # re-verify on save
 npm test                            # full test suite
 ```

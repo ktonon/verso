@@ -13,7 +13,7 @@ Add SI unit support to erd expressions so that numeric values can carry unit ann
 - `c [m/s]` — SYNTAX ERROR (variable requires dimension, not unit)
 - `3 [L]` — SYNTAX ERROR (number requires unit, not dimension)
 
-### Unit types (`erd_symbolic/src/unit.rs`)
+### Unit types (`verso_symbolic/src/unit.rs`)
 
 - `BaseUnit` enum: m(L), g(M, scale 0.001), s(T), K(Theta), A(I), mol(N), cd(J)
 - `DerivedUnit` table: N, J, W, Pa, Hz, C, V, Ohm
@@ -41,21 +41,21 @@ All values convert to canonical base SI form internally. Display chooses suitabl
 ## Implementation Notes
 
 ### Created files
-- `erd_symbolic/src/unit.rs` — core unit types and parsing (10 tests)
-- `erd_symbolic/src/dim.rs` — Dimension type moved from erd_doc (shared across crates)
+- `verso_symbolic/src/unit.rs` — core unit types and parsing (10 tests)
+- `verso_symbolic/src/dim.rs` — Dimension type moved from verso_doc (shared across crates)
 
 ### Modified files
-- `erd_symbolic/src/lib.rs` — added `pub mod unit`, `pub mod dim`, re-exports
-- `erd_symbolic/src/expr.rs` — `Quantity(Box<Expr>, Unit)` variant, `quantity()` constructor
-- `erd_symbolic/src/parser.rs` — context-sensitive bracket parsing with `parse_unit_bracket`, `expr_has_vars` helper, improved error messages for dimension/unit mismatches
-- `erd_symbolic/src/fmt.rs` — Display and colored output for Quantity
-- `erd_symbolic/src/to_tex.rs` — LaTeX rendering: `{value} \; \mathrm{{unit}}`
-- `erd_doc/src/dim.rs` — `infer_dim` for Quantity returns `unit.dimension`; uses erd_symbolic::Dimension
-- `erd_doc/src/eval.rs` — `eval_f64` for Quantity: `eval(inner) * unit.scale`
-- `erd_symbolic/src/search.rs` — pass-through for Quantity
-- `erd_symbolic/src/token.rs` — pass-through for Quantity
-- `erd_symbolic/src/gen_expr.rs` — Quantity as leaf
-- `erd_symbolic/src/random_search.rs` — Quantity as leaf
+- `verso_symbolic/src/lib.rs` — added `pub mod unit`, `pub mod dim`, re-exports
+- `verso_symbolic/src/expr.rs` — `Quantity(Box<Expr>, Unit)` variant, `quantity()` constructor
+- `verso_symbolic/src/parser.rs` — context-sensitive bracket parsing with `parse_unit_bracket`, `expr_has_vars` helper, improved error messages for dimension/unit mismatches
+- `verso_symbolic/src/fmt.rs` — Display and colored output for Quantity
+- `verso_symbolic/src/to_tex.rs` — LaTeX rendering: `{value} \; \mathrm{{unit}}`
+- `verso_doc/src/dim.rs` — `infer_dim` for Quantity returns `unit.dimension`; uses verso_symbolic::Dimension
+- `verso_doc/src/eval.rs` — `eval_f64` for Quantity: `eval(inner) * unit.scale`
+- `verso_symbolic/src/search.rs` — pass-through for Quantity
+- `verso_symbolic/src/token.rs` — pass-through for Quantity
+- `verso_symbolic/src/gen_expr.rs` — Quantity as leaf
+- `verso_symbolic/src/random_search.rs` — Quantity as leaf
 
 ### Key design decisions
 - Brackets at the multiplicative level: `3*10^8 [m/s]` wraps the entire multiplicative expression
