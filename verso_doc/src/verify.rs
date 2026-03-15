@@ -126,6 +126,22 @@ fn verify_claim(claim: &Claim, ctx: &Context) -> VerificationResult {
 
 /// Verify a proof chain: each adjacent pair of steps must be equivalent.
 fn verify_proof(proof: &Proof, ctx: &Context) -> VerificationResult {
+    // Check dimensions: first step vs last step (a proof asserts first = last)
+    let dim_outcome = if ctx.has_dims() {
+        let first = &proof.steps.first().unwrap().expr;
+        let last = &proof.steps.last().unwrap().expr;
+        Some(ctx.check_dims(first, last))
+    } else {
+        None
+    };
+
+    let mut units: Vec<String> = Vec::new();
+    for step in &proof.steps {
+        units.extend(collect_units(&step.expr));
+    }
+    units.sort();
+    units.dedup();
+
     for i in 0..proof.steps.len() - 1 {
         let from = &proof.steps[i];
         let to = &proof.steps[i + 1];
@@ -157,8 +173,8 @@ fn verify_proof(proof: &Proof, ctx: &Context) -> VerificationResult {
                     residual: result,
                     step_span: to.span,
                 },
-                dim_outcome: None,
-                units: Vec::new(),
+                dim_outcome,
+                units,
             };
         }
     }
@@ -169,8 +185,8 @@ fn verify_proof(proof: &Proof, ctx: &Context) -> VerificationResult {
         outcome: Outcome::ProofPass {
             steps: proof.steps.len(),
         },
-        dim_outcome: None,
-        units: Vec::new(),
+        dim_outcome,
+        units,
     }
 }
 
@@ -382,5 +398,67 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.fail_count(), 1);
+    }
+
+    #[test]
+    fn verify_claim_with_const_catches_dim_error() {
+        let src = "\
+:var v [L T^-1]
+:const c = 5
+:claim bad
+  v = c
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        let result = &report.results[0];
+        assert!(!result.passed(), "velocity = dimensionless should fail");
+        // dim_outcome should NOT be Skipped — c is a known const
+        assert!(result.dim_outcome.is_some());
+        match result.dim_outcome.as_ref().unwrap() {
+            DimOutcome::Skipped { .. } => {
+                panic!("should not skip dim check when const is known")
+            }
+            _ => {} // LhsRhsMismatch or ExprError is expected
+        }
+    }
+
+    #[test]
+    fn verify_proof_has_dim_outcome() {
+        let src = "\
+:var x [L]
+:proof double
+  2 * x
+  = x + x
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        let result = &report.results[0];
+        assert!(
+            result.dim_outcome.is_some(),
+            "proof should have dim_outcome when vars declared"
+        );
+        assert!(
+            result.dim_outcome.as_ref().unwrap().passed(),
+            "dim should pass for consistent proof"
+        );
+    }
+
+    #[test]
+    fn verify_proof_dim_mismatch_fails() {
+        let src = "\
+:var v [L T^-1]
+:var t [T]
+:proof dim_bad
+  v * t
+  = v + t
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        let result = &report.results[0];
+        assert!(!result.passed());
+        assert!(
+            result.dim_outcome.is_some(),
+            "proof should have dim_outcome"
+        );
     }
 }

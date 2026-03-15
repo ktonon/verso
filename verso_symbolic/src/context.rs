@@ -136,22 +136,27 @@ impl Context {
     }
 
     /// Check dimensional consistency of a single expression.
-    /// Returns Ok(dimension) if consistent, Err if there's a mismatch.
+    /// Constants and functions are expanded before checking so that
+    /// declared constants don't appear as undeclared variables.
     /// Returns None if no dimension declarations exist.
     pub fn check_expr_dim(&self, expr: &Expr) -> Option<Result<Dimension, DimError>> {
         if !self.has_dims() {
             return None;
         }
-        Some(infer_dim(expr, &self.dims))
+        let expr = self.apply_consts(expr);
+        Some(infer_dim(&expr, &self.dims))
     }
 
     /// Check dimensional consistency of an equality.
+    /// Constants and functions are expanded before checking.
     pub fn check_dims(
         &self,
         lhs: &Expr,
         rhs: &Expr,
     ) -> DimOutcome {
-        check_claim_dim(lhs, rhs, &self.dims)
+        let lhs = self.apply_consts(lhs);
+        let rhs = self.apply_consts(rhs);
+        check_claim_dim(&lhs, &rhs, &self.dims)
     }
 }
 
@@ -630,5 +635,47 @@ mod tests {
         let ctx = Context::new();
         let expr = parse_expr("x + 4 [s]").unwrap();
         assert!(ctx.check_expr_dim(&expr).is_none());
+    }
+
+    #[test]
+    fn check_expr_dim_substitutes_consts() {
+        let mut ctx = Context::new();
+        ctx.declare_var(
+            "v",
+            Some(Dimension::single(BaseDim::L, 1).mul(&Dimension::single(BaseDim::T, -1))),
+        );
+        ctx.declare_const("g", parse_expr("9.8").unwrap());
+        // v + g should fail with Mismatch (not UndeclaredVar) after const substitution
+        let expr = parse_expr("v + g").unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some());
+        match result.unwrap() {
+            Err(DimError::Mismatch { .. }) => {} // expected: [L T^-1] + [1]
+            Err(DimError::UndeclaredVar(_)) => {
+                panic!("const 'g' should be substituted before dim check")
+            }
+            other => panic!("expected Mismatch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn check_dims_substitutes_consts() {
+        let mut ctx = Context::new();
+        ctx.declare_var(
+            "v",
+            Some(Dimension::single(BaseDim::L, 1).mul(&Dimension::single(BaseDim::T, -1))),
+        );
+        ctx.declare_const("c", parse_expr("5").unwrap());
+        // v = c should be LhsRhsMismatch: [L T^-1] vs [1]
+        let lhs = parse_expr("v").unwrap();
+        let rhs = parse_expr("c").unwrap();
+        let result = ctx.check_dims(&lhs, &rhs);
+        match result {
+            DimOutcome::Skipped { .. } => {
+                panic!("should not skip dim check when const is a known substitution")
+            }
+            DimOutcome::LhsRhsMismatch { .. } => {} // expected
+            other => panic!("expected LhsRhsMismatch, got {:?}", other),
+        }
     }
 }

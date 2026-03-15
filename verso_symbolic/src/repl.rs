@@ -80,6 +80,9 @@ pub fn run() -> Result<(), ReadlineError> {
                     let rest = input[":const".len()..].trim();
                     match parse_const_decl(rest) {
                         Ok((name, value)) => {
+                            if let Some(Err(e)) = ctx.check_expr_dim(&value) {
+                                println!("\x1b[31mdim error: {}\x1b[0m", e);
+                            }
                             let simplified = ctx.simplify(&value);
                             println!(
                                 "\x1b[90m{} = {}\x1b[0m\n",
