@@ -1,4 +1,6 @@
+pub mod context;
 pub mod dim;
+pub mod eval;
 mod expr;
 pub mod unit;
 pub mod fmt;
@@ -14,7 +16,9 @@ pub mod token;
 pub mod training_data;
 pub mod validate;
 
+pub use context::{Context, DimEnv, DimError, DimOutcome, EqualityResult, is_zero};
 pub use dim::{BaseDim, Dimension};
+pub use eval::{eval_f64, free_vars, spot_check, SpotCheckFailure};
 pub use unit::Unit;
 pub use expr::*;
 pub use fmt::{fmt_colored, Colored};

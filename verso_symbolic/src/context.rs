@@ -1,0 +1,389 @@
+use crate::dim::Dimension;
+use crate::eval::spot_check;
+use crate::expr::Expr;
+use crate::rule::RuleSet;
+use crate::search;
+use std::collections::HashMap;
+
+/// Map from variable name to its declared dimension.
+pub type DimEnv = HashMap<String, Dimension>;
+
+/// Mathematical context accumulating declarations and verified results.
+///
+/// Used by both `verso_doc` (document verification) and the repl.
+pub struct Context {
+    pub rules: RuleSet,
+    pub dims: DimEnv,
+}
+
+impl Context {
+    pub fn new() -> Self {
+        Context {
+            rules: RuleSet::full(),
+            dims: DimEnv::new(),
+        }
+    }
+
+    /// Declare a variable with optional dimensions.
+    pub fn declare_var(&mut self, name: &str, dim: Option<Dimension>) {
+        if let Some(d) = dim {
+            self.dims.insert(name.to_string(), d);
+        }
+    }
+
+    /// Check whether the dimension environment has any declarations.
+    pub fn has_dims(&self) -> bool {
+        !self.dims.is_empty()
+    }
+
+    /// Simplify an expression using the current rule set.
+    pub fn simplify(&self, expr: &Expr) -> Expr {
+        search::simplify(expr, &self.rules)
+    }
+
+    /// Check if two expressions are symbolically equal.
+    /// Falls back to numerical spot-checking if symbolic fails.
+    pub fn check_equal(&self, lhs: &Expr, rhs: &Expr) -> EqualityResult {
+        let diff = Expr::Add(
+            Box::new(lhs.clone()),
+            Box::new(Expr::Neg(Box::new(rhs.clone()))),
+        );
+        let residual = search::simplify(&diff, &self.rules);
+
+        if is_zero(&residual) {
+            return EqualityResult::Equal;
+        }
+
+        match spot_check(lhs, rhs, SPOT_CHECK_SAMPLES) {
+            Ok(()) => EqualityResult::NumericallyEqual {
+                samples: SPOT_CHECK_SAMPLES,
+                residual,
+            },
+            Err(_) => EqualityResult::NotEqual { residual },
+        }
+    }
+
+    /// Check if two expressions are equivalent (simplified diff is zero).
+    pub fn exprs_equivalent(&self, a: &Expr, b: &Expr) -> bool {
+        if a == b {
+            return true;
+        }
+        let diff = Expr::Add(
+            Box::new(a.clone()),
+            Box::new(Expr::Neg(Box::new(b.clone()))),
+        );
+        is_zero(&search::simplify(&diff, &self.rules))
+    }
+
+    /// Try applying a named rule at every subexpression of `from`
+    /// and check if any result equals `to`.
+    pub fn try_rule_produces(&self, from: &Expr, rule: &crate::rule::Rule, to: &Expr) -> bool {
+        try_rule_produces_inner(from, rule, to, self)
+    }
+
+    /// Check dimensional consistency of an equality.
+    pub fn check_dims(
+        &self,
+        lhs: &Expr,
+        rhs: &Expr,
+    ) -> DimOutcome {
+        check_claim_dim(lhs, rhs, &self.dims)
+    }
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+const SPOT_CHECK_SAMPLES: usize = 200;
+
+/// Result of checking equality between two expressions.
+#[derive(Debug)]
+pub enum EqualityResult {
+    Equal,
+    NumericallyEqual { samples: usize, residual: Expr },
+    NotEqual { residual: Expr },
+}
+
+impl EqualityResult {
+    pub fn passed(&self) -> bool {
+        matches!(self, EqualityResult::Equal | EqualityResult::NumericallyEqual { .. })
+    }
+}
+
+/// Check if an expression is zero.
+pub fn is_zero(expr: &Expr) -> bool {
+    match expr {
+        Expr::Rational(r) => r.is_zero(),
+        Expr::FracPi(r) => r.is_zero(),
+        _ => false,
+    }
+}
+
+// --- Dimensional analysis (moved from verso_doc/src/dim.rs) ---
+
+/// A dimensional analysis error.
+#[derive(Debug)]
+pub enum DimError {
+    UndeclaredVar(String),
+    Mismatch {
+        expected: Dimension,
+        got: Dimension,
+        context: String,
+    },
+    NonDimensionlessFnArg {
+        func: String,
+        dim: Dimension,
+    },
+    NonIntegerPower,
+}
+
+impl std::fmt::Display for DimError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DimError::UndeclaredVar(v) => write!(f, "variable '{}' has no :var declaration", v),
+            DimError::Mismatch {
+                expected,
+                got,
+                context,
+            } => write!(
+                f,
+                "dimension mismatch in {}: expected {}, got {}",
+                context, expected, got
+            ),
+            DimError::NonDimensionlessFnArg { func, dim } => {
+                write!(
+                    f,
+                    "argument to {}() must be dimensionless, got {}",
+                    func, dim
+                )
+            }
+            DimError::NonIntegerPower => {
+                write!(f, "cannot raise dimensional quantity to non-integer power")
+            }
+        }
+    }
+}
+
+/// Result of dimension checking a claim.
+#[derive(Debug)]
+pub enum DimOutcome {
+    /// All dimensions consistent.
+    Pass,
+    /// Some variables lack declarations — check skipped.
+    Skipped { undeclared: Vec<String> },
+    /// Dimension mismatch between lhs and rhs.
+    LhsRhsMismatch { lhs: Dimension, rhs: Dimension },
+    /// Error within an expression (e.g., adding length to time).
+    ExprError { side: String, error: DimError },
+}
+
+impl DimOutcome {
+    pub fn passed(&self) -> bool {
+        matches!(self, DimOutcome::Pass | DimOutcome::Skipped { .. })
+    }
+}
+
+/// Infer the dimension of an expression given a dimension environment.
+pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
+    match expr {
+        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => Ok(Dimension::dimensionless()),
+        Expr::Quantity(_inner, unit) => Ok(unit.dimension.clone()),
+        Expr::Var { name, dim, .. } => {
+            if let Some(d) = dim {
+                return Ok(d.clone());
+            }
+            env.get(name)
+                .cloned()
+                .ok_or_else(|| DimError::UndeclaredVar(name.clone()))
+        }
+        Expr::Add(a, b) => {
+            let da = infer_dim(a, env)?;
+            let db = infer_dim(b, env)?;
+            if da != db {
+                return Err(DimError::Mismatch {
+                    expected: da,
+                    got: db,
+                    context: "addition".to_string(),
+                });
+            }
+            Ok(da)
+        }
+        Expr::Mul(a, b) => {
+            let da = infer_dim(a, env)?;
+            let db = infer_dim(b, env)?;
+            Ok(da.mul(&db))
+        }
+        Expr::Neg(inner) => infer_dim(inner, env),
+        Expr::Inv(inner) => {
+            let d = infer_dim(inner, env)?;
+            Ok(d.inv())
+        }
+        Expr::Pow(base, exp) => {
+            let db = infer_dim(base, env)?;
+            if db.is_dimensionless() {
+                let de = infer_dim(exp, env)?;
+                if !de.is_dimensionless() {
+                    return Err(DimError::Mismatch {
+                        expected: Dimension::dimensionless(),
+                        got: de,
+                        context: "exponent".to_string(),
+                    });
+                }
+                return Ok(Dimension::dimensionless());
+            }
+            let n = expr_as_integer(exp).ok_or(DimError::NonIntegerPower)?;
+            Ok(db.pow(n))
+        }
+        Expr::Fn(kind, arg) => {
+            let da = infer_dim(arg, env)?;
+            if !da.is_dimensionless() {
+                return Err(DimError::NonDimensionlessFnArg {
+                    func: format!("{:?}", kind).to_lowercase(),
+                    dim: da,
+                });
+            }
+            Ok(Dimension::dimensionless())
+        }
+        Expr::FnN(kind, args) => {
+            for arg in args {
+                let da = infer_dim(arg, env)?;
+                if !da.is_dimensionless() {
+                    return Err(DimError::NonDimensionlessFnArg {
+                        func: format!("{:?}", kind).to_lowercase(),
+                        dim: da,
+                    });
+                }
+            }
+            Ok(Dimension::dimensionless())
+        }
+    }
+}
+
+/// Check that two sides of a claim have the same dimension.
+pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
+    let dl = match infer_dim(lhs, env) {
+        Ok(d) => d,
+        Err(DimError::UndeclaredVar(v)) => {
+            let mut undeclared = collect_undeclared(lhs, env);
+            undeclared.extend(collect_undeclared(rhs, env));
+            undeclared.sort();
+            undeclared.dedup();
+            if undeclared.is_empty() {
+                undeclared.push(v);
+            }
+            return DimOutcome::Skipped { undeclared };
+        }
+        Err(e) => {
+            return DimOutcome::ExprError {
+                side: "lhs".to_string(),
+                error: e,
+            }
+        }
+    };
+
+    let dr = match infer_dim(rhs, env) {
+        Ok(d) => d,
+        Err(DimError::UndeclaredVar(v)) => {
+            let mut undeclared = collect_undeclared(rhs, env);
+            if undeclared.is_empty() {
+                undeclared.push(v);
+            }
+            return DimOutcome::Skipped { undeclared };
+        }
+        Err(e) => {
+            return DimOutcome::ExprError {
+                side: "rhs".to_string(),
+                error: e,
+            }
+        }
+    };
+
+    if dl == dr {
+        DimOutcome::Pass
+    } else {
+        DimOutcome::LhsRhsMismatch { lhs: dl, rhs: dr }
+    }
+}
+
+fn collect_undeclared(expr: &Expr, env: &DimEnv) -> Vec<String> {
+    let mut undeclared = Vec::new();
+    collect_undeclared_inner(expr, env, &mut undeclared);
+    undeclared.sort();
+    undeclared.dedup();
+    undeclared
+}
+
+fn collect_undeclared_inner(expr: &Expr, env: &DimEnv, out: &mut Vec<String>) {
+    match expr {
+        Expr::Var { name, dim, .. } => {
+            if dim.is_none() && !env.contains_key(name) {
+                out.push(name.clone());
+            }
+        }
+        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+            collect_undeclared_inner(a, env, out);
+            collect_undeclared_inner(b, env, out);
+        }
+        Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => {
+            collect_undeclared_inner(inner, env, out);
+        }
+        Expr::FnN(_, args) => {
+            for arg in args {
+                collect_undeclared_inner(arg, env, out);
+            }
+        }
+        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => {}
+        Expr::Quantity(inner, _) => {
+            collect_undeclared_inner(inner, env, out);
+        }
+    }
+}
+
+/// Collect all unit display names from Quantity nodes in an expression.
+pub fn collect_units(expr: &Expr) -> Vec<String> {
+    expr.collect_units()
+}
+
+fn expr_as_integer(expr: &Expr) -> Option<i32> {
+    match expr {
+        Expr::Rational(r) => {
+            if r.den() == 1 {
+                Some(r.num() as i32)
+            } else {
+                None
+            }
+        }
+        Expr::Neg(inner) => expr_as_integer(inner).map(|n| -n),
+        _ => None,
+    }
+}
+
+fn try_rule_produces_inner(from: &Expr, rule: &crate::rule::Rule, to: &Expr, ctx: &Context) -> bool {
+    if let Some(result) = rule.apply_ltr(from) {
+        if ctx.exprs_equivalent(&result, to) {
+            return true;
+        }
+    }
+    if rule.reversible {
+        if let Some(result) = rule.apply_rtl(from) {
+            if ctx.exprs_equivalent(&result, to) {
+                return true;
+            }
+        }
+    }
+
+    match from {
+        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+            try_rule_produces_inner(a, rule, to, ctx)
+                || try_rule_produces_inner(b, rule, to, ctx)
+        }
+        Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => {
+            try_rule_produces_inner(inner, rule, to, ctx)
+        }
+        Expr::FnN(_, args) => args.iter().any(|a| try_rule_produces_inner(a, rule, to, ctx)),
+        _ => false,
+    }
+}

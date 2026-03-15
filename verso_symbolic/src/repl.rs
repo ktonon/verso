@@ -1,8 +1,8 @@
+use crate::context::{Context, EqualityResult};
 use crate::dim::Dimension;
 use crate::expr::Expr;
 use crate::fmt::fmt_colored;
 use crate::parser::parse_expr;
-use crate::rule::RuleSet;
 use crate::search;
 use crate::unit::base_si_display;
 use rustyline::error::ReadlineError;
@@ -16,6 +16,7 @@ enum HistoryMode {
 
 pub fn run() -> Result<(), ReadlineError> {
     let mut rl = DefaultEditor::new()?;
+    let ctx = Context::new();
     let mut show_trace = false;
     let mut history_mode = HistoryMode::Inputs;
     let mut input_history: Vec<String> = Vec::new();
@@ -61,20 +62,25 @@ pub fn run() -> Result<(), ReadlineError> {
                     let rhs_str = input[eq_pos + 1..].trim();
                     match (parse_expr(lhs_str), parse_expr(rhs_str)) {
                         (Ok(lhs), Ok(rhs)) => {
+                            match ctx.check_equal(&lhs, &rhs) {
+                                EqualityResult::Equal => {
+                                    println!("\x1b[32mtrue\x1b[0m\n");
+                                }
+                                EqualityResult::NumericallyEqual { .. } => {
+                                    println!("\x1b[32mtrue\x1b[0m (numerical)\n");
+                                }
+                                EqualityResult::NotEqual { residual } => {
+                                    println!(
+                                        "\x1b[31mfalse\x1b[0m  residual: {}\n",
+                                        fmt_colored(&residual)
+                                    );
+                                }
+                            }
                             let diff = Expr::Add(
                                 Box::new(lhs),
                                 Box::new(Expr::Neg(Box::new(rhs))),
                             );
-                            let rules = RuleSet::full();
-                            let simplified = search::simplify(&diff, &rules);
-                            if is_zero(&simplified) {
-                                println!("\x1b[32mtrue\x1b[0m\n");
-                            } else {
-                                println!(
-                                    "\x1b[31mfalse\x1b[0m  residual: {}\n",
-                                    fmt_colored(&simplified)
-                                );
-                            }
+                            let simplified = ctx.simplify(&diff);
                             record_result(&mut result_history, &mut rl, history_mode, &simplified);
                         }
                         (Err(err), _) | (_, Err(err)) => {
@@ -87,9 +93,8 @@ pub fn run() -> Result<(), ReadlineError> {
                             let input_dim = expr.first_unit().map(|u| u.dimension.clone());
                             if show_trace {
                                 let (simplified, trace) =
-                                    search::simplify_with_trace(&expr, &RuleSet::full());
+                                    search::simplify_with_trace(&expr, &ctx.rules);
 
-                                // Compute alignment widths using plain (non-colored) text
                                 let plain_widths: Vec<usize> = trace
                                     .iter()
                                     .map(|s| format!("{}", s.expr).chars().count())
@@ -129,7 +134,7 @@ pub fn run() -> Result<(), ReadlineError> {
                                     &simplified,
                                 );
                             } else {
-                                let simplified = search::simplify(&expr, &RuleSet::full());
+                                let simplified = ctx.simplify(&expr);
                                 let unit_suffix =
                                     format_unit_suffix(&simplified, input_dim.as_ref());
                                 println!("{}{}\n", fmt_colored(&simplified), unit_suffix);
@@ -175,7 +180,7 @@ fn record_result(
     result_history: &mut Vec<String>,
     rl: &mut DefaultEditor,
     history_mode: HistoryMode,
-    simplified: &crate::expr::Expr,
+    simplified: &Expr,
 ) {
     let rendered = format!("{}", simplified);
     result_history.push(rendered.clone());
@@ -189,19 +194,10 @@ fn format_unit_suffix(simplified: &Expr, input_dim: Option<&Dimension>) -> Strin
         Some(d) => d,
         None => return String::new(),
     };
-    // If the simplified expr still has units, the formatter shows them already
     if simplified.first_unit().is_some() {
         return String::new();
     }
     format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
-}
-
-fn is_zero(expr: &Expr) -> bool {
-    match expr {
-        Expr::Rational(r) => r.is_zero(),
-        Expr::FracPi(r) => r.is_zero(),
-        _ => false,
-    }
 }
 
 fn reload_history(rl: &mut DefaultEditor, entries: &[String]) {

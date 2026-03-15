@@ -1,9 +1,6 @@
 use crate::ast::{Block, Claim, Document, Proof, Span};
-use crate::dim::{check_claim_dim, collect_units, DimEnv, DimOutcome};
-use crate::eval::spot_check;
-use verso_symbolic::{Expr, RuleSet, simplify};
-
-const SPOT_CHECK_SAMPLES: usize = 200;
+use crate::dim::{collect_units, DimOutcome};
+use verso_symbolic::{Context, Expr, is_zero};
 
 #[derive(Debug)]
 pub struct VerificationReport {
@@ -67,25 +64,23 @@ pub enum Outcome {
 
 /// Verify all claims and proofs in a document.
 pub fn verify_document(doc: &Document) -> VerificationReport {
-    let rules = RuleSet::full();
+    let mut ctx = Context::new();
     let mut results = Vec::new();
 
     // Collect dimension declarations
-    let mut dim_env = DimEnv::new();
     for block in &doc.blocks {
         if let Block::Dim(decl) = block {
-            dim_env.insert(decl.var_name.clone(), decl.dimension.clone());
+            ctx.declare_var(&decl.var_name, Some(decl.dimension.clone()));
         }
     }
-    let has_dims = !dim_env.is_empty();
 
     for block in &doc.blocks {
         match block {
             Block::Claim(claim) => {
-                results.push(verify_claim(claim, &rules, has_dims.then_some(&dim_env)));
+                results.push(verify_claim(claim, &ctx));
             }
             Block::Proof(proof) => {
-                results.push(verify_proof(proof, &rules));
+                results.push(verify_proof(proof, &ctx));
             }
             _ => {}
         }
@@ -95,13 +90,21 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
 }
 
 /// Verify a single claim by checking that `lhs - rhs` simplifies to 0.
-fn verify_claim(
-    claim: &Claim,
-    rules: &RuleSet,
-    dim_env: Option<&DimEnv>,
-) -> VerificationResult {
-    let outcome = check_equal(&claim.lhs, &claim.rhs, rules);
-    let dim_outcome = dim_env.map(|env| check_claim_dim(&claim.lhs, &claim.rhs, env));
+fn verify_claim(claim: &Claim, ctx: &Context) -> VerificationResult {
+    let outcome = match ctx.check_equal(&claim.lhs, &claim.rhs) {
+        verso_symbolic::EqualityResult::Equal => Outcome::Pass,
+        verso_symbolic::EqualityResult::NumericallyEqual { samples, residual } => {
+            Outcome::NumericalPass { samples, residual }
+        }
+        verso_symbolic::EqualityResult::NotEqual { residual } => {
+            Outcome::Fail { residual }
+        }
+    };
+    let dim_outcome = if ctx.has_dims() {
+        Some(ctx.check_dims(&claim.lhs, &claim.rhs))
+    } else {
+        None
+    };
     let mut units = collect_units(&claim.lhs);
     units.extend(collect_units(&claim.rhs));
     units.sort();
@@ -116,20 +119,18 @@ fn verify_claim(
 }
 
 /// Verify a proof chain: each adjacent pair of steps must be equivalent.
-fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
+fn verify_proof(proof: &Proof, ctx: &Context) -> VerificationResult {
     for i in 0..proof.steps.len() - 1 {
         let from = &proof.steps[i];
         let to = &proof.steps[i + 1];
 
         // If justification names a specific rule, try it first
         if let Some(ref rule_name) = to.justification {
-            if let Some(rule) = rules.find_rule(rule_name) {
-                // Try applying the named rule at any subexpression of `from`
-                if try_rule_produces(&from.expr, rule, &to.expr, rules) {
+            if let Some(rule) = ctx.rules.find_rule(rule_name) {
+                if ctx.try_rule_produces(&from.expr, rule, &to.expr) {
                     continue;
                 }
             }
-            // If the named rule didn't work, fall through to general simplification
         }
 
         // General check: simplify(from - to) == 0
@@ -137,7 +138,7 @@ fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
             Box::new(from.expr.clone()),
             Box::new(Expr::Neg(Box::new(to.expr.clone()))),
         );
-        let result = simplify(&diff, rules);
+        let result = ctx.simplify(&diff);
 
         if !is_zero(&result) {
             return VerificationResult {
@@ -164,79 +165,6 @@ fn verify_proof(proof: &Proof, rules: &RuleSet) -> VerificationResult {
         },
         dim_outcome: None,
         units: Vec::new(),
-    }
-}
-
-/// Check if two expressions are equivalent.
-/// First tries symbolic simplification. If that fails, falls back to numerical spot-checks.
-fn check_equal(lhs: &Expr, rhs: &Expr, rules: &RuleSet) -> Outcome {
-    let diff = Expr::Add(
-        Box::new(lhs.clone()),
-        Box::new(Expr::Neg(Box::new(rhs.clone()))),
-    );
-    let result = simplify(&diff, rules);
-
-    if is_zero(&result) {
-        return Outcome::Pass;
-    }
-
-    // Symbolic didn't reduce to 0 — try numerical spot-check
-    match spot_check(lhs, rhs, SPOT_CHECK_SAMPLES) {
-        Ok(()) => Outcome::NumericalPass {
-            samples: SPOT_CHECK_SAMPLES,
-            residual: result,
-        },
-        Err(_) => Outcome::Fail { residual: result },
-    }
-}
-
-/// Try applying a named rule at every subexpression of `from` (both LTR and RTL)
-/// and check if any result equals `to`.
-fn try_rule_produces(from: &Expr, rule: &verso_symbolic::Rule, to: &Expr, rules: &RuleSet) -> bool {
-    // Try at root
-    if let Some(result) = rule.apply_ltr(from) {
-        if exprs_equivalent(&result, to, rules) {
-            return true;
-        }
-    }
-    if rule.reversible {
-        if let Some(result) = rule.apply_rtl(from) {
-            if exprs_equivalent(&result, to, rules) {
-                return true;
-            }
-        }
-    }
-
-    // Try at subexpressions
-    match from {
-        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
-            try_rule_produces(a, rule, to, rules) || try_rule_produces(b, rule, to, rules)
-        }
-        Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => {
-            try_rule_produces(inner, rule, to, rules)
-        }
-        Expr::FnN(_, args) => args.iter().any(|a| try_rule_produces(a, rule, to, rules)),
-        _ => false,
-    }
-}
-
-/// Check if two expressions are equivalent via simplification.
-fn exprs_equivalent(a: &Expr, b: &Expr, rules: &RuleSet) -> bool {
-    if a == b {
-        return true;
-    }
-    let diff = Expr::Add(
-        Box::new(a.clone()),
-        Box::new(Expr::Neg(Box::new(b.clone()))),
-    );
-    is_zero(&simplify(&diff, rules))
-}
-
-fn is_zero(expr: &Expr) -> bool {
-    match expr {
-        Expr::Rational(r) => r.is_zero(),
-        Expr::FracPi(r) => r.is_zero(),
-        _ => false,
     }
 }
 

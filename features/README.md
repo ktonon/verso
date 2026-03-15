@@ -7,3 +7,4 @@
 | [paper-readiness.md](paper-readiness.md) | Paper Readiness | 2026-03-13 | 2026-03-13 | completed |
 | [si-units.md](si-units.md) | SI Unit System | 2026-03-14 | 2026-03-14 | completed |
 | [verso-rename.md](verso-rename.md) | Verso Rename | 2026-03-14 | 2026-03-14 | wip |
+| [declarations.md](declarations.md) | Variable, Constant, and Function Declarations | 2026-03-15 | 2026-03-15 | planned |
