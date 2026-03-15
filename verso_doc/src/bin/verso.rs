@@ -51,13 +51,11 @@ fn main() {
 fn cmd_clean() {
     let tmp = std::env::temp_dir().join("verso-build");
     if tmp.exists() {
-        match std::fs::remove_dir_all(&tmp) {
-            Ok(_) => eprintln!("removed {}", tmp.display()),
-            Err(e) => {
-                eprintln!("error removing {}: {}", tmp.display(), e);
-                process::exit(1);
-            }
+        if let Err(e) = std::fs::remove_dir_all(&tmp) {
+            eprintln!("error removing {}: {}", tmp.display(), e);
+            process::exit(1);
         }
+        eprintln!("removed {}", tmp.display());
     } else {
         eprintln!("nothing to clean");
     }
@@ -158,33 +156,29 @@ fn cmd_build(file: &str, output: Option<&str>) {
         process::exit(1);
     }
 
-    // Work in a temp dir to keep build artifacts out of the source tree
+    // Build in a temp directory to keep source tree clean
     let tmp = std::env::temp_dir().join("verso-build");
     std::fs::create_dir_all(&tmp).unwrap_or_else(|e| {
         eprintln!("error creating temp dir: {}", e);
         process::exit(1);
     });
 
-    let tex_path = tmp.join("paper.tex");
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let tex_file = format!("{}.tex", stem);
+    let tex_path = tmp.join(&tex_file);
     std::fs::write(&tex_path, &tex).unwrap_or_else(|e| {
         eprintln!("error writing tex: {}", e);
         process::exit(1);
     });
 
-    // Copy .bib files from the source directory and its parent into the temp dir
+    // Copy .bib files from source directory to temp build directory
     if let Some(src_dir) = path.parent() {
-        let dirs_to_check: Vec<&Path> = if let Some(parent) = src_dir.parent() {
-            vec![src_dir, parent]
-        } else {
-            vec![src_dir]
-        };
-        for dir in dirs_to_check {
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    if entry.path().extension().map_or(false, |e| e == "bib") {
-                        let dest = tmp.join(entry.file_name());
-                        let _ = std::fs::copy(entry.path(), dest);
-                    }
+        let abs_src = std::fs::canonicalize(src_dir).unwrap_or_else(|_| src_dir.to_path_buf());
+        if let Ok(entries) = std::fs::read_dir(&abs_src) {
+            for entry in entries.flatten() {
+                if entry.path().extension().map_or(false, |e| e == "bib") {
+                    let dest = tmp.join(entry.file_name());
+                    let _ = std::fs::copy(entry.path(), dest);
                 }
             }
         }
@@ -207,28 +201,31 @@ fn cmd_build(file: &str, output: Option<&str>) {
     };
 
     // pdflatex → bibtex → pdflatex → pdflatex
-    if !run("pdflatex", &["-interaction=nonstopmode", "paper.tex"]) {
+    if !run("pdflatex", &["-interaction=nonstopmode", &tex_file]) {
         eprintln!("error: pdflatex failed (pass 1)");
         process::exit(1);
     }
     // bibtex may fail if there are no citations — that's ok
-    let _ = run("bibtex", &["paper"]);
-    if !run("pdflatex", &["-interaction=nonstopmode", "paper.tex"]) {
+    let _ = run("bibtex", &[stem.as_ref()]);
+    if !run("pdflatex", &["-interaction=nonstopmode", &tex_file]) {
         eprintln!("error: pdflatex failed (pass 2)");
         process::exit(1);
     }
-    if !run("pdflatex", &["-interaction=nonstopmode", "paper.tex"]) {
+    if !run("pdflatex", &["-interaction=nonstopmode", &tex_file]) {
         eprintln!("error: pdflatex failed (pass 3)");
         process::exit(1);
     }
 
-    let built_pdf = tmp.join("paper.pdf");
-    std::fs::copy(&built_pdf, &output_path).unwrap_or_else(|e| {
+    let built_pdf = tmp.join(format!("{}.pdf", stem));
+    let abs_output = std::fs::canonicalize(output_path.parent().unwrap_or(Path::new(".")))
+        .unwrap_or_else(|_| output_path.parent().unwrap_or(Path::new(".")).to_path_buf())
+        .join(output_path.file_name().unwrap_or_default());
+    std::fs::copy(&built_pdf, &abs_output).unwrap_or_else(|e| {
         eprintln!("error copying PDF: {}", e);
         process::exit(1);
     });
 
-    eprintln!("wrote {}", output_path.display());
+    eprintln!("wrote {}", abs_output.display());
 }
 
 fn cmd_watch(files: &[String]) {
