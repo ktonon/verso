@@ -16,6 +16,9 @@ enum Command {
     Check {
         /// .verso files to check (optional if .verso.jsonc exists)
         files: Vec<String>,
+        /// Watch files and re-run on save
+        #[arg(short, long)]
+        watch: bool,
     },
     /// Build .verso documents to PDF or LaTeX.
     /// With no arguments, reads .verso.jsonc config.
@@ -25,12 +28,9 @@ enum Command {
         /// Output file. Use .pdf for PDF (default), .tex for LaTeX only
         #[arg(short, long)]
         output: Option<String>,
-    },
-    /// Watch .verso files and re-verify on save.
-    /// With no arguments, reads .verso.jsonc config.
-    Watch {
-        /// .verso files to watch (optional if .verso.jsonc exists)
-        files: Vec<String>,
+        /// Watch files and re-build on save
+        #[arg(short, long)]
+        watch: bool,
     },
     /// Remove cached build artifacts
     Clean,
@@ -43,19 +43,71 @@ enum Command {
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Command::Check { files } if files.is_empty() => {
-            cmd_check(&require_config().inputs())
+        Command::Check { files, watch } => {
+            let files = if files.is_empty() {
+                require_config().inputs()
+            } else {
+                files
+            };
+            if watch {
+                let tasks: Vec<WatchTask> = files
+                    .iter()
+                    .map(|f| {
+                        let f2 = f.clone();
+                        WatchTask::new(f, move || cmd_check(&[f2.clone()]))
+                    })
+                    .collect();
+                watch_and_run(tasks);
+            } else {
+                cmd_check(&files);
+            }
         }
-        Command::Check { files } => cmd_check(&files),
-        Command::Build { file: None, output } => cmd_build_from_config(output.as_deref()),
+        Command::Build {
+            file: None,
+            output,
+            watch,
+        } => {
+            let config = require_config();
+            if watch {
+                let tasks: Vec<WatchTask> = config
+                    .papers
+                    .iter()
+                    .map(|paper| {
+                        let input = paper.input.clone();
+                        let input2 = input.clone();
+                        let out = output
+                            .clone()
+                            .unwrap_or_else(|| {
+                                format!("{}/{}.pdf", config.output_dir, paper.output)
+                            });
+                        WatchTask::new(&input, move || cmd_build(&input2, Some(&out)))
+                    })
+                    .collect();
+                // Ensure output dir exists before first run
+                if config.output_dir != "." {
+                    std::fs::create_dir_all(&config.output_dir).ok();
+                }
+                watch_and_run(tasks);
+            } else {
+                cmd_build_from_config_resolved(&config, output.as_deref());
+            }
+        }
         Command::Build {
             file: Some(f),
             output,
-        } => cmd_build(&f, output.as_deref()),
-        Command::Watch { files } if files.is_empty() => {
-            cmd_watch(&require_config().inputs())
+            watch,
+        } => {
+            if watch {
+                let f2 = f.clone();
+                let out = output;
+                let tasks = vec![WatchTask::new(&f, move || {
+                    cmd_build(&f2, out.as_deref())
+                })];
+                watch_and_run(tasks);
+            } else {
+                cmd_build(&f, output.as_deref());
+            }
         }
-        Command::Watch { files } => cmd_watch(&files),
         Command::Clean => cmd_clean(),
         Command::Init => cmd_init(),
         Command::Lsp => cmd_lsp(),
@@ -171,9 +223,10 @@ fn cmd_check(files: &[String]) {
     }
 }
 
-fn cmd_build_from_config(output_override: Option<&str>) {
-    let config = require_config();
-
+fn cmd_build_from_config_resolved(
+    config: &verso_doc::config::ResolvedConfig,
+    output_override: Option<&str>,
+) {
     if config.output_dir != "." {
         std::fs::create_dir_all(&config.output_dir).unwrap_or_else(|e| {
             eprintln!("error creating {}: {}", config.output_dir, e);
@@ -323,66 +376,93 @@ fn cmd_build(file: &str, output: Option<&str>) {
     eprintln!("wrote {}", abs_output.display());
 }
 
-fn cmd_watch(files: &[String]) {
-    use verso_doc::parse::parse_document_from_file;
-    use verso_doc::report::ReportFormatter;
-    use verso_doc::verify::verify_document;
+struct WatchTask {
+    /// Canonical paths this task depends on (the input file + all its :includes)
+    deps: Vec<std::path::PathBuf>,
+    /// Callback to run when a dependency changes
+    run: Box<dyn Fn()>,
+}
+
+impl WatchTask {
+    fn new<F: Fn() + 'static>(input: &str, run: F) -> Self {
+        use verso_doc::parse::collect_dependencies;
+        let deps = collect_dependencies(Path::new(input)).unwrap_or_else(|e| {
+            eprintln!("warning: cannot resolve dependencies for {}: {}", input, e);
+            Path::new(input)
+                .canonicalize()
+                .map(|p| vec![p])
+                .unwrap_or_default()
+        });
+        WatchTask {
+            deps,
+            run: Box::new(run),
+        }
+    }
+}
+
+fn watch_and_run(tasks: Vec<WatchTask>) {
     use notify_debouncer_mini::{new_debouncer, DebouncedEventKind};
+    use std::collections::HashSet;
     use std::sync::mpsc;
     use std::time::Duration;
 
-    let check = |files: &[String]| {
-        print!("\x1b[2J\x1b[H");
-        let mut all_passed = true;
-        for file in files {
-            let doc = match parse_document_from_file(Path::new(file)) {
-                Ok(d) => d,
-                Err(e) => {
-                    eprintln!("error: {}: {}", file, e);
-                    all_passed = false;
-                    continue;
-                }
-            };
-            let report = verify_document(&doc);
-            let formatter = ReportFormatter {
-                report: &report,
-                filename: file,
-            };
-            print!("{}", formatter);
-            if !report.all_passed() {
-                all_passed = false;
-            }
-        }
-        if all_passed {
-            println!("\n\x1b[32mWatching for changes... (Ctrl+C to stop)\x1b[0m");
-        } else {
-            println!("\n\x1b[31mWatching for changes... (Ctrl+C to stop)\x1b[0m");
-        }
-    };
-
-    check(files);
+    // Initial run of all tasks
+    print!("\x1b[2J\x1b[H");
+    for task in &tasks {
+        (task.run)();
+    }
+    println!("\n\x1b[32mWatching for changes... (Ctrl+C to stop)\x1b[0m");
 
     let (tx, rx) = mpsc::channel();
     let mut debouncer = new_debouncer(Duration::from_millis(300), tx)
         .expect("failed to create file watcher");
 
-    for path in files {
-        debouncer
-            .watcher()
-            .watch(Path::new(path), notify::RecursiveMode::NonRecursive)
-            .unwrap_or_else(|e| {
-                eprintln!("warning: cannot watch {}: {}", path, e);
-            });
+    // Watch parent directories of all dependencies
+    let mut watched = HashSet::new();
+    for task in &tasks {
+        for dep in &task.deps {
+            let dir = dep.parent().unwrap_or(Path::new(".")).to_path_buf();
+            if watched.insert(dir.clone()) {
+                debouncer
+                    .watcher()
+                    .watch(&dir, notify::RecursiveMode::Recursive)
+                    .unwrap_or_else(|e| {
+                        eprintln!("warning: cannot watch {}: {}", dir.display(), e);
+                    });
+            }
+        }
     }
+
+    let dominated_extensions: &[&str] = &["verso", "bib"];
 
     loop {
         match rx.recv() {
             Ok(Ok(events)) => {
-                let has_write = events
+                let changed: Vec<std::path::PathBuf> = events
                     .iter()
-                    .any(|e| matches!(e.kind, DebouncedEventKind::Any));
-                if has_write {
-                    check(files);
+                    .filter(|e| {
+                        matches!(e.kind, DebouncedEventKind::Any)
+                            && e.path.extension().map_or(false, |ext| {
+                                dominated_extensions.iter().any(|de| ext == *de)
+                            })
+                    })
+                    .filter_map(|e| e.path.canonicalize().ok())
+                    .collect();
+
+                if changed.is_empty() {
+                    continue;
+                }
+
+                print!("\x1b[2J\x1b[H");
+                let mut any_ran = false;
+                for task in &tasks {
+                    if changed.iter().any(|c| task.deps.contains(c)) {
+                        (task.run)();
+                        any_ran = true;
+                    }
+                }
+                if any_ran {
+                    println!("\n\x1b[32mWatching for changes... (Ctrl+C to stop)\x1b[0m");
                 }
             }
             Ok(Err(e)) => eprintln!("watch error: {}", e),

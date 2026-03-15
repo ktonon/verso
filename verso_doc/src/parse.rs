@@ -65,6 +65,21 @@ pub fn resolve_includes(
     Ok(out)
 }
 
+/// Collect all file dependencies for a `.verso` file (the file itself + all includes, recursively).
+pub fn collect_dependencies(path: &std::path::Path) -> Result<Vec<std::path::PathBuf>, ParseDocError> {
+    let src = std::fs::read_to_string(path).map_err(|e| ParseDocError {
+        line: 0,
+        message: format!("cannot read '{}': {}", path.display(), e),
+    })?;
+    let base_dir = path.parent().unwrap_or(std::path::Path::new("."));
+    let mut seen = vec![path.canonicalize().map_err(|e| ParseDocError {
+        line: 0,
+        message: format!("cannot resolve '{}': {}", path.display(), e),
+    })?];
+    let _ = resolve_includes(&src, base_dir, &mut seen)?;
+    Ok(seen)
+}
+
 /// Parse an `.verso` file, resolving `:include` directives.
 pub fn parse_document_from_file(path: &std::path::Path) -> Result<Document, ParseDocError> {
     let src = std::fs::read_to_string(path).map_err(|e| ParseDocError {
