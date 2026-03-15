@@ -181,7 +181,11 @@ pub fn run() -> Result<(), ReadlineError> {
                             if let Some(Err(e)) = ctx.check_expr_dim(&expr) {
                                 println!("\x1b[31mdim error: {}\x1b[0m", e);
                             }
-                            let input_dim = expr.first_unit().map(|u| u.dimension.clone());
+                            let unit_dim = expr.first_unit().map(|u| u.dimension.clone());
+                            let inferred_dim = ctx
+                                .check_expr_dim(&expr)
+                                .and_then(|r| r.ok())
+                                .filter(|d| !d.is_dimensionless());
                             if show_trace {
                                 let applied = ctx.apply_consts(&expr);
                                 let (simplified, trace) =
@@ -227,8 +231,11 @@ pub fn run() -> Result<(), ReadlineError> {
                                 );
                             } else {
                                 let simplified = ctx.simplify(&expr);
-                                let unit_suffix =
-                                    format_unit_suffix(&simplified, input_dim.as_ref());
+                                let unit_suffix = format_unit_suffix(
+                                    &simplified,
+                                    unit_dim.as_ref(),
+                                    inferred_dim.as_ref(),
+                                );
                                 println!("{}{}\n", fmt_colored(&simplified), unit_suffix);
                                 record_result(
                                     &mut result_history,
@@ -333,15 +340,21 @@ fn record_result(
     }
 }
 
-fn format_unit_suffix(simplified: &Expr, input_dim: Option<&Dimension>) -> String {
-    let dim = match input_dim {
-        Some(d) => d,
-        None => return String::new(),
-    };
+fn format_unit_suffix(
+    simplified: &Expr,
+    unit_dim: Option<&Dimension>,
+    inferred_dim: Option<&Dimension>,
+) -> String {
     if simplified.first_unit().is_some() {
         return String::new();
     }
-    format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
+    if let Some(d) = unit_dim {
+        return format!(" \x1b[36m[{}]\x1b[0m", base_si_display(d));
+    }
+    if let Some(d) = inferred_dim {
+        return format!(" \x1b[36m{}\x1b[0m", d);
+    }
+    String::new()
 }
 
 fn reload_history(rl: &mut DefaultEditor, entries: &[String]) {
