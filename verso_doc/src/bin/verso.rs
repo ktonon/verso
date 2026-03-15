@@ -31,6 +31,14 @@ enum Command {
         #[arg(required = true)]
         files: Vec<String>,
     },
+    /// Build PDF from a .verso document
+    Build {
+        /// .verso file to build
+        file: String,
+        /// Output PDF file (default: based on input filename)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
     /// Start the language server (LSP)
     Lsp,
 }
@@ -40,6 +48,7 @@ fn main() {
     match cli.command {
         Command::Check { files } => cmd_check(&files),
         Command::Compile { file, output } => cmd_compile(&file, output.as_deref()),
+        Command::Build { file, output } => cmd_build(&file, output.as_deref()),
         Command::Watch { files } => cmd_watch(&files),
         Command::Lsp => cmd_lsp(),
     }
@@ -102,6 +111,127 @@ fn cmd_compile(file: &str, output: Option<&str>) {
     } else {
         print!("{}", tex);
     }
+}
+
+fn cmd_build(file: &str, output: Option<&str>) {
+    use verso_doc::compile_tex::compile_to_tex;
+    use verso_doc::parse::parse_document_from_file;
+    use std::process::Command;
+
+    // Check for required tools
+    let missing: Vec<&str> = ["pdflatex", "bibtex"]
+        .iter()
+        .copied()
+        .filter(|cmd| {
+            Command::new("which")
+                .arg(cmd)
+                .output()
+                .map(|o| !o.status.success())
+                .unwrap_or(true)
+        })
+        .collect();
+
+    if !missing.is_empty() {
+        eprintln!("error: missing required tools: {}", missing.join(", "));
+        eprintln!();
+        eprintln!("Install a TeX distribution to get pdflatex and bibtex:");
+        eprintln!("  macOS:        brew install --cask basictex");
+        eprintln!("  Ubuntu/Debian: sudo apt install texlive-latex-base");
+        eprintln!("  Fedora:       sudo dnf install texlive-scheme-basic");
+        eprintln!("  Arch:         sudo pacman -S texlive-basic");
+        process::exit(1);
+    }
+
+    let path = Path::new(file);
+    let doc = match parse_document_from_file(path) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("error: {}: {}", file, e);
+            process::exit(1);
+        }
+    };
+
+    let tex = compile_to_tex(&doc);
+
+    // Work in a temp dir to keep build artifacts out of the source tree
+    let tmp = std::env::temp_dir().join("verso-build");
+    std::fs::create_dir_all(&tmp).unwrap_or_else(|e| {
+        eprintln!("error creating temp dir: {}", e);
+        process::exit(1);
+    });
+
+    let tex_path = tmp.join("paper.tex");
+    std::fs::write(&tex_path, &tex).unwrap_or_else(|e| {
+        eprintln!("error writing tex: {}", e);
+        process::exit(1);
+    });
+
+    // Copy .bib files from the source directory and its parent into the temp dir
+    if let Some(src_dir) = path.parent() {
+        let dirs_to_check: Vec<&Path> = if let Some(parent) = src_dir.parent() {
+            vec![src_dir, parent]
+        } else {
+            vec![src_dir]
+        };
+        for dir in dirs_to_check {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    if entry.path().extension().map_or(false, |e| e == "bib") {
+                        let dest = tmp.join(entry.file_name());
+                        let _ = std::fs::copy(entry.path(), dest);
+                    }
+                }
+            }
+        }
+    }
+
+    let run = |cmd: &str, args: &[&str]| -> bool {
+        let status = Command::new(cmd)
+            .args(args)
+            .current_dir(&tmp)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        match status {
+            Ok(s) => s.success(),
+            Err(e) => {
+                eprintln!("error running {}: {}", cmd, e);
+                false
+            }
+        }
+    };
+
+    // pdflatex → bibtex → pdflatex → pdflatex
+    if !run("pdflatex", &["-interaction=nonstopmode", "paper.tex"]) {
+        eprintln!("error: pdflatex failed (pass 1)");
+        process::exit(1);
+    }
+    // bibtex may fail if there are no citations — that's ok
+    let _ = run("bibtex", &["paper"]);
+    if !run("pdflatex", &["-interaction=nonstopmode", "paper.tex"]) {
+        eprintln!("error: pdflatex failed (pass 2)");
+        process::exit(1);
+    }
+    if !run("pdflatex", &["-interaction=nonstopmode", "paper.tex"]) {
+        eprintln!("error: pdflatex failed (pass 3)");
+        process::exit(1);
+    }
+
+    let built_pdf = tmp.join("paper.pdf");
+    let output_path = match output {
+        Some(o) => std::path::PathBuf::from(o),
+        None => {
+            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+            path.parent().unwrap_or(Path::new(".")).join(format!("{}.pdf", stem))
+        }
+    };
+
+    std::fs::copy(&built_pdf, &output_path).unwrap_or_else(|e| {
+        eprintln!("error copying PDF: {}", e);
+        process::exit(1);
+    });
+
+    eprintln!("wrote {}", output_path.display());
 }
 
 fn cmd_watch(files: &[String]) {
