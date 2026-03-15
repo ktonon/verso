@@ -56,55 +56,94 @@ pub fn run() -> Result<(), ReadlineError> {
 
                 record_input(&mut input_history, &mut rl, history_mode, input);
 
-                match parse_expr(input) {
-                    Ok(expr) => {
-                        let input_dim = expr.first_unit().map(|u| u.dimension.clone());
-                        if show_trace {
-                            let (simplified, trace) =
-                                search::simplify_with_trace(&expr, &RuleSet::full());
-
-                            // Compute alignment widths using plain (non-colored) text
-                            let plain_widths: Vec<usize> = trace
-                                .iter()
-                                .map(|s| format!("{}", s.expr).chars().count())
-                                .collect();
-                            let max_expr_width = plain_widths.iter().copied().max().unwrap_or(0);
-                            let max_name_width = trace
-                                .iter()
-                                .filter_map(|s| s.rule_name.as_ref().map(|n| n.len()))
-                                .max()
-                                .unwrap_or(0);
-
-                            for (i, step) in trace.iter().enumerate() {
-                                let expr_str = fmt_colored(&step.expr);
-                                let padding = max_expr_width - plain_widths[i];
-                                match (&step.rule_name, &step.rule_display) {
-                                    (Some(name), Some(display)) => {
-                                        println!(
-                                            "{}: {}{:padding$}  \x1b[90m{:width$}\x1b[0m  \x1b[2m{}\x1b[0m",
-                                            i,
-                                            expr_str,
-                                            "",
-                                            name,
-                                            display,
-                                            padding = padding,
-                                            width = max_name_width,
-                                        );
-                                    }
-                                    _ => println!("{}: {}", i, expr_str),
-                                }
+                if let Some(eq_pos) = input.find('=') {
+                    let lhs_str = input[..eq_pos].trim();
+                    let rhs_str = input[eq_pos + 1..].trim();
+                    match (parse_expr(lhs_str), parse_expr(rhs_str)) {
+                        (Ok(lhs), Ok(rhs)) => {
+                            let diff = Expr::Add(
+                                Box::new(lhs),
+                                Box::new(Expr::Neg(Box::new(rhs))),
+                            );
+                            let rules = RuleSet::full();
+                            let simplified = search::simplify(&diff, &rules);
+                            if is_zero(&simplified) {
+                                println!("\x1b[32mtrue\x1b[0m\n");
+                            } else {
+                                println!(
+                                    "\x1b[31mfalse\x1b[0m  residual: {}\n",
+                                    fmt_colored(&simplified)
+                                );
                             }
-                            println!();
-                            record_result(&mut result_history, &mut rl, history_mode, &simplified);
-                        } else {
-                            let simplified = search::simplify(&expr, &RuleSet::full());
-                            let unit_suffix = format_unit_suffix(&simplified, input_dim.as_ref());
-                            println!("{}{}\n", fmt_colored(&simplified), unit_suffix);
                             record_result(&mut result_history, &mut rl, history_mode, &simplified);
                         }
+                        (Err(err), _) | (_, Err(err)) => {
+                            println!("Error: {:?}\n", err);
+                        }
                     }
-                    Err(err) => {
-                        println!("Error: {:?}\n", err);
+                } else {
+                    match parse_expr(input) {
+                        Ok(expr) => {
+                            let input_dim = expr.first_unit().map(|u| u.dimension.clone());
+                            if show_trace {
+                                let (simplified, trace) =
+                                    search::simplify_with_trace(&expr, &RuleSet::full());
+
+                                // Compute alignment widths using plain (non-colored) text
+                                let plain_widths: Vec<usize> = trace
+                                    .iter()
+                                    .map(|s| format!("{}", s.expr).chars().count())
+                                    .collect();
+                                let max_expr_width =
+                                    plain_widths.iter().copied().max().unwrap_or(0);
+                                let max_name_width = trace
+                                    .iter()
+                                    .filter_map(|s| s.rule_name.as_ref().map(|n| n.len()))
+                                    .max()
+                                    .unwrap_or(0);
+
+                                for (i, step) in trace.iter().enumerate() {
+                                    let expr_str = fmt_colored(&step.expr);
+                                    let padding = max_expr_width - plain_widths[i];
+                                    match (&step.rule_name, &step.rule_display) {
+                                        (Some(name), Some(display)) => {
+                                            println!(
+                                                "{}: {}{:padding$}  \x1b[90m{:width$}\x1b[0m  \x1b[2m{}\x1b[0m",
+                                                i,
+                                                expr_str,
+                                                "",
+                                                name,
+                                                display,
+                                                padding = padding,
+                                                width = max_name_width,
+                                            );
+                                        }
+                                        _ => println!("{}: {}", i, expr_str),
+                                    }
+                                }
+                                println!();
+                                record_result(
+                                    &mut result_history,
+                                    &mut rl,
+                                    history_mode,
+                                    &simplified,
+                                );
+                            } else {
+                                let simplified = search::simplify(&expr, &RuleSet::full());
+                                let unit_suffix =
+                                    format_unit_suffix(&simplified, input_dim.as_ref());
+                                println!("{}{}\n", fmt_colored(&simplified), unit_suffix);
+                                record_result(
+                                    &mut result_history,
+                                    &mut rl,
+                                    history_mode,
+                                    &simplified,
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            println!("Error: {:?}\n", err);
+                        }
                     }
                 }
             }
@@ -155,6 +194,14 @@ fn format_unit_suffix(simplified: &Expr, input_dim: Option<&Dimension>) -> Strin
         return String::new();
     }
     format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
+}
+
+fn is_zero(expr: &Expr) -> bool {
+    match expr {
+        Expr::Rational(r) => r.is_zero(),
+        Expr::FracPi(r) => r.is_zero(),
+        _ => false,
+    }
 }
 
 fn reload_history(rl: &mut DefaultEditor, entries: &[String]) {
