@@ -1,9 +1,14 @@
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct VersoConfig {
+    /// Version of verso that last successfully processed this config
+    #[serde(default)]
+    pub verso: Option<String>,
     #[serde(default)]
     pub output_directory: Option<String>,
     #[serde(default)]
@@ -155,7 +160,10 @@ impl VersoConfig {
 
 /// Generate the default `.verso.jsonc` content for `verso init`.
 pub fn default_config_content() -> String {
-    r#"{
+    format!(
+        r#"{{
+  "verso": "{}",
+
   // Output directory for build artifacts
   "outputDirectory": "build",
 
@@ -164,17 +172,18 @@ pub fn default_config_content() -> String {
 
   // For multiple papers, replace "input" above with "papers":
   // "papers": [
-  //   {
+  //   {{
   //     "input": "paper.verso",
   //     "output": "paper"
-  //   },
-  //   {
+  //   }},
+  //   {{
   //     "input": "other.verso"
-  //   }
+  //   }}
   // ]
-}
-"#
-    .to_string()
+}}
+"#,
+        VERSION
+    )
 }
 
 /// A loaded and resolved config with all fields ready to use.
@@ -188,6 +197,69 @@ impl ResolvedConfig {
     pub fn inputs(&self) -> Vec<String> {
         self.papers.iter().map(|p| p.input.clone()).collect()
     }
+}
+
+/// Update the `"verso"` version field in the config file.
+/// If the field exists, its value is replaced. If not, it is inserted as the first key.
+pub fn stamp_version(config_path: &Path) -> Result<(), ConfigError> {
+    let text = std::fs::read_to_string(config_path)
+        .map_err(|e| ConfigError::Parse(format!("reading {}: {}", config_path.display(), e)))?;
+
+    let updated = stamp_version_in_text(&text);
+
+    std::fs::write(config_path, updated)
+        .map_err(|e| ConfigError::Parse(format!("writing {}: {}", config_path.display(), e)))
+}
+
+fn stamp_version_in_text(text: &str) -> String {
+    // Try to find and replace an existing "verso": "..." line
+    let mut lines: Vec<&str> = text.lines().collect();
+    for line in &mut lines {
+        let trimmed = line.trim();
+        if trimmed.starts_with("\"verso\"") && trimmed.contains(':') {
+            // Preserve leading whitespace
+            let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
+            // Check if there's a trailing comma by looking at the trimmed line
+            let has_comma = trimmed.ends_with(',');
+            let comma = if has_comma { "," } else { "" };
+            let replacement = format!("{}\"verso\": \"{}\"{}", indent, VERSION, comma);
+            // We need to return a new string with this line replaced
+            let mut result = String::with_capacity(text.len());
+            for (i, orig) in text.lines().enumerate() {
+                if i > 0 {
+                    result.push('\n');
+                }
+                let orig_trimmed = orig.trim();
+                if orig_trimmed.starts_with("\"verso\"") && orig_trimmed.contains(':') {
+                    result.push_str(&replacement);
+                } else {
+                    result.push_str(orig);
+                }
+            }
+            if text.ends_with('\n') {
+                result.push('\n');
+            }
+            return result;
+        }
+    }
+
+    // No existing "verso" field — insert after opening brace
+    let mut result = String::with_capacity(text.len() + 30);
+    let mut inserted = false;
+    for (i, line) in text.lines().enumerate() {
+        if i > 0 {
+            result.push('\n');
+        }
+        result.push_str(line);
+        if !inserted && line.trim() == "{" {
+            result.push_str(&format!("\n  \"verso\": \"{}\",", VERSION));
+            inserted = true;
+        }
+    }
+    if text.ends_with('\n') {
+        result.push('\n');
+    }
+    result
 }
 
 pub const CONFIG_FILENAMES: &[&str] = &[".verso.jsonc", ".verso.json"];
@@ -282,6 +354,7 @@ mod tests {
     #[test]
     fn resolve_single_input_defaults_output() {
         let cfg = VersoConfig {
+            verso: None,
             output_directory: None,
             input: Some("src/paper.verso".into()),
             papers: None,
@@ -295,6 +368,7 @@ mod tests {
     #[test]
     fn resolve_papers_defaults_output_to_stem() {
         let cfg = VersoConfig {
+            verso: None,
             output_directory: None,
             input: None,
             papers: Some(vec![
@@ -316,6 +390,7 @@ mod tests {
     #[test]
     fn resolve_rejects_both_input_and_papers() {
         let cfg = VersoConfig {
+            verso: None,
             output_directory: None,
             input: Some("a.verso".into()),
             papers: Some(vec![]),
@@ -326,6 +401,7 @@ mod tests {
     #[test]
     fn resolve_rejects_neither_input_nor_papers() {
         let cfg = VersoConfig {
+            verso: None,
             output_directory: None,
             input: None,
             papers: None,
@@ -336,6 +412,7 @@ mod tests {
     #[test]
     fn resolve_rejects_output_with_extension() {
         let cfg = VersoConfig {
+            verso: None,
             output_directory: None,
             input: None,
             papers: Some(vec![PaperConfig {
@@ -352,6 +429,7 @@ mod tests {
     #[test]
     fn output_dir_defaults_to_dot() {
         let cfg = VersoConfig {
+            verso: None,
             output_directory: None,
             input: Some("paper.verso".into()),
             papers: None,
@@ -362,6 +440,7 @@ mod tests {
     #[test]
     fn output_dir_uses_configured_value() {
         let cfg = VersoConfig {
+            verso: None,
             output_directory: Some("build".into()),
             input: Some("paper.verso".into()),
             papers: None,
@@ -422,7 +501,35 @@ mod tests {
     fn default_config_is_valid_jsonc() {
         let content = default_config_content();
         let cfg = VersoConfig::from_jsonc(&content).unwrap();
+        assert_eq!(cfg.verso, Some(VERSION.into()));
         assert_eq!(cfg.output_directory, Some("build".into()));
         assert_eq!(cfg.input, Some("paper.verso".into()));
+    }
+
+    #[test]
+    fn stamp_version_replaces_existing() {
+        let input = "{\n  \"verso\": \"0.0.1\",\n  \"input\": \"paper.verso\"\n}\n";
+        let result = stamp_version_in_text(input);
+        assert!(result.contains(&format!("\"verso\": \"{}\"", VERSION)));
+        assert!(!result.contains("0.0.1"));
+        // Verify still valid JSON
+        VersoConfig::from_jsonc(&result).unwrap();
+    }
+
+    #[test]
+    fn stamp_version_inserts_when_missing() {
+        let input = "{\n  \"input\": \"paper.verso\"\n}\n";
+        let result = stamp_version_in_text(input);
+        assert!(result.contains(&format!("\"verso\": \"{}\"", VERSION)));
+        // Verify still valid JSON
+        VersoConfig::from_jsonc(&result).unwrap();
+    }
+
+    #[test]
+    fn stamp_version_preserves_comments() {
+        let input = "{\n  // A comment\n  \"verso\": \"0.0.1\",\n  \"input\": \"paper.verso\"\n}\n";
+        let result = stamp_version_in_text(input);
+        assert!(result.contains("// A comment"));
+        assert!(result.contains(&format!("\"verso\": \"{}\"", VERSION)));
     }
 }

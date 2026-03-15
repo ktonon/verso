@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process;
 
 #[derive(Parser)]
-#[command(name = "verso", about = "Verso — verifiable source for scientific papers")]
+#[command(name = "verso", version, about = "Verso — verifiable source for scientific papers")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -36,6 +36,8 @@ enum Command {
     Clean,
     /// Initialize a new verso project (creates .verso.jsonc)
     Init,
+    /// Interactive symbolic math REPL
+    Repl,
     /// Start the language server (LSP)
     Lsp,
 }
@@ -60,6 +62,7 @@ fn main() {
                 watch_and_run(tasks);
             } else {
                 cmd_check(&files);
+                stamp_config();
             }
         }
         Command::Build {
@@ -90,6 +93,7 @@ fn main() {
                 watch_and_run(tasks);
             } else {
                 cmd_build_from_config_resolved(&config, output.as_deref());
+                stamp_config();
             }
         }
         Command::Build {
@@ -110,7 +114,25 @@ fn main() {
         }
         Command::Clean => cmd_clean(),
         Command::Init => cmd_init(),
+        Command::Repl => {
+            if let Err(e) = verso_symbolic::repl::run() {
+                eprintln!("repl error: {}", e);
+                process::exit(1);
+            }
+        }
         Command::Lsp => cmd_lsp(),
+    }
+}
+
+/// Stamp the config file with the current verso version after a successful run.
+fn stamp_config() {
+    use verso_doc::config::{find_config, stamp_version};
+    if let Some(cwd) = std::env::current_dir().ok() {
+        if let Some(path) = find_config(&cwd) {
+            if let Err(e) = stamp_version(&path) {
+                eprintln!("warning: could not update version in config: {}", e);
+            }
+        }
     }
 }
 
