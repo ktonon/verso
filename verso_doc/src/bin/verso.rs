@@ -17,11 +17,11 @@ enum Command {
         #[arg(required = true)]
         files: Vec<String>,
     },
-    /// Compile .verso documents to LaTeX
-    Compile {
-        /// .verso file to compile
+    /// Build a .verso document to PDF or LaTeX
+    Build {
+        /// .verso file to build
         file: String,
-        /// Output file (default: stdout)
+        /// Output file. Use .pdf for PDF (default), .tex for LaTeX only
         #[arg(short, long)]
         output: Option<String>,
     },
@@ -31,14 +31,6 @@ enum Command {
         #[arg(required = true)]
         files: Vec<String>,
     },
-    /// Build PDF from a .verso document
-    Build {
-        /// .verso file to build
-        file: String,
-        /// Output PDF file (default: based on input filename)
-        #[arg(short, long)]
-        output: Option<String>,
-    },
     /// Start the language server (LSP)
     Lsp,
 }
@@ -47,7 +39,6 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Check { files } => cmd_check(&files),
-        Command::Compile { file, output } => cmd_compile(&file, output.as_deref()),
         Command::Build { file, output } => cmd_build(&file, output.as_deref()),
         Command::Watch { files } => cmd_watch(&files),
         Command::Lsp => cmd_lsp(),
@@ -88,11 +79,24 @@ fn cmd_check(files: &[String]) {
     }
 }
 
-fn cmd_compile(file: &str, output: Option<&str>) {
+fn cmd_build(file: &str, output: Option<&str>) {
     use verso_doc::compile_tex::compile_to_tex;
     use verso_doc::parse::parse_document_from_file;
+    use std::process::Command;
 
-    let doc = match parse_document_from_file(Path::new(file)) {
+    let path = Path::new(file);
+
+    // Determine output path and format
+    let output_path = match output {
+        Some(o) => std::path::PathBuf::from(o),
+        None => {
+            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+            path.parent().unwrap_or(Path::new(".")).join(format!("{}.pdf", stem))
+        }
+    };
+    let is_tex = output_path.extension().map_or(false, |e| e == "tex");
+
+    let doc = match parse_document_from_file(path) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("error: {}: {}", file, e);
@@ -102,23 +106,17 @@ fn cmd_compile(file: &str, output: Option<&str>) {
 
     let tex = compile_to_tex(&doc);
 
-    if let Some(output_path) = output {
-        if let Err(e) = std::fs::write(output_path, &tex) {
-            eprintln!("error writing {}: {}", output_path, e);
+    // LaTeX output — just write the .tex file
+    if is_tex {
+        if let Err(e) = std::fs::write(&output_path, &tex) {
+            eprintln!("error writing {}: {}", output_path.display(), e);
             process::exit(1);
         }
-        eprintln!("wrote {}", output_path);
-    } else {
-        print!("{}", tex);
+        eprintln!("wrote {}", output_path.display());
+        return;
     }
-}
 
-fn cmd_build(file: &str, output: Option<&str>) {
-    use verso_doc::compile_tex::compile_to_tex;
-    use verso_doc::parse::parse_document_from_file;
-    use std::process::Command;
-
-    // Check for required tools
+    // PDF output — check for required tools
     let missing: Vec<&str> = ["pdflatex", "bibtex"]
         .iter()
         .copied()
@@ -135,23 +133,12 @@ fn cmd_build(file: &str, output: Option<&str>) {
         eprintln!("error: missing required tools: {}", missing.join(", "));
         eprintln!();
         eprintln!("Install a TeX distribution to get pdflatex and bibtex:");
-        eprintln!("  macOS:        brew install --cask basictex");
+        eprintln!("  macOS:         brew install --cask basictex");
         eprintln!("  Ubuntu/Debian: sudo apt install texlive-latex-base");
-        eprintln!("  Fedora:       sudo dnf install texlive-scheme-basic");
-        eprintln!("  Arch:         sudo pacman -S texlive-basic");
+        eprintln!("  Fedora:        sudo dnf install texlive-scheme-basic");
+        eprintln!("  Arch:          sudo pacman -S texlive-basic");
         process::exit(1);
     }
-
-    let path = Path::new(file);
-    let doc = match parse_document_from_file(path) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("error: {}: {}", file, e);
-            process::exit(1);
-        }
-    };
-
-    let tex = compile_to_tex(&doc);
 
     // Work in a temp dir to keep build artifacts out of the source tree
     let tmp = std::env::temp_dir().join("verso-build");
@@ -218,14 +205,6 @@ fn cmd_build(file: &str, output: Option<&str>) {
     }
 
     let built_pdf = tmp.join("paper.pdf");
-    let output_path = match output {
-        Some(o) => std::path::PathBuf::from(o),
-        None => {
-            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-            path.parent().unwrap_or(Path::new(".")).join(format!("{}.pdf", stem))
-        }
-    };
-
     std::fs::copy(&built_pdf, &output_path).unwrap_or_else(|e| {
         eprintln!("error copying PDF: {}", e);
         process::exit(1);
