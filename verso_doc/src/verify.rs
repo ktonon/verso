@@ -26,7 +26,7 @@ pub struct VerificationResult {
     pub name: String,
     pub span: Span,
     pub outcome: Outcome,
-    /// Result of dimensional analysis (None if no :dim declarations in document).
+    /// Result of dimensional analysis (None if no :var declarations in document).
     pub dim_outcome: Option<DimOutcome>,
     /// Unit annotations found in the claim expressions.
     pub units: Vec<String>,
@@ -69,7 +69,7 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
 
     // Collect dimension declarations
     for block in &doc.blocks {
-        if let Block::Dim(decl) = block {
+        if let Block::Var(decl) = block {
             ctx.declare_var(&decl.var_name, Some(decl.dimension.clone()));
         }
     }

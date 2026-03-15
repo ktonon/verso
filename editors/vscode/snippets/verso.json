@@ -18,12 +18,12 @@
     ],
     "description": "New proof block"
   },
-  "Dimension": {
-    "prefix": "dim",
+  "Variable": {
+    "prefix": "var",
     "body": [
-      ":dim ${1:var} [${2:dims}]"
+      ":var ${1:name} [${2:dims}]"
     ],
-    "description": "Dimension declaration"
+    "description": "Variable declaration with dimensions"
   },
   "Theorem": {
     "prefix": "thm",

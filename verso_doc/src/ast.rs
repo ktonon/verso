@@ -17,8 +17,8 @@ pub enum Block {
     Claim(Claim),
     /// A proof chain for a named claim.
     Proof(Proof),
-    /// A dimension declaration for a variable.
-    Dim(DimDecl),
+    /// A variable declaration with dimensions: `:var varname [dims]`
+    Var(VarDecl),
     /// A list (bullet or numbered).
     List(List),
     /// A displayed math block (not verified).
@@ -179,9 +179,9 @@ pub struct ProofStep {
     pub span: Span,
 }
 
-/// A dimension declaration: `:dim varname [M L T^-2]`
+/// A variable declaration: `:var varname [M L T^-2]`
 #[derive(Debug)]
-pub struct DimDecl {
+pub struct VarDecl {
     pub var_name: String,
     pub dimension: Dimension,
     pub span: Span,

@@ -177,7 +177,7 @@ fn unit_annotations_pass_dim_check() {
             r.outcome,
             r.dim_outcome
         );
-        // Claims with :dim declarations and unit quantities should have dimension checking
+        // Claims with :var declarations and unit quantities should have dimension checking
         assert!(
             matches!(r.dim_outcome, Some(DimOutcome::Pass)),
             "'{}' should have DimOutcome::Pass, got {:?}",
@@ -190,14 +190,14 @@ fn unit_annotations_pass_dim_check() {
 
 #[test]
 fn no_dim_declarations_skips_dim_check() {
-    // Documents without :dim blocks should have dim_outcome = None
+    // Documents without :var blocks should have dim_outcome = None
     let src = load_fixture("basic_algebra.verso");
     let doc = parse_document(&src).unwrap();
     let report = verify_document(&doc);
     for r in &report.results {
         assert!(
             r.dim_outcome.is_none(),
-            "'{}' should have no dim_outcome without :dim declarations",
+            "'{}' should have no dim_outcome without :var declarations",
             r.name
         );
     }

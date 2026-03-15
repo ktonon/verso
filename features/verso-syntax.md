@@ -252,22 +252,22 @@ of steps is verified. Justifications are optional annotations after `;`.
 
 ---
 
-### Dimension declarations
+### Variable declarations
 
-Declare the physical dimensions of a variable. When present, Verso checks that both
+Declare a variable with its physical dimensions. When present, Verso checks that both
 sides of every claim have matching dimensions.
 
 ```
-:dim v [L T^-1]
-:dim m [M]
-:dim F [M L T^-2]
+:var v [L T^-1]
+:var m [M]
+:var F [M L T^-2]
 ```
 
 - Bracket notation: base dimensions separated by spaces, exponents via `^`.
 - Base dimensions: `L` (length), `M` (mass), `T` (time), `Theta` or `\u{0398}` (temperature),
   `I` (current), `N` (amount), `J` (luminosity).
 - Dimensionless: `[1]`.
-- Dimension declarations produce no LaTeX output.
+- Variable declarations produce no LaTeX output.
 
 ---
 

@@ -2,10 +2,10 @@
 
 Algebraic identities with dimension annotations.
 
-:dim m [M]
-:dim v [L T^-1]
-:dim x [L]
-:dim t [T]
+:var m [M]
+:var v [L T^-1]
+:var x [L]
+:var t [T]
 
 :claim ke_commutative
   (1/2) * m * v * v = (1/2) * m * v^2

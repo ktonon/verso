@@ -8,7 +8,7 @@
     { "include": "#math-block" },
     { "include": "#directive-claim" },
     { "include": "#directive-proof" },
-    { "include": "#directive-dim" },
+    { "include": "#directive-var" },
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
     { "include": "#directive-table" },
@@ -132,11 +132,11 @@
       ]
     },
 
-    "directive-dim": {
-      "match": "^(:dim)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+    "directive-var": {
+      "match": "^(:var)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
       "captures": {
-        "1": { "name": "keyword.control.directive.dim.verso" },
-        "2": { "name": "variable.parameter.dim.verso" },
+        "1": { "name": "keyword.control.directive.var.verso" },
+        "2": { "name": "variable.parameter.var.verso" },
         "3": { "name": "storage.type.dimension.verso" }
       }
     },

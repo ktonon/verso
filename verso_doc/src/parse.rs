@@ -1,5 +1,5 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, DimDecl, Document, EnvKind, Environment, Figure, List, ListItem,
+    Block, Claim, ColumnAlign, VarDecl, Document, EnvKind, Environment, Figure, List, ListItem,
     MathBlock, Proof, ProofStep, ProseFragment, Span, Table,
 };
 use verso_symbolic::{parse_expr, Dimension};
@@ -414,29 +414,29 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Dimension declaration
-        if trimmed.starts_with(":dim") {
-            let rest = trimmed[":dim".len()..].trim();
+        // Variable declaration
+        if trimmed.starts_with(":var") {
+            let rest = trimmed[":var".len()..].trim();
             // Parse: varname [dim spec]
             let bracket_pos = rest.find('[').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: ":dim requires a variable name and dimension, e.g. :dim x [L T^-1]"
+                message: ":var requires a variable name and dimension, e.g. :var x [L T^-1]"
                     .into(),
             })?;
             let var_name = rest[..bracket_pos].trim().to_string();
             if var_name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":dim requires a variable name".into(),
+                    message: ":var requires a variable name".into(),
                 });
             }
             let dim_str = rest[bracket_pos..].trim();
             let dimension =
                 Dimension::parse(dim_str).map_err(|e| ParseDocError {
                     line: i + 1,
-                    message: format!(":dim '{}': {}", var_name, e),
+                    message: format!(":var '{}': {}", var_name, e),
                 })?;
-            blocks.push(Block::Dim(DimDecl {
+            blocks.push(Block::Var(VarDecl {
                 var_name,
                 dimension,
                 span: Span { line: i + 1 },
@@ -1442,32 +1442,32 @@ mod tests {
     }
 
     #[test]
-    fn parse_dim_declaration() {
-        let src = ":dim x [L]\n:dim v [L T^-1]";
+    fn parse_var_declaration() {
+        let src = ":var x [L]\n:var v [L T^-1]";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         match &doc.blocks[0] {
-            Block::Dim(d) => {
+            Block::Var(d) => {
                 assert_eq!(d.var_name, "x");
                 assert_eq!(d.dimension.to_string(), "[L]");
             }
-            _ => panic!("expected Dim"),
+            _ => panic!("expected Var"),
         }
         match &doc.blocks[1] {
-            Block::Dim(d) => {
+            Block::Var(d) => {
                 assert_eq!(d.var_name, "v");
                 assert_eq!(d.dimension.to_string(), "[L T^-1]");
             }
-            _ => panic!("expected Dim"),
+            _ => panic!("expected Var"),
         }
     }
 
     #[test]
-    fn parse_dim_missing_brackets() {
-        let src = ":dim x L";
+    fn parse_var_missing_brackets() {
+        let src = ":var x L";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains(":dim requires"),
+            err.message.contains(":var requires"),
             "unexpected error: {}",
             err.message
         );
@@ -2557,10 +2557,10 @@ More prose here.
     #[test]
     fn parse_claim_with_inline_dim() {
         // Claim using inline dimension annotations on variables
-        let src = ":dim F [M L T^-2]\n:claim newton\n  F = m [M] * a [L T^-2]";
+        let src = ":var F [M L T^-2]\n:claim newton\n  F = m [M] * a [L T^-2]";
         let doc = parse_document(src).unwrap();
         // Should parse without error — the claim body has inline dimensions
-        assert_eq!(doc.blocks.len(), 2); // Dim + Claim
+        assert_eq!(doc.blocks.len(), 2); // Var + Claim
     }
 
     #[test]
@@ -2568,6 +2568,6 @@ More prose here.
         // Claim using a quantity (numeric with unit)
         let src = ":claim speed_of_light\n  c [L T^-1] = 3*10^8 [m/s]";
         let doc = parse_document(src).unwrap();
-        assert_eq!(doc.blocks.len(), 1); // just the Claim (no :dim needed)
+        assert_eq!(doc.blocks.len(), 1); // just the Claim (no :var needed)
     }
 }

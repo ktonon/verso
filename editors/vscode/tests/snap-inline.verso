@@ -8,5 +8,5 @@ A cross-ref ref`earth-and-the-solar-system|Hydrogen creation` here.
 A plain ref ref`some-label` here.
 Visit url`https://example.com|Example Site` now.
 ## Absolute Time label`absolute-time`
-:dim v [L T^-1]
-:dim F [M L T^-2]
+:var v [L T^-1]
+:var F [M L T^-2]

@@ -74,7 +74,7 @@ Create a TextMate grammar for block-level syntax highlighting.
 | `% comment` | `comment.line.percentage.verso` |
 | `:claim name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
 | `:proof name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
-| `:dim var [dims]` | `keyword.control.directive.verso` + `variable.other.verso` + `support.type.verso` |
+| `:var name [dims]` | `keyword.control.directive.var.verso` + `variable.parameter.var.verso` + `storage.type.dimension.verso` |
 | `:bibliography path` | `keyword.control.directive.verso` + `string.unquoted.verso` |
 | `:theorem Title` | `keyword.control.directive.verso` + `entity.name.section.verso` |
 | (same for `:lemma`, `:definition`, `:corollary`, `:remark`, `:example`) | same pattern |
@@ -155,7 +155,7 @@ Add code snippets for common Verso constructs.
 |--------|-------------|------|
 | `claim` | New claim block | `:claim ${1:name}\n  ${2:lhs} = ${3:rhs}` |
 | `proof` | New proof block | `:proof ${1:name}\n  ${2:expr}\n  = ${3:step}` |
-| `dim` | Dimension declaration | `:dim ${1:var} [${2:dims}]` |
+| `var` | Variable declaration | `:var ${1:name} [${2:dims}]` |
 | `thm` | Theorem environment | `:theorem ${1:Title}\n  ${2:body}` |
 | `lem` | Lemma environment | `:lemma ${1:Title}\n  ${2:body}` |
 | `def` | Definition environment | `:definition ${1:Title}\n  ${2:body}` |

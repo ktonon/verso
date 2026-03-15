@@ -9,20 +9,18 @@ All core logic lives in `verso_symbolic`. Both `verso_doc` and the repl are thin
 ## Background
 
 Currently verso has:
-- `:dim` — annotates a variable with physical dimensions (dimensional analysis only)
+- `:var` — declares a variable with optional physical dimensions
 - `:claim` — asserts `lhs = rhs` and verifies symbolically
 - `:proof` — step-by-step chain verifying a claim
 
 Missing capabilities:
 - No way to bind a name to a fixed value (physical constants like c, G, h)
 - No way to define reusable parameterized expressions (functions like KE, PE)
-- `:dim` is programmer jargon; `:var` is more natural for physicists
 - The repl only simplifies expressions and checks equalities — no persistent context
 
-Existing duplication to eliminate:
-- `is_zero` is defined in both `verso_doc/verify.rs` and `verso_symbolic/repl.rs`
-- The equality check pattern (diff, simplify, check zero) is repeated in both
-- `DimEnv` lives in `verso_doc` but dimensional analysis is a symbolic concern
+Resolved in Phase 1:
+- All core logic (is_zero, check_equal, DimEnv, dimensional analysis) now lives in `verso_symbolic::Context`
+- Both `verso_doc` and the repl are thin consumers
 
 ## Plan
 
@@ -64,7 +62,7 @@ verso_symbolic::Context
 
 **`:var` — declare a variable with optional dimensions**
 
-Replaces `:dim`. Declares a free (universally quantified) variable.
+Declares a free (universally quantified) variable.
 
 ```verso
 :var v [L T^-1]
@@ -139,16 +137,12 @@ The repl is just a readline loop that feeds lines into a `Context`.
 - **Repl equality**: a line containing `=` is treated as a claim (check lhs = rhs). A bare expression is simplified (like an auto-prover).
 - **Redefinition** is an error in both documents and the repl. Use `:reset` in the repl to clear state.
 - **No piecewise `:func`** for now. Simple expression body only.
-- **`:dim` is removed**, not deprecated. Direct rename to `:var`.
+### Migration (completed in Phase 1 & 2)
 
-### Migration
-
-- Rename `:dim` to `:var` across all existing `.verso` files and tests
-- Remove `:dim` parsing entirely (no deprecated alias)
-- Update the TextMate grammar for VS Code highlighting
-- Move `DimEnv` from `verso_doc` to `verso_symbolic`
-- Move `is_zero`, `check_equal`, `verify_claim` logic from `verso_doc/verify.rs` into `verso_symbolic::Context`
-- `verso_doc/verify.rs` becomes a thin wrapper that walks the AST and calls `Context` methods
+- `:dim` renamed to `:var` across all `.verso` files, tests, parser, AST, and editor support
+- `DimEnv`, `is_zero`, `check_equal` moved to `verso_symbolic::Context`
+- `verso_doc/verify.rs` is a thin wrapper that walks the AST and calls `Context` methods
+- AST types renamed: `Block::Dim(DimDecl)` → `Block::Var(VarDecl)`
 
 ### Key files
 
@@ -182,5 +176,4 @@ New test cases needed:
 - `:func` expansion in claims and proofs
 - Claims used as rules in subsequent proofs
 - Repl session with accumulated context
-- `:dim` no longer parses (clean removal)
 - `verso_doc` verification produces identical results using `Context`

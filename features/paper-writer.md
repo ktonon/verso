@@ -15,7 +15,7 @@ Six milestones:
 | 1 | Red/green loop: `verso check file.verso` verifies claims | **completed** |
 | 2 | Proof chains + LaTeX compilation | **completed** |
 | 3 | Numerical spot-checks (random-point evaluation) | **completed** |
-| 4 | Dimensional analysis (`:dim` declarations, unit checking) | **completed** |
+| 4 | Dimensional analysis (`:var` declarations, unit checking) | **completed** |
 | 5 | Watch mode (`verso watch` re-verifies on save) | **completed** |
 | 6 | VSCode integration (inline diagnostics via LSP) | **completed** |
 
@@ -35,7 +35,7 @@ Raw LaTeX via tex`\vec{v}`.
   = expr1   ; rule_name
   = expr2   ; rule_name
 
-:dim velocity [L T^-1]
+:var velocity [L T^-1]
 ```
 
 ### Key design decisions
@@ -76,8 +76,8 @@ Raw LaTeX via tex`\vec{v}`.
 - **Dimension types**: `dim.rs` with `BaseDim` enum (L, M, T, Θ, I, N, J), `Dimension` type (BTreeMap of exponents), parsing from bracket notation `[M L T^-2]`.
 - **Dimension inference**: `infer_dim(expr, env)` propagates dimensions through all Expr variants — multiplication adds exponents, division subtracts, power multiplies, functions require dimensionless args.
 - **Claim checking**: `check_claim_dim(lhs, rhs, env)` with four outcomes: Pass, Skipped (undeclared vars), LhsRhsMismatch, ExprError (e.g., adding length to time).
-- **Integration into verifier**: `VerificationResult.dim_outcome` is `Some` when document has `:dim` blocks, `None` otherwise. A claim must pass both symbolic and dimensional checks.
-- **Parser**: `:dim varname [dim spec]` blocks parsed as `Block::Dim(DimDecl)`.
+- **Integration into verifier**: `VerificationResult.dim_outcome` is `Some` when document has `:var` blocks, `None` otherwise. A claim must pass both symbolic and dimensional checks.
+- **Parser**: `:var varname [dim spec]` blocks parsed as `Block::Var(VarDecl)`.
 - **Report**: dim errors shown in red, skipped in gray.
 - New fixtures: `dimensional.verso` (3 passing claims with dims), `dim_fail.verso` (dimension mismatch).
 
