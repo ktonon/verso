@@ -1,4 +1,4 @@
-use crate::context::{Context, EqualityResult};
+use crate::context::{Context, DimOutcome, EqualityResult};
 use crate::dim::Dimension;
 use crate::expr::Expr;
 use crate::fmt::fmt_colored;
@@ -118,6 +118,25 @@ pub fn run() -> Result<(), ReadlineError> {
                     let rhs_str = input[eq_pos + 1..].trim();
                     match (parse_expr(lhs_str), parse_expr(rhs_str)) {
                         (Ok(lhs), Ok(rhs)) => {
+                            // Dimensional check on equality
+                            if ctx.has_dims() {
+                                match ctx.check_dims(&lhs, &rhs) {
+                                    DimOutcome::Pass => {}
+                                    DimOutcome::Skipped { .. } => {}
+                                    DimOutcome::LhsRhsMismatch { lhs: dl, rhs: dr } => {
+                                        println!(
+                                            "\x1b[31mdim error: lhs is {}, rhs is {}\x1b[0m",
+                                            dl, dr
+                                        );
+                                    }
+                                    DimOutcome::ExprError { side, error } => {
+                                        println!(
+                                            "\x1b[31mdim error in {}: {}\x1b[0m",
+                                            side, error
+                                        );
+                                    }
+                                }
+                            }
                             let result = ctx.check_equal(&lhs, &rhs);
                             match &result {
                                 EqualityResult::Equal => {
@@ -155,6 +174,10 @@ pub fn run() -> Result<(), ReadlineError> {
                 } else {
                     match parse_expr(input) {
                         Ok(expr) => {
+                            // Dimensional consistency check
+                            if let Some(Err(e)) = ctx.check_expr_dim(&expr) {
+                                println!("\x1b[31mdim error: {}\x1b[0m", e);
+                            }
                             let input_dim = expr.first_unit().map(|u| u.dimension.clone());
                             if show_trace {
                                 let applied = ctx.apply_consts(&expr);

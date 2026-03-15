@@ -135,6 +135,16 @@ impl Context {
         try_rule_produces_inner(from, rule, to, self)
     }
 
+    /// Check dimensional consistency of a single expression.
+    /// Returns Ok(dimension) if consistent, Err if there's a mismatch.
+    /// Returns None if no dimension declarations exist.
+    pub fn check_expr_dim(&self, expr: &Expr) -> Option<Result<Dimension, DimError>> {
+        if !self.has_dims() {
+            return None;
+        }
+        Some(infer_dim(expr, &self.dims))
+    }
+
     /// Check dimensional consistency of an equality.
     pub fn check_dims(
         &self,
@@ -586,5 +596,39 @@ fn try_rule_produces_inner(from: &Expr, rule: &crate::rule::Rule, to: &Expr, ctx
         }
         Expr::FnN(_, args) => args.iter().any(|a| try_rule_produces_inner(a, rule, to, ctx)),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dim::BaseDim;
+    use crate::parser::parse_expr;
+
+    #[test]
+    fn check_expr_dim_catches_length_plus_time() {
+        let mut ctx = Context::new();
+        ctx.declare_var("b", Some(Dimension::single(BaseDim::L, 1)));
+        let expr = parse_expr("b + 4 [s]").unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some());
+        assert!(result.unwrap().is_err(), "adding length to time should fail");
+    }
+
+    #[test]
+    fn check_expr_dim_ok_same_dimension() {
+        let mut ctx = Context::new();
+        ctx.declare_var("b", Some(Dimension::single(BaseDim::L, 1)));
+        let expr = parse_expr("b + 4 [m]").unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some());
+        assert!(result.unwrap().is_ok(), "adding length to meters should pass");
+    }
+
+    #[test]
+    fn check_expr_dim_none_without_declarations() {
+        let ctx = Context::new();
+        let expr = parse_expr("x + 4 [s]").unwrap();
+        assert!(ctx.check_expr_dim(&expr).is_none());
     }
 }

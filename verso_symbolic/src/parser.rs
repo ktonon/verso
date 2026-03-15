@@ -742,30 +742,6 @@ fn expr_has_vars(expr: &Expr) -> bool {
     }
 }
 
-fn is_known_function(name: &str) -> bool {
-    matches!(
-        name,
-        "sin"
-            | "cos"
-            | "tan"
-            | "asin"
-            | "acos"
-            | "atan"
-            | "sinh"
-            | "cosh"
-            | "tanh"
-            | "exp"
-            | "ln"
-            | "sign"
-            | "floor"
-            | "ceil"
-            | "round"
-            | "sqrt"
-            | "min"
-            | "max"
-            | "clamp"
-    )
-}
 
 fn expect_arity(
     args: Vec<crate::expr::Expr>,
