@@ -11,28 +11,31 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Verify claims in .verso documents
+    /// Verify claims in .verso documents.
+    /// With no arguments, reads .verso.jsonc config.
     Check {
-        /// .verso files to check
-        #[arg(required = true)]
+        /// .verso files to check (optional if .verso.jsonc exists)
         files: Vec<String>,
     },
-    /// Build a .verso document to PDF or LaTeX
+    /// Build .verso documents to PDF or LaTeX.
+    /// With no arguments, reads .verso.jsonc config.
     Build {
-        /// .verso file to build
-        file: String,
+        /// .verso file to build (optional if .verso.jsonc exists)
+        file: Option<String>,
         /// Output file. Use .pdf for PDF (default), .tex for LaTeX only
         #[arg(short, long)]
         output: Option<String>,
     },
-    /// Watch .verso files and re-verify on save
+    /// Watch .verso files and re-verify on save.
+    /// With no arguments, reads .verso.jsonc config.
     Watch {
-        /// .verso files to watch
-        #[arg(required = true)]
+        /// .verso files to watch (optional if .verso.jsonc exists)
         files: Vec<String>,
     },
     /// Remove cached build artifacts
     Clean,
+    /// Initialize a new verso project (creates .verso.jsonc)
+    Init,
     /// Start the language server (LSP)
     Lsp,
 }
@@ -40,15 +43,68 @@ enum Command {
 fn main() {
     let cli = Cli::parse();
     match cli.command {
+        Command::Check { files } if files.is_empty() => {
+            cmd_check(&require_config().inputs())
+        }
         Command::Check { files } => cmd_check(&files),
-        Command::Build { file, output } => cmd_build(&file, output.as_deref()),
+        Command::Build { file: None, output } => cmd_build_from_config(output.as_deref()),
+        Command::Build {
+            file: Some(f),
+            output,
+        } => cmd_build(&f, output.as_deref()),
+        Command::Watch { files } if files.is_empty() => {
+            cmd_watch(&require_config().inputs())
+        }
         Command::Watch { files } => cmd_watch(&files),
         Command::Clean => cmd_clean(),
+        Command::Init => cmd_init(),
         Command::Lsp => cmd_lsp(),
     }
 }
 
+fn require_config() -> verso_doc::config::ResolvedConfig {
+    use verso_doc::config::resolve_config;
+
+    let cwd = std::env::current_dir().unwrap_or_else(|e| {
+        eprintln!("error: cannot determine current directory: {}", e);
+        process::exit(1);
+    });
+
+    match resolve_config(&cwd) {
+        Ok(Some(cfg)) => cfg,
+        Ok(None) => {
+            eprintln!("error: no .verso.jsonc or .verso.json found");
+            eprintln!("run 'verso init' to create one");
+            process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    }
+}
+
+fn cmd_init() {
+    use verso_doc::config::{default_config_content, CONFIG_FILENAME};
+
+    let path = Path::new(CONFIG_FILENAME);
+    if path.exists() {
+        eprintln!("{} already exists", CONFIG_FILENAME);
+        process::exit(1);
+    }
+    let content = default_config_content();
+    if let Err(e) = std::fs::write(path, content) {
+        eprintln!("error writing {}: {}", CONFIG_FILENAME, e);
+        process::exit(1);
+    }
+    eprintln!("created {}", CONFIG_FILENAME);
+}
+
 fn cmd_clean() {
+    use verso_doc::config::resolve_config;
+
+    let mut cleaned = false;
+
     let tmp = std::env::temp_dir().join("verso-build");
     if tmp.exists() {
         if let Err(e) = std::fs::remove_dir_all(&tmp) {
@@ -56,7 +112,27 @@ fn cmd_clean() {
             process::exit(1);
         }
         eprintln!("removed {}", tmp.display());
-    } else {
+        cleaned = true;
+    }
+
+    let cwd = std::env::current_dir().ok();
+    if let Some(ref cwd) = cwd {
+        if let Ok(Some(config)) = resolve_config(cwd) {
+            if config.output_dir != "." {
+                let out = Path::new(&config.output_dir);
+                if out.exists() {
+                    if let Err(e) = std::fs::remove_dir_all(out) {
+                        eprintln!("error removing {}: {}", out.display(), e);
+                        process::exit(1);
+                    }
+                    eprintln!("removed {}", out.display());
+                    cleaned = true;
+                }
+            }
+        }
+    }
+
+    if !cleaned {
         eprintln!("nothing to clean");
     }
 }
@@ -92,6 +168,25 @@ fn cmd_check(files: &[String]) {
 
     if !all_passed {
         process::exit(1);
+    }
+}
+
+fn cmd_build_from_config(output_override: Option<&str>) {
+    let config = require_config();
+
+    if config.output_dir != "." {
+        std::fs::create_dir_all(&config.output_dir).unwrap_or_else(|e| {
+            eprintln!("error creating {}: {}", config.output_dir, e);
+            process::exit(1);
+        });
+    }
+
+    for paper in &config.papers {
+        let output = match output_override {
+            Some(o) => o.to_string(),
+            None => format!("{}/{}.pdf", config.output_dir, paper.output),
+        };
+        cmd_build(&paper.input, Some(&output));
     }
 }
 

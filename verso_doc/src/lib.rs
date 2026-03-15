@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod compile_tex;
+pub mod config;
 pub mod dim;
 pub mod eval;
 pub mod parse;

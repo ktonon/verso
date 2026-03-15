@@ -6409,6 +6409,8 @@ dependencies = [
  "clap",
  "notify",
  "notify-debouncer-mini",
+ "serde",
+ "serde_json",
  "tokio",
  "tower-lsp",
  "verso_symbolic",
