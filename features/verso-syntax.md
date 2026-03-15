@@ -271,7 +271,38 @@ sides of every claim have matching dimensions.
 
 ---
 
-### Multiline math blocks 
+### Constant declarations
+
+Bind a name to a fixed value. The value is substituted wherever the name appears in subsequent claims and proofs.
+
+```
+:const c = 3*10^8
+:const G = 6.674*10^-11
+:const pi_approx = 355/113
+```
+
+- Constants carry dimensions implicitly from their value expression.
+- Constant declarations produce no LaTeX output.
+
+---
+
+### Function declarations
+
+Define a named parameterized expression that expands at use sites.
+
+```
+:func KE(m, v) = (1/2)*m*v^2
+:func PE(m, h) = m*g*h
+:func gamma(v) = 1/sqrt(1 - v^2/c^2)
+```
+
+- Parameters are positional. The body can reference previously declared constants and variables.
+- Multi-character names followed by `(` are parsed as function calls.
+- Function declarations produce no LaTeX output.
+
+---
+
+### Multiline math blocks
 For displayed math that isn't a claim or proof — derivations, definitions, or
 sequences of related equations that don't need verification:
 

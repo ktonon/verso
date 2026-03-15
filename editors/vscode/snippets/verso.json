@@ -25,6 +25,20 @@
     ],
     "description": "Variable declaration with dimensions"
   },
+  "Constant": {
+    "prefix": "const",
+    "body": [
+      ":const ${1:name} = ${2:value}"
+    ],
+    "description": "Constant declaration"
+  },
+  "Function": {
+    "prefix": "func",
+    "body": [
+      ":func ${1:name}(${2:params}) = ${3:body}"
+    ],
+    "description": "Function declaration"
+  },
   "Theorem": {
     "prefix": "thm",
     "body": [

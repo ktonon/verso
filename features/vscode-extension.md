@@ -75,6 +75,8 @@ Create a TextMate grammar for block-level syntax highlighting.
 | `:claim name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
 | `:proof name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
 | `:var name [dims]` | `keyword.control.directive.var.verso` + `variable.parameter.var.verso` + `storage.type.dimension.verso` |
+| `:const name = expr` | `keyword.control.directive.const.verso` + `variable.parameter.const.verso` + `keyword.operator.assignment.verso` |
+| `:func name(params) = expr` | `keyword.control.directive.func.verso` + `entity.name.function.verso` + `variable.parameter.func.verso` |
 | `:bibliography path` | `keyword.control.directive.verso` + `string.unquoted.verso` |
 | `:theorem Title` | `keyword.control.directive.verso` + `entity.name.section.verso` |
 | (same for `:lemma`, `:definition`, `:corollary`, `:remark`, `:example`) | same pattern |
@@ -156,6 +158,8 @@ Add code snippets for common Verso constructs.
 | `claim` | New claim block | `:claim ${1:name}\n  ${2:lhs} = ${3:rhs}` |
 | `proof` | New proof block | `:proof ${1:name}\n  ${2:expr}\n  = ${3:step}` |
 | `var` | Variable declaration | `:var ${1:name} [${2:dims}]` |
+| `const` | Constant declaration | `:const ${1:name} = ${2:value}` |
+| `func` | Function declaration | `:func ${1:name}(${2:params}) = ${3:body}` |
 | `thm` | Theorem environment | `:theorem ${1:Title}\n  ${2:body}` |
 | `lem` | Lemma environment | `:lemma ${1:Title}\n  ${2:body}` |
 | `def` | Definition environment | `:definition ${1:Title}\n  ${2:body}` |

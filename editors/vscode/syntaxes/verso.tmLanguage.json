@@ -9,6 +9,8 @@
     { "include": "#directive-claim" },
     { "include": "#directive-proof" },
     { "include": "#directive-var" },
+    { "include": "#directive-const" },
+    { "include": "#directive-func" },
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
     { "include": "#directive-table" },
@@ -138,6 +140,27 @@
         "1": { "name": "keyword.control.directive.var.verso" },
         "2": { "name": "variable.parameter.var.verso" },
         "3": { "name": "storage.type.dimension.verso" }
+      }
+    },
+
+    "directive-const": {
+      "match": "^(:const)\\s+(\\S+)\\s*(=)\\s*(.+)$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.const.verso" },
+        "2": { "name": "variable.parameter.const.verso" },
+        "3": { "name": "keyword.operator.assignment.verso" },
+        "4": { "name": "string.unquoted.expression.verso" }
+      }
+    },
+
+    "directive-func": {
+      "match": "^(:func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(=)\\s*(.+)$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.func.verso" },
+        "2": { "name": "entity.name.function.verso" },
+        "3": { "name": "variable.parameter.func.verso" },
+        "4": { "name": "keyword.operator.assignment.verso" },
+        "5": { "name": "string.unquoted.expression.verso" }
       }
     },
 

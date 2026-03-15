@@ -161,19 +161,48 @@ The repl is just a readline loop that feeds lines into a `Context`.
 
 ## Implementation Notes
 
-(To be updated as work progresses.)
+### Phase 1: Context extraction (completed)
+- Moved `is_zero`, `check_equal`, `DimEnv`, dimensional analysis to `verso_symbolic::Context`
+- Both `verso_doc` and repl are thin consumers
+
+### Phase 2: `:dim` → `:var` rename (completed)
+- Renamed across all code, tests, fixtures, editor support, and docs
+- AST: `Block::Dim(DimDecl)` → `Block::Var(VarDecl)`
+
+### Phase 3: `:const` support (completed)
+- Parser: `:const name = expr`
+- Context: `declare_const`, `apply_consts` substitutes before simplification
+- Tests: const substitution in claims and proofs
+
+### Phase 4: `:func` support (completed)
+- Parser: `:func name(params) = expr`
+- Context: `declare_func`, `expand_funcs` replaces `FnKind::Custom` calls
+- Multi-character names followed by `(` parse as function calls; single-char remain implicit multiplication
+- Function bodies can reference constants (substituted after expansion)
+
+### Phase 5: Claims as rules (completed)
+- Verified claims become LTR rewrite rules with free vars as wildcards
+- `verify_document` processes blocks in order (single pass)
+- `add_claim_as_rule` converts Expr to Pattern
+
+### Phase 6: Repl declarations (completed)
+- Repl supports `:var`, `:const`, `:func`, `:reset`
+- Passed equality checks registered as rules
+
+### Phase 7: VS Code grammar (completed)
+- TextMate patterns for `:const` and `:func` directives
+- Snippets for all three declaration types
 
 ## Verification
 
 ```bash
-cargo test --workspace   # all existing tests still pass
-verso check              # existing papers still verify
+cargo test -p verso_symbolic -p verso_doc --release
+cd editors/vscode && npm test
 ```
 
-New test cases needed:
-- `:var` with and without dimensions
-- `:const` substitution in claims
-- `:func` expansion in claims and proofs
-- Claims used as rules in subsequent proofs
-- Repl session with accumulated context
-- `verso_doc` verification produces identical results using `Context`
+All test cases implemented:
+- `:var` declaration parsing
+- `:const` substitution in claims and proofs, wrong value detection
+- `:func` expansion (single param, multi param, with constants)
+- Claims used as rules in subsequent claims
+- Parser tests for error cases (missing `=`, missing params, etc.)

@@ -108,4 +108,22 @@
 #     ^ source.verso variable.parameter.var.verso
 #      ^ source.verso
 #       ^^^^^^^^^^ source.verso storage.type.dimension.verso
+>:const c = 3*10^8
+#^^^^^^ source.verso keyword.control.directive.const.verso
+#      ^ source.verso
+#       ^ source.verso variable.parameter.const.verso
+#        ^ source.verso
+#         ^ source.verso keyword.operator.assignment.verso
+#          ^ source.verso
+#           ^^^^^^ source.verso string.unquoted.expression.verso
+>:func KE(m, v) = (1/2)*m*v^2
+#^^^^^ source.verso keyword.control.directive.func.verso
+#     ^ source.verso
+#      ^^ source.verso entity.name.function.verso
+#        ^ source.verso
+#         ^^^^ source.verso variable.parameter.func.verso
+#             ^^ source.verso
+#               ^ source.verso keyword.operator.assignment.verso
+#                ^ source.verso
+#                 ^^^^^^^^^^^ source.verso string.unquoted.expression.verso
 >
