@@ -530,6 +530,42 @@ fn expr_as_integer(expr: &Expr) -> Option<i32> {
     }
 }
 
+fn respan_tree(expr: &Expr, span: Span) -> Expr {
+    let kind = match &expr.kind {
+        ExprKind::Rational(r) => ExprKind::Rational(*r),
+        ExprKind::FracPi(r) => ExprKind::FracPi(*r),
+        ExprKind::Named(n) => ExprKind::Named(*n),
+        ExprKind::Var { name, indices, dim } => ExprKind::Var {
+            name: name.clone(),
+            indices: indices.clone(),
+            dim: dim.clone(),
+        },
+        ExprKind::Add(a, b) => ExprKind::Add(
+            Box::new(respan_tree(a, span)),
+            Box::new(respan_tree(b, span)),
+        ),
+        ExprKind::Mul(a, b) => ExprKind::Mul(
+            Box::new(respan_tree(a, span)),
+            Box::new(respan_tree(b, span)),
+        ),
+        ExprKind::Pow(a, b) => ExprKind::Pow(
+            Box::new(respan_tree(a, span)),
+            Box::new(respan_tree(b, span)),
+        ),
+        ExprKind::Neg(inner) => ExprKind::Neg(Box::new(respan_tree(inner, span))),
+        ExprKind::Inv(inner) => ExprKind::Inv(Box::new(respan_tree(inner, span))),
+        ExprKind::Fn(kind, inner) => ExprKind::Fn(kind.clone(), Box::new(respan_tree(inner, span))),
+        ExprKind::FnN(kind, args) => ExprKind::FnN(
+            kind.clone(),
+            args.iter().map(|arg| respan_tree(arg, span)).collect(),
+        ),
+        ExprKind::Quantity(inner, unit) => {
+            ExprKind::Quantity(Box::new(respan_tree(inner, span)), unit.clone())
+        }
+    };
+    Expr::spanned(kind, span)
+}
+
 /// Convert an Expr into a Pattern, turning free variables into wildcards.
 fn expr_to_pattern(expr: &Expr, wildcards: &HashSet<String>) -> Pattern {
     match &expr.kind {
@@ -581,9 +617,9 @@ pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
     match &expr.kind {
         ExprKind::Var { name, .. } => {
             if let Some(value) = consts.get(name) {
-                // Preserve the call-site span so error reporting points at
-                // the user's input, not the const definition site.
-                Expr::spanned(value.kind.clone(), span)
+                // Preserve the call-site span recursively so nested errors
+                // point at the user's input, not the const definition site.
+                respan_tree(value, span)
             } else {
                 expr.clone()
             }
@@ -631,9 +667,8 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                     bindings.insert(param.clone(), expanded_arg);
                 }
                 let result = substitute_consts(&def.body, &bindings);
-                // Preserve the call-site span on the expanded result.
                 let expanded = expand_funcs(&result, funcs);
-                Expr::spanned(expanded.kind, span)
+                respan_tree(&expanded, span)
             } else {
                 Expr::spanned(ExprKind::Fn(
                     crate::expr::FnKind::Custom(name.clone()),
@@ -650,7 +685,7 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                 }
                 let result = substitute_consts(&def.body, &bindings);
                 let expanded = expand_funcs(&result, funcs);
-                Expr::spanned(expanded.kind, span)
+                respan_tree(&expanded, span)
             } else {
                 Expr::spanned(ExprKind::FnN(
                     crate::expr::FnKind::Custom(name.clone()),
@@ -1335,6 +1370,28 @@ mod tests {
     }
 
     #[test]
+    fn nested_error_span_valid_after_const_substitution() {
+        // Regression: nested spans inside a substituted const body must also
+        // be rewritten to the call site, not just the root node.
+        let mut ctx = Context::new();
+        ctx.declare_const("c", parse_expr("1 [m] + 2 [s]").unwrap());
+        let source = "c";
+        let expr = parse_expr(source).unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some());
+        if let Some(Err(e)) = result {
+            let span = e.span();
+            let source_len = source.chars().count();
+            assert!(
+                span.end <= source_len,
+                "nested const span end {} exceeds source length {}",
+                span.end,
+                source_len,
+            );
+        }
+    }
+
+    #[test]
     fn error_span_valid_after_func_expansion() {
         // Regression: expand_funcs must preserve spans of compound nodes.
         let mut ctx = Context::new();
@@ -1352,6 +1409,32 @@ mod tests {
                 "error span end {} exceeds source length {} — \
                  expand_funcs likely corrupted spans",
                 span.end, source_len,
+            );
+        }
+    }
+
+    #[test]
+    fn nested_error_span_valid_after_func_expansion() {
+        // Regression: nested spans inside an expanded function body must be
+        // rewritten to the call site, not left at definition-site offsets.
+        let mut ctx = Context::new();
+        ctx.declare_func(
+            "foo",
+            vec!["x".to_string()],
+            parse_expr("1 [m] + x").unwrap(),
+        );
+        let source = "foo(2 [s])";
+        let expr = parse_expr(source).unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some());
+        if let Some(Err(e)) = result {
+            let span = e.span();
+            let source_len = source.chars().count();
+            assert!(
+                span.end <= source_len,
+                "nested function span end {} exceeds source length {}",
+                span.end,
+                source_len,
             );
         }
     }
