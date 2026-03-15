@@ -159,7 +159,7 @@ fn require_config() -> verso_doc::config::ResolvedConfig {
 }
 
 fn cmd_init() {
-    use verso_doc::config::{default_config_content, CONFIG_FILENAME};
+    use verso_doc::config::{default_config_content, install_schema, CONFIG_FILENAME};
 
     let path = Path::new(CONFIG_FILENAME);
     if path.exists() {
@@ -167,9 +167,12 @@ fn cmd_init() {
         process::exit(1);
     }
     let content = default_config_content();
-    if let Err(e) = std::fs::write(path, content) {
+    if let Err(e) = std::fs::write(path, &content) {
         eprintln!("error writing {}: {}", CONFIG_FILENAME, e);
         process::exit(1);
+    }
+    if let Err(e) = install_schema(path) {
+        eprintln!("warning: could not install schema: {}", e);
     }
     eprintln!("created {}", CONFIG_FILENAME);
 }

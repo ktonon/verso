@@ -2,12 +2,9 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const SCHEMA_BASE_URL: &str =
-    "https://raw.githubusercontent.com/ktonon/verso/main/schema";
-
-pub fn schema_url() -> String {
-    format!("{}/v{}/verso.schema.json", SCHEMA_BASE_URL, VERSION)
-}
+pub const SCHEMA_FILENAME: &str = "verso.schema.json";
+pub const SCHEMA_REF: &str = "./verso.schema.json";
+pub const SCHEMA_CONTENT: &str = include_str!("../../schema/v0.1.0/verso.schema.json");
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -192,7 +189,7 @@ pub fn default_config_content() -> String {
   // ]
 }}
 "#,
-        schema_url(), VERSION
+        SCHEMA_REF, VERSION
     )
 }
 
@@ -209,21 +206,30 @@ impl ResolvedConfig {
     }
 }
 
-/// Update the `"$schema"` and `"verso"` fields in the config file.
-/// Existing fields are replaced in place. Missing fields are inserted after the opening brace.
+/// Write the embedded schema file next to the config file.
+pub fn install_schema(config_path: &Path) -> Result<(), ConfigError> {
+    let dir = config_path.parent().unwrap_or(Path::new("."));
+    let schema_path = dir.join(SCHEMA_FILENAME);
+    std::fs::write(&schema_path, SCHEMA_CONTENT)
+        .map_err(|e| ConfigError::Parse(format!("writing {}: {}", schema_path.display(), e)))
+}
+
+/// Update the `"$schema"` and `"verso"` fields in the config file,
+/// and install the schema file alongside it.
 pub fn stamp_config(config_path: &Path) -> Result<(), ConfigError> {
     let text = std::fs::read_to_string(config_path)
         .map_err(|e| ConfigError::Parse(format!("reading {}: {}", config_path.display(), e)))?;
 
     let updated = stamp_config_text(&text);
 
-    std::fs::write(config_path, updated)
-        .map_err(|e| ConfigError::Parse(format!("writing {}: {}", config_path.display(), e)))
+    std::fs::write(config_path, &updated)
+        .map_err(|e| ConfigError::Parse(format!("writing {}: {}", config_path.display(), e)))?;
+
+    install_schema(config_path)
 }
 
 fn stamp_config_text(text: &str) -> String {
-    let url = schema_url();
-    let stamps: &[(&str, &str)] = &[("$schema", &url), ("verso", VERSION)];
+    let stamps: &[(&str, &str)] = &[("$schema", SCHEMA_REF), ("verso", VERSION)];
     let mut result = text.to_string();
     for &(key, value) in stamps {
         result = stamp_field(&result, key, value);
@@ -531,7 +537,7 @@ mod tests {
     fn default_config_is_valid_jsonc() {
         let content = default_config_content();
         let cfg = VersoConfig::from_jsonc(&content).unwrap();
-        assert_eq!(cfg.schema, Some(schema_url().into()));
+        assert_eq!(cfg.schema, Some(SCHEMA_REF.into()));
         assert_eq!(cfg.verso, Some(VERSION.into()));
         assert_eq!(cfg.output_directory, Some("build".into()));
         assert_eq!(cfg.input, Some("paper.verso".into()));
@@ -541,7 +547,7 @@ mod tests {
     fn stamp_replaces_existing_fields() {
         let input = "{\n  \"$schema\": \"old\",\n  \"verso\": \"0.0.1\",\n  \"input\": \"paper.verso\"\n}\n";
         let result = stamp_config_text(input);
-        assert!(result.contains(&format!("\"$schema\": \"{}\"", schema_url())));
+        assert!(result.contains(&format!("\"$schema\": \"{}\"", SCHEMA_REF)));
         assert!(result.contains(&format!("\"verso\": \"{}\"", VERSION)));
         assert!(!result.contains("0.0.1"));
         assert!(!result.contains("\"old\""));
@@ -552,7 +558,7 @@ mod tests {
     fn stamp_inserts_when_missing() {
         let input = "{\n  \"input\": \"paper.verso\"\n}\n";
         let result = stamp_config_text(input);
-        assert!(result.contains(&format!("\"$schema\": \"{}\"", schema_url())));
+        assert!(result.contains(&format!("\"$schema\": \"{}\"", SCHEMA_REF)));
         assert!(result.contains(&format!("\"verso\": \"{}\"", VERSION)));
         VersoConfig::from_jsonc(&result).unwrap();
     }
@@ -562,7 +568,7 @@ mod tests {
         let input = "{\n  // A comment\n  \"verso\": \"0.0.1\",\n  \"input\": \"paper.verso\"\n}\n";
         let result = stamp_config_text(input);
         assert!(result.contains("// A comment"));
-        assert!(result.contains(&format!("\"$schema\": \"{}\"", schema_url())));
+        assert!(result.contains(&format!("\"$schema\": \"{}\"", SCHEMA_REF)));
         assert!(result.contains(&format!("\"verso\": \"{}\"", VERSION)));
     }
 }
