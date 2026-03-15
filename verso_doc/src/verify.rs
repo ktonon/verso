@@ -67,10 +67,16 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
     let mut ctx = Context::new();
     let mut results = Vec::new();
 
-    // Collect dimension declarations
+    // Collect declarations
     for block in &doc.blocks {
-        if let Block::Var(decl) = block {
-            ctx.declare_var(&decl.var_name, Some(decl.dimension.clone()));
+        match block {
+            Block::Var(decl) => {
+                ctx.declare_var(&decl.var_name, Some(decl.dimension.clone()));
+            }
+            Block::Const(decl) => {
+                ctx.declare_const(&decl.name, decl.value.clone());
+            }
+            _ => {}
         }
     }
 
@@ -283,5 +289,42 @@ mod tests {
             Outcome::ProofStepFail { step_index, .. } => assert_eq!(*step_index, 1),
             other => panic!("expected ProofStepFail, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn verify_const_substitution() {
+        let src = "\
+:const k = 2
+:claim double
+  k * x = 2 * x
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(report.all_passed(), "const substitution should pass: {:?}", report.results);
+    }
+
+    #[test]
+    fn verify_const_in_proof() {
+        let src = "\
+:const a = 3
+:proof expand
+  a * (x + 1)
+  = 3 * x + 3
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(report.all_passed(), "const in proof should pass: {:?}", report.results);
+    }
+
+    #[test]
+    fn verify_const_wrong_value_fails() {
+        let src = "\
+:const k = 2
+:claim wrong
+  k * x = 3 * x
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.fail_count(), 1);
     }
 }

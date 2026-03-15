@@ -14,6 +14,7 @@ pub type DimEnv = HashMap<String, Dimension>;
 pub struct Context {
     pub rules: RuleSet,
     pub dims: DimEnv,
+    pub consts: HashMap<String, Expr>,
 }
 
 impl Context {
@@ -21,6 +22,7 @@ impl Context {
         Context {
             rules: RuleSet::full(),
             dims: DimEnv::new(),
+            consts: HashMap::new(),
         }
     }
 
@@ -31,19 +33,34 @@ impl Context {
         }
     }
 
+    /// Declare a named constant with a value expression.
+    pub fn declare_const(&mut self, name: &str, value: Expr) {
+        self.consts.insert(name.to_string(), value);
+    }
+
+    /// Apply constant substitution to an expression.
+    pub fn apply_consts(&self, expr: &Expr) -> Expr {
+        substitute_consts(expr, &self.consts)
+    }
+
     /// Check whether the dimension environment has any declarations.
     pub fn has_dims(&self) -> bool {
         !self.dims.is_empty()
     }
 
     /// Simplify an expression using the current rule set.
+    /// Constants are substituted before simplification.
     pub fn simplify(&self, expr: &Expr) -> Expr {
-        search::simplify(expr, &self.rules)
+        let expr = self.apply_consts(expr);
+        search::simplify(&expr, &self.rules)
     }
 
     /// Check if two expressions are symbolically equal.
+    /// Constants are substituted before comparison.
     /// Falls back to numerical spot-checking if symbolic fails.
     pub fn check_equal(&self, lhs: &Expr, rhs: &Expr) -> EqualityResult {
+        let lhs = self.apply_consts(lhs);
+        let rhs = self.apply_consts(rhs);
         let diff = Expr::Add(
             Box::new(lhs.clone()),
             Box::new(Expr::Neg(Box::new(rhs.clone()))),
@@ -54,7 +71,7 @@ impl Context {
             return EqualityResult::Equal;
         }
 
-        match spot_check(lhs, rhs, SPOT_CHECK_SAMPLES) {
+        match spot_check(&lhs, &rhs, SPOT_CHECK_SAMPLES) {
             Ok(()) => EqualityResult::NumericallyEqual {
                 samples: SPOT_CHECK_SAMPLES,
                 residual,
@@ -358,6 +375,46 @@ fn expr_as_integer(expr: &Expr) -> Option<i32> {
         }
         Expr::Neg(inner) => expr_as_integer(inner).map(|n| -n),
         _ => None,
+    }
+}
+
+/// Substitute all constants in an expression.
+/// Replaces `Var { name, .. }` nodes whose name appears in `consts` with the constant value.
+pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
+    if consts.is_empty() {
+        return expr.clone();
+    }
+    match expr {
+        Expr::Var { name, .. } => {
+            if let Some(value) = consts.get(name) {
+                value.clone()
+            } else {
+                expr.clone()
+            }
+        }
+        Expr::Add(a, b) => Expr::Add(
+            Box::new(substitute_consts(a, consts)),
+            Box::new(substitute_consts(b, consts)),
+        ),
+        Expr::Mul(a, b) => Expr::Mul(
+            Box::new(substitute_consts(a, consts)),
+            Box::new(substitute_consts(b, consts)),
+        ),
+        Expr::Pow(a, b) => Expr::Pow(
+            Box::new(substitute_consts(a, consts)),
+            Box::new(substitute_consts(b, consts)),
+        ),
+        Expr::Neg(inner) => Expr::Neg(Box::new(substitute_consts(inner, consts))),
+        Expr::Inv(inner) => Expr::Inv(Box::new(substitute_consts(inner, consts))),
+        Expr::Fn(kind, inner) => Expr::Fn(kind.clone(), Box::new(substitute_consts(inner, consts))),
+        Expr::FnN(kind, args) => Expr::FnN(
+            kind.clone(),
+            args.iter().map(|a| substitute_consts(a, consts)).collect(),
+        ),
+        Expr::Quantity(inner, unit) => {
+            Expr::Quantity(Box::new(substitute_consts(inner, consts)), unit.clone())
+        }
+        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => expr.clone(),
     }
 }
 

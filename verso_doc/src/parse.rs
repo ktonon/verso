@@ -1,5 +1,5 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, VarDecl, Document, EnvKind, Environment, Figure, List, ListItem,
+    Block, Claim, ColumnAlign, ConstDecl, VarDecl, Document, EnvKind, Environment, Figure, List, ListItem,
     MathBlock, Proof, ProofStep, ProseFragment, Span, Table,
 };
 use verso_symbolic::{parse_expr, Dimension};
@@ -439,6 +439,34 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             blocks.push(Block::Var(VarDecl {
                 var_name,
                 dimension,
+                span: Span { line: i + 1 },
+            }));
+            i += 1;
+            continue;
+        }
+
+        // Constant declaration
+        if trimmed.starts_with(":const") {
+            let rest = trimmed[":const".len()..].trim();
+            let eq_pos = rest.find('=').ok_or_else(|| ParseDocError {
+                line: i + 1,
+                message: ":const requires name = expr, e.g. :const c = 3*10^8".into(),
+            })?;
+            let name = rest[..eq_pos].trim().to_string();
+            if name.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":const requires a name".into(),
+                });
+            }
+            let value_str = rest[eq_pos + 1..].trim();
+            let value = parse_expr(value_str).map_err(|e| ParseDocError {
+                line: i + 1,
+                message: format!(":const '{}': {:?}", name, e),
+            })?;
+            blocks.push(Block::Const(ConstDecl {
+                name,
+                value,
                 span: Span { line: i + 1 },
             }));
             i += 1;
@@ -1468,6 +1496,44 @@ mod tests {
         let err = parse_document(src).unwrap_err();
         assert!(
             err.message.contains(":var requires"),
+            "unexpected error: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_const_declaration() {
+        let src = ":const c = 3*10^8";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Const(c) => {
+                assert_eq!(c.name, "c");
+                // 3*10^8 parses as implicit multiplication: "310^8"
+                let formatted = format!("{}", c.value);
+                assert!(formatted.contains("10"), "expected numeric expr, got: {}", formatted);
+            }
+            _ => panic!("expected Const"),
+        }
+    }
+
+    #[test]
+    fn parse_const_missing_equals() {
+        let src = ":const c 3";
+        let err = parse_document(src).unwrap_err();
+        assert!(
+            err.message.contains(":const requires"),
+            "unexpected error: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_const_missing_name() {
+        let src = ":const = 3";
+        let err = parse_document(src).unwrap_err();
+        assert!(
+            err.message.contains(":const requires a name"),
             "unexpected error: {}",
             err.message
         );

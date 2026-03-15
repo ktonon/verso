@@ -19,6 +19,8 @@ pub enum Block {
     Proof(Proof),
     /// A variable declaration with dimensions: `:var varname [dims]`
     Var(VarDecl),
+    /// A constant declaration: `:const name = expr`
+    Const(ConstDecl),
     /// A list (bullet or numbered).
     List(List),
     /// A displayed math block (not verified).
@@ -184,6 +186,14 @@ pub struct ProofStep {
 pub struct VarDecl {
     pub var_name: String,
     pub dimension: Dimension,
+    pub span: Span,
+}
+
+/// A constant declaration: `:const name = value_expr`
+#[derive(Debug)]
+pub struct ConstDecl {
+    pub name: String,
+    pub value: Expr,
     pub span: Span,
 }
 
