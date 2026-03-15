@@ -11,10 +11,18 @@ pub type DimEnv = HashMap<String, Dimension>;
 /// Mathematical context accumulating declarations and verified results.
 ///
 /// Used by both `verso_doc` (document verification) and the repl.
+/// A user-defined function: name, parameter names, body expression.
+#[derive(Debug, Clone)]
+pub struct FuncDef {
+    pub params: Vec<String>,
+    pub body: Expr,
+}
+
 pub struct Context {
     pub rules: RuleSet,
     pub dims: DimEnv,
     pub consts: HashMap<String, Expr>,
+    pub funcs: HashMap<String, FuncDef>,
 }
 
 impl Context {
@@ -23,6 +31,7 @@ impl Context {
             rules: RuleSet::full(),
             dims: DimEnv::new(),
             consts: HashMap::new(),
+            funcs: HashMap::new(),
         }
     }
 
@@ -38,9 +47,21 @@ impl Context {
         self.consts.insert(name.to_string(), value);
     }
 
-    /// Apply constant substitution to an expression.
+    /// Declare a user-defined function.
+    pub fn declare_func(&mut self, name: &str, params: Vec<String>, body: Expr) {
+        self.funcs.insert(name.to_string(), FuncDef { params, body });
+    }
+
+    /// Apply constant substitution and function expansion to an expression.
+    /// Function bodies may reference constants, so we substitute again after expansion.
     pub fn apply_consts(&self, expr: &Expr) -> Expr {
-        substitute_consts(expr, &self.consts)
+        let expr = substitute_consts(expr, &self.consts);
+        let expr = expand_funcs(&expr, &self.funcs);
+        if self.funcs.is_empty() {
+            expr
+        } else {
+            substitute_consts(&expr, &self.consts)
+        }
     }
 
     /// Check whether the dimension environment has any declarations.
@@ -415,6 +436,72 @@ pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
             Expr::Quantity(Box::new(substitute_consts(inner, consts)), unit.clone())
         }
         Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => expr.clone(),
+    }
+}
+
+/// Expand user-defined function calls in an expression.
+/// Replaces `Fn(Custom(name), arg)` / `FnN(Custom(name), args)` with the function body,
+/// substituting parameters with the provided arguments.
+fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
+    if funcs.is_empty() {
+        return expr.clone();
+    }
+    match expr {
+        Expr::Fn(crate::expr::FnKind::Custom(name), arg) => {
+            if let Some(def) = funcs.get(name) {
+                let expanded_arg = expand_funcs(arg, funcs);
+                let mut bindings = HashMap::new();
+                if let Some(param) = def.params.first() {
+                    bindings.insert(param.clone(), expanded_arg);
+                }
+                let result = substitute_consts(&def.body, &bindings);
+                expand_funcs(&result, funcs)
+            } else {
+                Expr::Fn(
+                    crate::expr::FnKind::Custom(name.clone()),
+                    Box::new(expand_funcs(arg, funcs)),
+                )
+            }
+        }
+        Expr::FnN(crate::expr::FnKind::Custom(name), args) => {
+            if let Some(def) = funcs.get(name) {
+                let expanded_args: Vec<Expr> = args.iter().map(|a| expand_funcs(a, funcs)).collect();
+                let mut bindings = HashMap::new();
+                for (param, arg) in def.params.iter().zip(expanded_args) {
+                    bindings.insert(param.clone(), arg);
+                }
+                let result = substitute_consts(&def.body, &bindings);
+                expand_funcs(&result, funcs)
+            } else {
+                Expr::FnN(
+                    crate::expr::FnKind::Custom(name.clone()),
+                    args.iter().map(|a| expand_funcs(a, funcs)).collect(),
+                )
+            }
+        }
+        Expr::Add(a, b) => Expr::Add(
+            Box::new(expand_funcs(a, funcs)),
+            Box::new(expand_funcs(b, funcs)),
+        ),
+        Expr::Mul(a, b) => Expr::Mul(
+            Box::new(expand_funcs(a, funcs)),
+            Box::new(expand_funcs(b, funcs)),
+        ),
+        Expr::Pow(a, b) => Expr::Pow(
+            Box::new(expand_funcs(a, funcs)),
+            Box::new(expand_funcs(b, funcs)),
+        ),
+        Expr::Neg(inner) => Expr::Neg(Box::new(expand_funcs(inner, funcs))),
+        Expr::Inv(inner) => Expr::Inv(Box::new(expand_funcs(inner, funcs))),
+        Expr::Fn(kind, inner) => Expr::Fn(kind.clone(), Box::new(expand_funcs(inner, funcs))),
+        Expr::FnN(kind, args) => Expr::FnN(
+            kind.clone(),
+            args.iter().map(|a| expand_funcs(a, funcs)).collect(),
+        ),
+        Expr::Quantity(inner, unit) => {
+            Expr::Quantity(Box::new(expand_funcs(inner, funcs)), unit.clone())
+        }
+        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
     }
 }
 

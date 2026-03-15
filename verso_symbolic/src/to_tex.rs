@@ -59,6 +59,7 @@ impl ToTex for FnKind {
             FnKind::Clamp => "\\operatorname{clamp}".to_string(),
             FnKind::Exp => "\\exp".to_string(),
             FnKind::Ln => "\\ln".to_string(),
+            FnKind::Custom(name) => format!("\\operatorname{{{}}}", name),
         }
     }
 }

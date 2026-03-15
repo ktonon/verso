@@ -21,6 +21,8 @@ pub enum Block {
     Var(VarDecl),
     /// A constant declaration: `:const name = expr`
     Const(ConstDecl),
+    /// A function declaration: `:func name(params) = expr`
+    Func(FuncDecl),
     /// A list (bullet or numbered).
     List(List),
     /// A displayed math block (not verified).
@@ -194,6 +196,15 @@ pub struct VarDecl {
 pub struct ConstDecl {
     pub name: String,
     pub value: Expr,
+    pub span: Span,
+}
+
+/// A function declaration: `:func name(params) = body_expr`
+#[derive(Debug)]
+pub struct FuncDecl {
+    pub name: String,
+    pub params: Vec<String>,
+    pub body: Expr,
     pub span: Span,
 }
 

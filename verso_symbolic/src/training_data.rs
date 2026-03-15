@@ -75,6 +75,7 @@ pub fn fn_kind_string(kind: &FnKind) -> String {
         FnKind::Clamp => "CLAMP",
         FnKind::Exp => "EXP",
         FnKind::Ln => "LN",
+        FnKind::Custom(name) => return name.to_uppercase(),
     }
     .to_string()
 }

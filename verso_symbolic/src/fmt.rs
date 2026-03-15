@@ -301,6 +301,7 @@ impl Display for FnKind {
             FnKind::Clamp => write!(f, "clamp"),
             FnKind::Exp => write!(f, "exp"),
             FnKind::Ln => write!(f, "ln"),
+            FnKind::Custom(name) => write!(f, "{}", name),
         }
     }
 }

@@ -87,7 +87,8 @@ pub enum FnKind {
     Clamp,
     Exp,
     Ln,
-    // extend as needed
+    /// User-defined function (from `:func` declarations).
+    Custom(String),
 }
 
 /// Named mathematical constants with exact symbolic representation.

@@ -2,7 +2,7 @@ use crate::dim::Dimension;
 use crate::expr::{
     acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
     min, mul, named, neg, pow, quantity, round, scalar, sign, sin, sinh, sqrt, tan, tanh, Expr,
-    Index, IndexPosition, NamedConst,
+    FnKind, Index, IndexPosition, NamedConst,
 };
 use crate::rational::Rational;
 use crate::unit::Unit;
@@ -340,7 +340,9 @@ impl Parser {
                 if name.starts_with("log_") {
                     return self.parse_log_base(name);
                 }
-                if self.peek() == Some(&Token::LParen) && is_known_function(&name) {
+                // Multi-character names followed by ( are function calls;
+                // single-character names are implicit multiplication: x(y+1) = x*(y+1)
+                if self.peek() == Some(&Token::LParen) && name.len() > 1 {
                     return self.parse_function_call(name);
                 }
                 let mut expr = scalar(&name);
@@ -402,7 +404,14 @@ impl Parser {
                 let mut args = expect_n(args, 3, "clamp")?;
                 Ok(clamp(args.remove(0), args.remove(0), args.remove(0)))
             }
-            _ => Err(ParseError::UnexpectedToken(name)),
+            _ => {
+                // User-defined function call
+                if args.len() == 1 {
+                    Ok(Expr::Fn(FnKind::Custom(name), Box::new(args.into_iter().next().unwrap())))
+                } else {
+                    Ok(Expr::FnN(FnKind::Custom(name), args))
+                }
+            }
         }
     }
 
@@ -880,9 +889,13 @@ mod tests {
     }
 
     #[test]
-    fn parse_unknown_ident_parens_as_mul() {
+    fn parse_unknown_ident_parens_as_func_call() {
+        // Multi-character names followed by ( are parsed as function calls
         let expr = parse_expr("foo(x + 1)").unwrap();
-        assert_eq!(expr, mul(scalar("foo"), add(scalar("x"), constant(1.0))));
+        assert_eq!(
+            expr,
+            Expr::Fn(FnKind::Custom("foo".to_string()), Box::new(add(scalar("x"), constant(1.0))))
+        );
     }
 
     #[test]

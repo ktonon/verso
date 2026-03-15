@@ -1,5 +1,5 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, ConstDecl, VarDecl, Document, EnvKind, Environment, Figure, List, ListItem,
+    Block, Claim, ColumnAlign, ConstDecl, FuncDecl, VarDecl, Document, EnvKind, Environment, Figure, List, ListItem,
     MathBlock, Proof, ProofStep, ProseFragment, Span, Table,
 };
 use verso_symbolic::{parse_expr, Dimension};
@@ -467,6 +467,56 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             blocks.push(Block::Const(ConstDecl {
                 name,
                 value,
+                span: Span { line: i + 1 },
+            }));
+            i += 1;
+            continue;
+        }
+
+        // Function declaration
+        if trimmed.starts_with(":func") {
+            let rest = trimmed[":func".len()..].trim();
+            let lparen = rest.find('(').ok_or_else(|| ParseDocError {
+                line: i + 1,
+                message: ":func requires name(params) = expr, e.g. :func KE(m, v) = (1/2)*m*v^2"
+                    .into(),
+            })?;
+            let name = rest[..lparen].trim().to_string();
+            if name.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":func requires a name".into(),
+                });
+            }
+            let rparen = rest.find(')').ok_or_else(|| ParseDocError {
+                line: i + 1,
+                message: ":func missing closing parenthesis".into(),
+            })?;
+            let params_str = &rest[lparen + 1..rparen];
+            let params: Vec<String> = params_str
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if params.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: ":func requires at least one parameter".into(),
+                });
+            }
+            let after_rparen = rest[rparen + 1..].trim();
+            let body_str = after_rparen.strip_prefix('=').ok_or_else(|| ParseDocError {
+                line: i + 1,
+                message: ":func requires = after parameters".into(),
+            })?.trim();
+            let body = parse_expr(body_str).map_err(|e| ParseDocError {
+                line: i + 1,
+                message: format!(":func '{}': {:?}", name, e),
+            })?;
+            blocks.push(Block::Func(FuncDecl {
+                name,
+                params,
+                body,
                 span: Span { line: i + 1 },
             }));
             i += 1;
@@ -1534,6 +1584,42 @@ mod tests {
         let err = parse_document(src).unwrap_err();
         assert!(
             err.message.contains(":const requires a name"),
+            "unexpected error: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_func_declaration() {
+        let src = ":func KE(m, v) = (1/2) * m * v^2";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Func(f) => {
+                assert_eq!(f.name, "KE");
+                assert_eq!(f.params, vec!["m", "v"]);
+            }
+            _ => panic!("expected Func"),
+        }
+    }
+
+    #[test]
+    fn parse_func_missing_parens() {
+        let src = ":func f = x";
+        let err = parse_document(src).unwrap_err();
+        assert!(
+            err.message.contains(":func requires"),
+            "unexpected error: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_func_no_params() {
+        let src = ":func f() = x";
+        let err = parse_document(src).unwrap_err();
+        assert!(
+            err.message.contains("at least one parameter"),
             "unexpected error: {}",
             err.message
         );

@@ -76,6 +76,9 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
             Block::Const(decl) => {
                 ctx.declare_const(&decl.name, decl.value.clone());
             }
+            Block::Func(decl) => {
+                ctx.declare_func(&decl.name, decl.params.clone(), decl.body.clone());
+            }
             _ => {}
         }
     }
@@ -314,6 +317,43 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert!(report.all_passed(), "const in proof should pass: {:?}", report.results);
+    }
+
+    #[test]
+    fn verify_func_expansion() {
+        let src = "\
+:func sq(x) = x^2
+:claim square
+  sq(3) = 9
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(report.all_passed(), "func expansion should pass: {:?}", report.results);
+    }
+
+    #[test]
+    fn verify_func_two_params() {
+        let src = "\
+:func KE(m, v) = (1/2) * m * v^2
+:claim energy
+  KE(2, 3) = 9
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(report.all_passed(), "multi-param func should pass: {:?}", report.results);
+    }
+
+    #[test]
+    fn verify_func_with_const() {
+        let src = "\
+:const g = 10
+:func PE(m, h) = m * g * h
+:claim potential
+  PE(2, 5) = 100
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(report.all_passed(), "func with const should pass: {:?}", report.results);
     }
 
     #[test]

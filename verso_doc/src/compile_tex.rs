@@ -166,7 +166,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Proof(proof) => {
                 write_proof(&mut out, proof);
             }
-            Block::Var(_) | Block::Const(_) => {}
+            Block::Var(_) | Block::Const(_) | Block::Func(_) => {}
             Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_) => {}
             Block::PageBreak => {
                 writeln!(out, "\\newpage").unwrap();
