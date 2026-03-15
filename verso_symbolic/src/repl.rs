@@ -16,11 +16,12 @@ enum HistoryMode {
 
 pub fn run() -> Result<(), ReadlineError> {
     let mut rl = DefaultEditor::new()?;
-    let ctx = Context::new();
+    let mut ctx = Context::new();
     let mut show_trace = false;
     let mut history_mode = HistoryMode::Inputs;
     let mut input_history: Vec<String> = Vec::new();
     let mut result_history: Vec<String> = Vec::new();
+    let mut claim_counter: usize = 0;
 
     loop {
         match rl.readline("> ") {
@@ -54,6 +55,61 @@ pub fn run() -> Result<(), ReadlineError> {
                     }
                     continue;
                 }
+                if input == ":reset" {
+                    ctx = Context::new();
+                    claim_counter = 0;
+                    println!("context reset\n");
+                    continue;
+                }
+
+                // :var declaration
+                if input.starts_with(":var") {
+                    let rest = input[":var".len()..].trim();
+                    match parse_var_decl(rest) {
+                        Ok((name, dim)) => {
+                            ctx.declare_var(&name, Some(dim.clone()));
+                            println!("\x1b[90m{}: {}\x1b[0m\n", name, dim);
+                        }
+                        Err(msg) => println!("Error: {}\n", msg),
+                    }
+                    continue;
+                }
+
+                // :const declaration
+                if input.starts_with(":const") {
+                    let rest = input[":const".len()..].trim();
+                    match parse_const_decl(rest) {
+                        Ok((name, value)) => {
+                            let simplified = ctx.simplify(&value);
+                            println!(
+                                "\x1b[90m{} = {}\x1b[0m\n",
+                                name,
+                                fmt_colored(&simplified)
+                            );
+                            ctx.declare_const(&name, value);
+                        }
+                        Err(msg) => println!("Error: {}\n", msg),
+                    }
+                    continue;
+                }
+
+                // :func declaration
+                if input.starts_with(":func") {
+                    let rest = input[":func".len()..].trim();
+                    match parse_func_decl(rest) {
+                        Ok((name, params, body)) => {
+                            println!(
+                                "\x1b[90m{}({}) = {}\x1b[0m\n",
+                                name,
+                                params.join(", "),
+                                fmt_colored(&body)
+                            );
+                            ctx.declare_func(&name, params, body);
+                        }
+                        Err(msg) => println!("Error: {}\n", msg),
+                    }
+                    continue;
+                }
 
                 record_input(&mut input_history, &mut rl, history_mode, input);
 
@@ -62,7 +118,8 @@ pub fn run() -> Result<(), ReadlineError> {
                     let rhs_str = input[eq_pos + 1..].trim();
                     match (parse_expr(lhs_str), parse_expr(rhs_str)) {
                         (Ok(lhs), Ok(rhs)) => {
-                            match ctx.check_equal(&lhs, &rhs) {
+                            let result = ctx.check_equal(&lhs, &rhs);
+                            match &result {
                                 EqualityResult::Equal => {
                                     println!("\x1b[32mtrue\x1b[0m\n");
                                 }
@@ -72,9 +129,17 @@ pub fn run() -> Result<(), ReadlineError> {
                                 EqualityResult::NotEqual { residual } => {
                                     println!(
                                         "\x1b[31mfalse\x1b[0m  residual: {}\n",
-                                        fmt_colored(&residual)
+                                        fmt_colored(residual)
                                     );
                                 }
+                            }
+                            if result.passed() {
+                                claim_counter += 1;
+                                ctx.add_claim_as_rule(
+                                    &format!("repl_{}", claim_counter),
+                                    &lhs,
+                                    &rhs,
+                                );
                             }
                             let diff = Expr::Add(
                                 Box::new(lhs),
@@ -92,8 +157,9 @@ pub fn run() -> Result<(), ReadlineError> {
                         Ok(expr) => {
                             let input_dim = expr.first_unit().map(|u| u.dimension.clone());
                             if show_trace {
+                                let applied = ctx.apply_consts(&expr);
                                 let (simplified, trace) =
-                                    search::simplify_with_trace(&expr, &ctx.rules);
+                                    search::simplify_with_trace(&applied, &ctx.rules);
 
                                 let plain_widths: Vec<usize> = trace
                                     .iter()
@@ -162,6 +228,58 @@ pub fn run() -> Result<(), ReadlineError> {
     }
 
     Ok(())
+}
+
+fn parse_var_decl(rest: &str) -> Result<(String, Dimension), String> {
+    let bracket_pos = rest
+        .find('[')
+        .ok_or(":var requires name [dims], e.g. :var v [L T^-1]")?;
+    let name = rest[..bracket_pos].trim().to_string();
+    if name.is_empty() {
+        return Err(":var requires a variable name".into());
+    }
+    let dim_str = rest[bracket_pos..].trim();
+    let dimension = Dimension::parse(dim_str).map_err(|e| format!("{}", e))?;
+    Ok((name, dimension))
+}
+
+fn parse_const_decl(rest: &str) -> Result<(String, Expr), String> {
+    let eq_pos = rest
+        .find('=')
+        .ok_or(":const requires name = expr, e.g. :const c = 3*10^8")?;
+    let name = rest[..eq_pos].trim().to_string();
+    if name.is_empty() {
+        return Err(":const requires a name".into());
+    }
+    let value_str = rest[eq_pos + 1..].trim();
+    let value = parse_expr(value_str).map_err(|e| format!("{:?}", e))?;
+    Ok((name, value))
+}
+
+fn parse_func_decl(rest: &str) -> Result<(String, Vec<String>, Expr), String> {
+    let lparen = rest
+        .find('(')
+        .ok_or(":func requires name(params) = expr")?;
+    let name = rest[..lparen].trim().to_string();
+    if name.is_empty() {
+        return Err(":func requires a name".into());
+    }
+    let rparen = rest.find(')').ok_or(":func missing closing parenthesis")?;
+    let params: Vec<String> = rest[lparen + 1..rparen]
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if params.is_empty() {
+        return Err(":func requires at least one parameter".into());
+    }
+    let after = rest[rparen + 1..].trim();
+    let body_str = after
+        .strip_prefix('=')
+        .ok_or(":func requires = after parameters")?
+        .trim();
+    let body = parse_expr(body_str).map_err(|e| format!("{:?}", e))?;
+    Ok((name, params, body))
 }
 
 fn record_input(
