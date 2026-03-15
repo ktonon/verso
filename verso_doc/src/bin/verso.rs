@@ -62,7 +62,7 @@ fn main() {
                 watch_and_run(tasks);
             } else {
                 cmd_check(&files);
-                stamp_config();
+                stamp_config_if_present();
             }
         }
         Command::Build {
@@ -93,7 +93,7 @@ fn main() {
                 watch_and_run(tasks);
             } else {
                 cmd_build_from_config_resolved(&config, output.as_deref());
-                stamp_config();
+                stamp_config_if_present();
             }
         }
         Command::Build {
@@ -124,13 +124,13 @@ fn main() {
     }
 }
 
-/// Stamp the config file with the current verso version after a successful run.
-fn stamp_config() {
-    use verso_doc::config::{find_config, stamp_version};
+/// Stamp the config file with the current verso version and schema URL after a successful run.
+fn stamp_config_if_present() {
+    use verso_doc::config::{find_config, stamp_config};
     if let Some(cwd) = std::env::current_dir().ok() {
         if let Some(path) = find_config(&cwd) {
-            if let Err(e) = stamp_version(&path) {
-                eprintln!("warning: could not update version in config: {}", e);
+            if let Err(e) = stamp_config(&path) {
+                eprintln!("warning: could not update config: {}", e);
             }
         }
     }

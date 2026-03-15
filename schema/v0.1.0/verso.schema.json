@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/ktonon/verso/main/schema/v0.1.0/verso.schema.json",
+  "title": "Verso Configuration",
+  "description": "Configuration for a verso project (.verso.jsonc or .verso.json)",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference (auto-managed by verso)"
+    },
+    "verso": {
+      "type": "string",
+      "description": "Version of verso that last successfully processed this project (auto-managed by verso)"
+    },
+    "outputDirectory": {
+      "type": "string",
+      "description": "Output directory for build artifacts",
+      "default": "."
+    },
+    "input": {
+      "type": "string",
+      "description": "Path to the main .verso file (for single-paper projects)"
+    },
+    "papers": {
+      "type": "array",
+      "description": "List of papers to build (for multi-paper projects)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Path to the .verso file"
+          },
+          "output": {
+            "type": "string",
+            "description": "Output filename stem (no extension). Defaults to the input filename stem"
+          }
+        },
+        "required": ["input"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "oneOf": [
+    { "required": ["input"] },
+    { "required": ["papers"] }
+  ],
+  "additionalProperties": false
+}
