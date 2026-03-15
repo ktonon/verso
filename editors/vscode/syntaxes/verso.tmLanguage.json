@@ -66,10 +66,10 @@
       "begin": "^(```math)\\s*$",
       "end": "^(```)\\s*$",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.fenced.begin.verso" }
+        "1": { "name": "keyword.control.fenced.begin.verso" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.definition.fenced.end.verso" }
+        "1": { "name": "keyword.control.fenced.end.verso" }
       },
       "name": "meta.block.math.verso",
       "patterns": [
@@ -82,7 +82,7 @@
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.claim.verso" },
-        "2": { "name": "entity.name.tag.claim.verso" }
+        "2": { "name": "entity.name.function.claim.verso" }
       },
       "name": "meta.block.claim.verso",
       "patterns": [
@@ -104,7 +104,7 @@
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.proof.verso" },
-        "2": { "name": "entity.name.tag.proof.verso" }
+        "2": { "name": "entity.name.function.proof.verso" }
       },
       "name": "meta.block.proof.verso",
       "patterns": [
@@ -136,8 +136,8 @@
       "match": "^(:dim)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
       "captures": {
         "1": { "name": "keyword.control.directive.dim.verso" },
-        "2": { "name": "variable.other.dim.verso" },
-        "3": { "name": "support.type.dimension.verso" }
+        "2": { "name": "variable.parameter.dim.verso" },
+        "3": { "name": "storage.type.dimension.verso" }
       }
     },
 
@@ -161,7 +161,7 @@
         {
           "match": "^\\s+(caption|label|width)(:)\\s*(.*)$",
           "captures": {
-            "1": { "name": "variable.other.key.verso" },
+            "1": { "name": "keyword.other.key.verso" },
             "2": { "name": "punctuation.separator.key-value.verso" },
             "3": { "name": "string.unquoted.value.verso" }
           }
@@ -181,7 +181,7 @@
         {
           "match": "^\\s+(label)(:)\\s*(.*)$",
           "captures": {
-            "1": { "name": "variable.other.key.verso" },
+            "1": { "name": "keyword.other.key.verso" },
             "2": { "name": "punctuation.separator.key-value.verso" },
             "3": { "name": "string.unquoted.value.verso" }
           }
@@ -251,14 +251,14 @@
           "match": "^(:author)\\s+(.+)$",
           "captures": {
             "1": { "name": "keyword.control.directive.author.verso" },
-            "2": { "name": "entity.name.tag.author.verso" }
+            "2": { "name": "string.other.author.verso" }
           }
         },
         {
           "match": "^(:date)\\s*(.*)$",
           "captures": {
             "1": { "name": "keyword.control.directive.date.verso" },
-            "2": { "name": "entity.name.tag.date.verso" }
+            "2": { "name": "constant.other.date.verso" }
           }
         },
         {
@@ -333,74 +333,74 @@
     "tag-math": {
       "match": "(math)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.math.verso" },
-        "2": { "name": "punctuation.definition.tag.begin.verso" },
-        "3": { "name": "meta.embedded.math.verso", "patterns": [{ "include": "#math-expression" }] },
-        "4": { "name": "punctuation.definition.tag.end.verso" }
+        "1": { "name": "keyword.other.tag.math.verso" },
+        "2": { "name": "string.other.begin.verso" },
+        "3": { "name": "string.other.math.verso", "patterns": [{ "include": "#math-expression" }] },
+        "4": { "name": "string.other.end.verso" }
       }
     },
 
     "tag-tex": {
       "match": "(tex)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.tex.verso" },
-        "2": { "name": "punctuation.definition.tag.begin.verso" },
-        "3": { "name": "markup.raw.inline.tex.verso" },
-        "4": { "name": "punctuation.definition.tag.end.verso" }
+        "1": { "name": "keyword.other.tag.tex.verso" },
+        "2": { "name": "string.other.begin.verso" },
+        "3": { "name": "string.other.tex.verso" },
+        "4": { "name": "string.other.end.verso" }
       }
     },
 
     "tag-claim": {
       "match": "(claim)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.claim.verso" },
-        "2": { "name": "punctuation.definition.tag.begin.verso" },
-        "3": { "name": "entity.name.tag.claim-ref.verso" },
-        "4": { "name": "punctuation.definition.tag.end.verso" }
+        "1": { "name": "keyword.other.tag.claim.verso" },
+        "2": { "name": "string.other.begin.verso" },
+        "3": { "name": "entity.name.function.claim-ref.verso" },
+        "4": { "name": "string.other.end.verso" }
       }
     },
 
     "tag-cite": {
       "match": "(cite)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.cite.verso" },
-        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "1": { "name": "keyword.other.tag.cite.verso" },
+        "2": { "name": "string.other.begin.verso" },
         "3": { "name": "string.other.citation.verso" },
-        "4": { "name": "punctuation.definition.tag.end.verso" }
+        "4": { "name": "string.other.end.verso" }
       }
     },
 
     "tag-ref": {
       "match": "(ref)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
       "captures": {
-        "1": { "name": "support.function.tag.ref.verso" },
-        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "1": { "name": "keyword.other.tag.ref.verso" },
+        "2": { "name": "string.other.begin.verso" },
         "3": { "name": "entity.name.tag.cross-ref.verso" },
         "4": { "name": "punctuation.separator.pipe.verso" },
         "5": { "name": "string.other.display-text.verso" },
-        "6": { "name": "punctuation.definition.tag.end.verso" }
+        "6": { "name": "string.other.end.verso" }
       }
     },
 
     "tag-url": {
       "match": "(url)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
       "captures": {
-        "1": { "name": "support.function.tag.url.verso" },
-        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "1": { "name": "keyword.other.tag.url.verso" },
+        "2": { "name": "string.other.begin.verso" },
         "3": { "name": "markup.underline.link.verso" },
         "4": { "name": "punctuation.separator.pipe.verso" },
         "5": { "name": "string.other.display-text.verso" },
-        "6": { "name": "punctuation.definition.tag.end.verso" }
+        "6": { "name": "string.other.end.verso" }
       }
     },
 
     "tag-label": {
       "match": "(label)(`)((?:[^`\\\\]|\\\\.)*)(`)",
       "captures": {
-        "1": { "name": "support.function.tag.label.verso" },
-        "2": { "name": "punctuation.definition.tag.begin.verso" },
+        "1": { "name": "keyword.other.tag.label.verso" },
+        "2": { "name": "string.other.begin.verso" },
         "3": { "name": "entity.name.tag.label.verso" },
-        "4": { "name": "punctuation.definition.tag.end.verso" }
+        "4": { "name": "string.other.end.verso" }
       }
     },
 
@@ -413,7 +413,7 @@
       "begin": "(\\^)(\\[)",
       "end": "(\\])",
       "beginCaptures": {
-        "1": { "name": "punctuation.definition.footnote.verso" },
+        "1": { "name": "keyword.other.footnote.verso" },
         "2": { "name": "punctuation.definition.footnote.begin.verso" }
       },
       "endCaptures": {
@@ -484,7 +484,7 @@
         },
         {
           "match": "\\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|exp|log|ln|abs|det|tr)\\b",
-          "name": "support.function.math.verso"
+          "name": "entity.name.function.math.verso"
         },
         {
           "match": "\\b(pi|π)\\b",
@@ -496,7 +496,7 @@
         },
         {
           "match": "\\b\\d[\\d_]*(\\.[\\d_]+)?",
-          "name": "constant.numeric.verso"
+          "name": "constant.numeric.decimal.verso"
         },
         {
           "match": "\\^",
@@ -531,25 +531,25 @@
         {
           "comment": "Base dimension symbols: L, M, T, Theta, I, N, J",
           "match": "\\b(L|M|T|Theta|I|N|J)\\b",
-          "name": "support.type.dimension.verso"
+          "name": "storage.type.dimension.verso"
         },
         {
           "comment": "SI derived units",
           "match": "\\b(Hz|Pa|Ohm)\\b",
-          "name": "support.type.unit.verso"
+          "name": "storage.type.unit.verso"
         },
         {
           "comment": "SI base and derived unit symbols (single/multi-char)",
           "match": "\\b[pnμmckMGT]?(m|g|s|K|A|mol|cd|N|J|W|C|V)\\b",
-          "name": "support.type.unit.verso"
+          "name": "storage.type.unit.verso"
         },
         {
           "match": "\\b(kg)\\b",
-          "name": "support.type.unit.verso"
+          "name": "storage.type.unit.verso"
         },
         {
           "match": "\\b\\d+\\b",
-          "name": "constant.numeric.verso"
+          "name": "constant.numeric.decimal.verso"
         },
         {
           "match": "[\\^/\\*\\-]",

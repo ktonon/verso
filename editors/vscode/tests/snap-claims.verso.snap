@@ -1,100 +1,100 @@
 >:claim inline_dim
 #^^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
 #      ^ source.verso meta.block.claim.verso
-#       ^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.tag.claim.verso
+#       ^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso
 >  v [L T^-1] = v [L T^-1]
 #^^ source.verso meta.block.claim.verso
 #  ^^ source.verso meta.block.claim.verso meta.expression.lhs.verso
 #    ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
-#     ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso support.type.dimension.verso
+#     ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.dimension.verso
 #      ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso
-#       ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso support.type.dimension.verso
+#       ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.dimension.verso
 #        ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso keyword.operator.verso
 #         ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso keyword.operator.verso
-#          ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso constant.numeric.verso
+#          ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso constant.numeric.decimal.verso
 #           ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 #            ^ source.verso meta.block.claim.verso
 #             ^ source.verso meta.block.claim.verso keyword.operator.equals.verso
 #              ^ source.verso meta.block.claim.verso
 #               ^^ source.verso meta.block.claim.verso meta.expression.rhs.verso
 #                 ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
-#                  ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso support.type.dimension.verso
+#                  ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.dimension.verso
 #                   ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso
-#                    ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso support.type.dimension.verso
+#                    ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.dimension.verso
 #                     ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso keyword.operator.verso
 #                      ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso keyword.operator.verso
-#                       ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso constant.numeric.verso
+#                       ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso constant.numeric.decimal.verso
 #                        ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 >
 >:claim compound_unit
 #^^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
 #      ^ source.verso meta.block.claim.verso
-#       ^^^^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.tag.claim.verso
+#       ^^^^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso
 >  3*10^8 [m/s] = 3*10^8 [m/s]
 #^^ source.verso meta.block.claim.verso
-#  ^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.verso
+#  ^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.decimal.verso
 #   ^ source.verso meta.block.claim.verso meta.expression.lhs.verso keyword.operator.arithmetic.verso
-#    ^^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.verso
+#    ^^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.decimal.verso
 #      ^ source.verso meta.block.claim.verso meta.expression.lhs.verso keyword.operator.power.verso
-#       ^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.verso
+#       ^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.decimal.verso
 #        ^ source.verso meta.block.claim.verso meta.expression.lhs.verso
 #         ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
-#          ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso support.type.unit.verso
+#          ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #           ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso keyword.operator.verso
-#            ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso support.type.unit.verso
+#            ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #             ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 #              ^ source.verso meta.block.claim.verso
 #               ^ source.verso meta.block.claim.verso keyword.operator.equals.verso
 #                ^ source.verso meta.block.claim.verso
-#                 ^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.verso
+#                 ^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 #                  ^ source.verso meta.block.claim.verso meta.expression.rhs.verso keyword.operator.arithmetic.verso
-#                   ^^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.verso
+#                   ^^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 #                     ^ source.verso meta.block.claim.verso meta.expression.rhs.verso keyword.operator.power.verso
-#                      ^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.verso
+#                      ^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 #                       ^ source.verso meta.block.claim.verso meta.expression.rhs.verso
 #                        ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
-#                         ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso support.type.unit.verso
+#                         ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #                          ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso keyword.operator.verso
-#                           ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso support.type.unit.verso
+#                           ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #                            ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 >
 >:claim si_prefix
 #^^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
 #      ^ source.verso meta.block.claim.verso
-#       ^^^^^^^^^ source.verso meta.block.claim.verso entity.name.tag.claim.verso
+#       ^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso
 >  1 [km] = 1000 [m]
 #^^ source.verso meta.block.claim.verso
-#  ^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.verso
+#  ^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.decimal.verso
 #   ^ source.verso meta.block.claim.verso meta.expression.lhs.verso
 #    ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
-#     ^^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso support.type.unit.verso
+#     ^^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #       ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 #        ^ source.verso meta.block.claim.verso
 #         ^ source.verso meta.block.claim.verso keyword.operator.equals.verso
 #          ^ source.verso meta.block.claim.verso
-#           ^^^^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.verso
+#           ^^^^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 #               ^ source.verso meta.block.claim.verso meta.expression.rhs.verso
 #                ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
-#                 ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso support.type.unit.verso
+#                 ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #                  ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 >
 >:claim derived_unit
 #^^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
 #      ^ source.verso meta.block.claim.verso
-#       ^^^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.tag.claim.verso
+#       ^^^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso
 >  10 [N] = 10 [N]
 #^^ source.verso meta.block.claim.verso
-#  ^^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.verso
+#  ^^ source.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.decimal.verso
 #    ^ source.verso meta.block.claim.verso meta.expression.lhs.verso
 #     ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
-#      ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso support.type.dimension.verso
+#      ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.dimension.verso
 #       ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 #        ^ source.verso meta.block.claim.verso
 #         ^ source.verso meta.block.claim.verso keyword.operator.equals.verso
 #          ^ source.verso meta.block.claim.verso
-#           ^^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.verso
+#           ^^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 #             ^ source.verso meta.block.claim.verso meta.expression.rhs.verso
 #              ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
-#               ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso support.type.dimension.verso
+#               ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.dimension.verso
 #                ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 >
