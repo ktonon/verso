@@ -67,7 +67,6 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
     let mut ctx = Context::new();
     let mut results = Vec::new();
 
-    // Collect declarations
     for block in &doc.blocks {
         match block {
             Block::Var(decl) => {
@@ -79,14 +78,12 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
             Block::Func(decl) => {
                 ctx.declare_func(&decl.name, decl.params.clone(), decl.body.clone());
             }
-            _ => {}
-        }
-    }
-
-    for block in &doc.blocks {
-        match block {
             Block::Claim(claim) => {
-                results.push(verify_claim(claim, &ctx));
+                let result = verify_claim(claim, &ctx);
+                if result.passed() {
+                    ctx.add_claim_as_rule(&claim.name, &claim.lhs, &claim.rhs);
+                }
+                results.push(result);
             }
             Block::Proof(proof) => {
                 results.push(verify_proof(proof, &ctx));
@@ -354,6 +351,25 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert!(report.all_passed(), "func with const should pass: {:?}", report.results);
+    }
+
+    #[test]
+    fn verify_claim_becomes_rule() {
+        // First claim establishes a rule; second claim uses it
+        let src = "\
+:claim double
+  2 * x = x + x
+
+:claim quadruple
+  4 * x = 2 * x + 2 * x
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(
+            report.all_passed(),
+            "claims-as-rules should pass: {:?}",
+            report.results
+        );
     }
 
     #[test]

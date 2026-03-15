@@ -1,9 +1,9 @@
 use crate::dim::Dimension;
-use crate::eval::spot_check;
+use crate::eval::{free_vars, spot_check};
 use crate::expr::Expr;
-use crate::rule::RuleSet;
+use crate::rule::{self, Pattern, Rule, RuleSet};
 use crate::search;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Map from variable name to its declared dimension.
 pub type DimEnv = HashMap<String, Dimension>;
@@ -62,6 +62,22 @@ impl Context {
         } else {
             substitute_consts(&expr, &self.consts)
         }
+    }
+
+    /// Register a verified claim as a bidirectional rewrite rule.
+    /// Free variables in the claim become pattern wildcards.
+    pub fn add_claim_as_rule(&mut self, name: &str, lhs: &Expr, rhs: &Expr) {
+        let mut vars = free_vars(lhs);
+        vars.extend(free_vars(rhs));
+        let wildcards: HashSet<String> = vars.into_iter().collect();
+        let lhs_pat = expr_to_pattern(lhs, &wildcards);
+        let rhs_pat = expr_to_pattern(rhs, &wildcards);
+        self.rules.add(Rule {
+            name: format!("claim:{}", name),
+            lhs: lhs_pat,
+            rhs: rhs_pat,
+            reversible: false,
+        });
     }
 
     /// Check whether the dimension environment has any declarations.
@@ -396,6 +412,47 @@ fn expr_as_integer(expr: &Expr) -> Option<i32> {
         }
         Expr::Neg(inner) => expr_as_integer(inner).map(|n| -n),
         _ => None,
+    }
+}
+
+/// Convert an Expr into a Pattern, turning free variables into wildcards.
+fn expr_to_pattern(expr: &Expr, wildcards: &HashSet<String>) -> Pattern {
+    match expr {
+        Expr::Var { name, .. } => {
+            if wildcards.contains(name) {
+                Pattern::Wildcard(name.clone())
+            } else {
+                rule::p_var(name, vec![])
+            }
+        }
+        Expr::Rational(r) => Pattern::Rational(*r),
+        Expr::FracPi(r) => Pattern::FracPi(*r),
+        Expr::Named(n) => Pattern::Named(*n),
+        Expr::Add(a, b) => Pattern::Add(
+            Box::new(expr_to_pattern(a, wildcards)),
+            Box::new(expr_to_pattern(b, wildcards)),
+        ),
+        Expr::Mul(a, b) => Pattern::Mul(
+            Box::new(expr_to_pattern(a, wildcards)),
+            Box::new(expr_to_pattern(b, wildcards)),
+        ),
+        Expr::Pow(a, b) => Pattern::Pow(
+            Box::new(expr_to_pattern(a, wildcards)),
+            Box::new(expr_to_pattern(b, wildcards)),
+        ),
+        Expr::Neg(inner) => Pattern::Neg(Box::new(expr_to_pattern(inner, wildcards))),
+        Expr::Inv(inner) => Pattern::Inv(Box::new(expr_to_pattern(inner, wildcards))),
+        Expr::Fn(kind, inner) => {
+            Pattern::Fn(kind.clone(), Box::new(expr_to_pattern(inner, wildcards)))
+        }
+        Expr::FnN(kind, args) => Pattern::FnN(
+            kind.clone(),
+            args.iter().map(|a| expr_to_pattern(a, wildcards)).collect(),
+        ),
+        Expr::Quantity(inner, _unit) => {
+            // Quantities lose their unit in patterns — match on the inner expression
+            expr_to_pattern(inner, wildcards)
+        }
     }
 }
 
