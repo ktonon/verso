@@ -31,6 +31,8 @@ enum Command {
         #[arg(required = true)]
         files: Vec<String>,
     },
+    /// Remove cached build artifacts
+    Clean,
     /// Start the language server (LSP)
     Lsp,
 }
@@ -41,7 +43,23 @@ fn main() {
         Command::Check { files } => cmd_check(&files),
         Command::Build { file, output } => cmd_build(&file, output.as_deref()),
         Command::Watch { files } => cmd_watch(&files),
+        Command::Clean => cmd_clean(),
         Command::Lsp => cmd_lsp(),
+    }
+}
+
+fn cmd_clean() {
+    let tmp = std::env::temp_dir().join("verso-build");
+    if tmp.exists() {
+        match std::fs::remove_dir_all(&tmp) {
+            Ok(_) => eprintln!("removed {}", tmp.display()),
+            Err(e) => {
+                eprintln!("error removing {}: {}", tmp.display(), e);
+                process::exit(1);
+            }
+        }
+    } else {
+        eprintln!("nothing to clean");
     }
 }
 
