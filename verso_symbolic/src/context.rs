@@ -1,6 +1,6 @@
 use crate::dim::Dimension;
 use crate::eval::{free_vars, spot_check};
-use crate::expr::{Expr, ExprKind, Span};
+use crate::expr::{Expr, ExprKind, Span, Ty};
 use crate::rule::{self, Pattern, Rule, RuleSet};
 use crate::search;
 use std::collections::{HashMap, HashSet};
@@ -49,7 +49,14 @@ impl Context {
 
     /// Declare a user-defined function.
     pub fn declare_func(&mut self, name: &str, params: Vec<String>, body: Expr) {
-        self.funcs.insert(name.to_string(), FuncDef { params, body });
+        self.funcs
+            .insert(name.to_string(), FuncDef { params, body });
+    }
+
+    /// Apply const/function expansion and elaborate explicit type state onto the tree.
+    pub fn elaborate_expr(&self, expr: &Expr) -> Result<Expr, DimError> {
+        let expr = self.apply_consts(expr);
+        elaborate_expr(&expr, &self.dims)
     }
 
     /// Apply constant substitution and function expansion to an expression.
@@ -145,11 +152,7 @@ impl Context {
         let expr = self.apply_consts(expr);
         match check_dim(&expr, &self.dims) {
             Ok(d) => Some(Ok(d)),
-            Err(DimError::UndeclaredVar(_, _))
-                if !self.has_dims() && !has_type_info(&expr) =>
-            {
-                None
-            }
+            Err(DimError::UndeclaredVar(_, _)) if !self.has_dims() && !has_type_info(&expr) => None,
             Err(e) => Some(Err(e)),
         }
     }
@@ -158,19 +161,13 @@ impl Context {
     /// Always attempts inference — works with explicit units even without
     /// :var declarations. Returns None if dimensionless or inference fails.
     pub fn infer_type(&self, expr: &Expr) -> Option<Dimension> {
-        let expr = self.apply_consts(expr);
-        check_dim(&expr, &self.dims)
-            .ok()
-            .filter(|d| !d.is_dimensionless())
+        let expr = self.elaborate_expr(expr).ok()?;
+        ty_dimension(&expr.ty).filter(|d| !d.is_dimensionless())
     }
 
     /// Check dimensional consistency of an equality.
     /// Constants and functions are expanded before checking.
-    pub fn check_dims(
-        &self,
-        lhs: &Expr,
-        rhs: &Expr,
-    ) -> DimOutcome {
+    pub fn check_dims(&self, lhs: &Expr, rhs: &Expr) -> DimOutcome {
         let lhs = self.apply_consts(lhs);
         let rhs = self.apply_consts(rhs);
         check_claim_dim(&lhs, &rhs, &self.dims)
@@ -195,7 +192,10 @@ pub enum EqualityResult {
 
 impl EqualityResult {
     pub fn passed(&self) -> bool {
-        matches!(self, EqualityResult::Equal | EqualityResult::NumericallyEqual { .. })
+        matches!(
+            self,
+            EqualityResult::Equal | EqualityResult::NumericallyEqual { .. }
+        )
     }
 }
 
@@ -310,7 +310,9 @@ impl DimOutcome {
 /// Infer the dimension of an expression given a dimension environment.
 pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
     match &expr.kind {
-        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => Ok(Dimension::dimensionless()),
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => {
+            Ok(Dimension::dimensionless())
+        }
         ExprKind::Quantity(_inner, unit) => Ok(unit.dimension.clone()),
         ExprKind::Var { name, dim, .. } => {
             if let Some(d) = dim {
@@ -417,6 +419,203 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
     }
 }
 
+fn ty_dimension(ty: &Ty) -> Option<Dimension> {
+    match ty {
+        Ty::Concrete(dim) => Some(dim.clone()),
+        Ty::Unresolved => None,
+    }
+}
+
+fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
+    let span = expr.span;
+    match &expr.kind {
+        ExprKind::Rational(r) => Ok(Expr::spanned_typed(
+            ExprKind::Rational(*r),
+            span,
+            Ty::Concrete(Dimension::dimensionless()),
+        )),
+        ExprKind::FracPi(r) => Ok(Expr::spanned_typed(
+            ExprKind::FracPi(*r),
+            span,
+            Ty::Concrete(Dimension::dimensionless()),
+        )),
+        ExprKind::Named(n) => Ok(Expr::spanned_typed(
+            ExprKind::Named(*n),
+            span,
+            Ty::Concrete(Dimension::dimensionless()),
+        )),
+        ExprKind::Quantity(inner, unit) => Ok(Expr::spanned_typed(
+            ExprKind::Quantity(Box::new(elaborate_expr(inner, env)?), unit.clone()),
+            span,
+            Ty::Concrete(unit.dimension.clone()),
+        )),
+        ExprKind::Var { name, indices, dim } => {
+            let ty = match dim {
+                Some(dim) => Ty::Concrete(dim.clone()),
+                None => env
+                    .get(name)
+                    .cloned()
+                    .map(Ty::Concrete)
+                    .unwrap_or(Ty::Unresolved),
+            };
+            Ok(Expr::spanned_typed(
+                ExprKind::Var {
+                    name: name.clone(),
+                    indices: indices.clone(),
+                    dim: dim.clone(),
+                },
+                span,
+                ty,
+            ))
+        }
+        ExprKind::Add(a, b) => {
+            let a = elaborate_expr(a, env)?;
+            let b = elaborate_expr(b, env)?;
+            let ty = match (ty_dimension(&a.ty), ty_dimension(&b.ty)) {
+                (Some(da), Some(db)) if da == db => Ty::Concrete(da),
+                (Some(da), Some(db)) => {
+                    return Err(DimError::Mismatch {
+                        expected: da,
+                        got: db,
+                        context: "addition".to_string(),
+                        span: b.span,
+                    });
+                }
+                (Some(da), None) if !da.is_dimensionless() => {
+                    return Err(DimError::Mismatch {
+                        expected: da,
+                        got: Dimension::dimensionless(),
+                        context: "addition".to_string(),
+                        span: b.span,
+                    });
+                }
+                (None, Some(db)) if !db.is_dimensionless() => {
+                    return Err(DimError::Mismatch {
+                        expected: db,
+                        got: Dimension::dimensionless(),
+                        context: "addition".to_string(),
+                        span: a.span,
+                    });
+                }
+                _ => Ty::Unresolved,
+            };
+            Ok(Expr::spanned_typed(
+                ExprKind::Add(Box::new(a), Box::new(b)),
+                span,
+                ty,
+            ))
+        }
+        ExprKind::Mul(a, b) => {
+            let a = elaborate_expr(a, env)?;
+            let b = elaborate_expr(b, env)?;
+            let ty = match (ty_dimension(&a.ty), ty_dimension(&b.ty)) {
+                (Some(da), Some(db)) => Ty::Concrete(da.mul(&db)),
+                _ => Ty::Unresolved,
+            };
+            Ok(Expr::spanned_typed(
+                ExprKind::Mul(Box::new(a), Box::new(b)),
+                span,
+                ty,
+            ))
+        }
+        ExprKind::Neg(inner) => {
+            let inner = elaborate_expr(inner, env)?;
+            Ok(Expr::spanned_typed(
+                ExprKind::Neg(Box::new(inner.clone())),
+                span,
+                inner.ty,
+            ))
+        }
+        ExprKind::Inv(inner) => {
+            let inner = elaborate_expr(inner, env)?;
+            let ty = ty_dimension(&inner.ty)
+                .map(|dim| Ty::Concrete(dim.inv()))
+                .unwrap_or(Ty::Unresolved);
+            Ok(Expr::spanned_typed(
+                ExprKind::Inv(Box::new(inner)),
+                span,
+                ty,
+            ))
+        }
+        ExprKind::Pow(base, exp) => {
+            let base = elaborate_expr(base, env)?;
+            let exp = elaborate_expr(exp, env)?;
+            let ty = match (ty_dimension(&base.ty), ty_dimension(&exp.ty)) {
+                (Some(db), Some(de)) if db.is_dimensionless() => {
+                    if !de.is_dimensionless() {
+                        return Err(DimError::Mismatch {
+                            expected: Dimension::dimensionless(),
+                            got: de,
+                            context: "exponent".to_string(),
+                            span: exp.span,
+                        });
+                    }
+                    Ty::Concrete(Dimension::dimensionless())
+                }
+                (Some(db), Some(_)) => {
+                    let n = expr_as_integer(&exp).ok_or(DimError::NonIntegerPower(exp.span))?;
+                    Ty::Concrete(db.pow(n))
+                }
+                _ => Ty::Unresolved,
+            };
+            Ok(Expr::spanned_typed(
+                ExprKind::Pow(Box::new(base), Box::new(exp)),
+                span,
+                ty,
+            ))
+        }
+        ExprKind::Fn(kind, arg) => {
+            let arg = elaborate_expr(arg, env)?;
+            let ty = match ty_dimension(&arg.ty) {
+                Some(dim) if dim.is_dimensionless() => Ty::Concrete(Dimension::dimensionless()),
+                Some(dim) => {
+                    return Err(DimError::NonDimensionlessFnArg {
+                        func: format!("{:?}", kind).to_lowercase(),
+                        dim,
+                        span: arg.span,
+                    });
+                }
+                None => Ty::Unresolved,
+            };
+            Ok(Expr::spanned_typed(
+                ExprKind::Fn(kind.clone(), Box::new(arg)),
+                span,
+                ty,
+            ))
+        }
+        ExprKind::FnN(kind, args) => {
+            let args: Vec<Expr> = args
+                .iter()
+                .map(|arg| elaborate_expr(arg, env))
+                .collect::<Result<_, _>>()?;
+            let mut unresolved = false;
+            for arg in &args {
+                match ty_dimension(&arg.ty) {
+                    Some(dim) if dim.is_dimensionless() => {}
+                    Some(dim) => {
+                        return Err(DimError::NonDimensionlessFnArg {
+                            func: format!("{:?}", kind).to_lowercase(),
+                            dim,
+                            span: arg.span,
+                        });
+                    }
+                    None => unresolved = true,
+                }
+            }
+            let ty = if unresolved {
+                Ty::Unresolved
+            } else {
+                Ty::Concrete(Dimension::dimensionless())
+            };
+            Ok(Expr::spanned_typed(
+                ExprKind::FnN(kind.clone(), args),
+                span,
+                ty,
+            ))
+        }
+    }
+}
+
 /// Check that two sides of a claim have the same dimension.
 pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
     let dl = match check_dim(lhs, env) {
@@ -510,7 +709,9 @@ fn has_type_info(expr: &Expr) -> bool {
         ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
             has_type_info(a) || has_type_info(b)
         }
-        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => has_type_info(inner),
+        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
+            has_type_info(inner)
+        }
         ExprKind::FnN(_, args) => args.iter().any(has_type_info),
         _ => false,
     }
@@ -531,6 +732,7 @@ fn expr_as_integer(expr: &Expr) -> Option<i32> {
 }
 
 fn respan_tree(expr: &Expr, span: Span) -> Expr {
+    let ty = expr.ty.clone();
     let kind = match &expr.kind {
         ExprKind::Rational(r) => ExprKind::Rational(*r),
         ExprKind::FracPi(r) => ExprKind::FracPi(*r),
@@ -563,7 +765,7 @@ fn respan_tree(expr: &Expr, span: Span) -> Expr {
             ExprKind::Quantity(Box::new(respan_tree(inner, span)), unit.clone())
         }
     };
-    Expr::spanned(kind, span)
+    Expr::spanned_typed(kind, span, ty)
 }
 
 /// Convert an Expr into a Pattern, turning free variables into wildcards.
@@ -624,28 +826,50 @@ pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
                 expr.clone()
             }
         }
-        ExprKind::Add(a, b) => Expr::spanned(ExprKind::Add(
-            Box::new(substitute_consts(a, consts)),
-            Box::new(substitute_consts(b, consts)),
-        ), span),
-        ExprKind::Mul(a, b) => Expr::spanned(ExprKind::Mul(
-            Box::new(substitute_consts(a, consts)),
-            Box::new(substitute_consts(b, consts)),
-        ), span),
-        ExprKind::Pow(a, b) => Expr::spanned(ExprKind::Pow(
-            Box::new(substitute_consts(a, consts)),
-            Box::new(substitute_consts(b, consts)),
-        ), span),
-        ExprKind::Neg(inner) => Expr::spanned(ExprKind::Neg(Box::new(substitute_consts(inner, consts))), span),
-        ExprKind::Inv(inner) => Expr::spanned(ExprKind::Inv(Box::new(substitute_consts(inner, consts))), span),
-        ExprKind::Fn(kind, inner) => Expr::spanned(ExprKind::Fn(kind.clone(), Box::new(substitute_consts(inner, consts))), span),
-        ExprKind::FnN(kind, args) => Expr::spanned(ExprKind::FnN(
-            kind.clone(),
-            args.iter().map(|a| substitute_consts(a, consts)).collect(),
-        ), span),
-        ExprKind::Quantity(inner, unit) => {
-            Expr::spanned(ExprKind::Quantity(Box::new(substitute_consts(inner, consts)), unit.clone()), span)
-        }
+        ExprKind::Add(a, b) => Expr::spanned(
+            ExprKind::Add(
+                Box::new(substitute_consts(a, consts)),
+                Box::new(substitute_consts(b, consts)),
+            ),
+            span,
+        ),
+        ExprKind::Mul(a, b) => Expr::spanned(
+            ExprKind::Mul(
+                Box::new(substitute_consts(a, consts)),
+                Box::new(substitute_consts(b, consts)),
+            ),
+            span,
+        ),
+        ExprKind::Pow(a, b) => Expr::spanned(
+            ExprKind::Pow(
+                Box::new(substitute_consts(a, consts)),
+                Box::new(substitute_consts(b, consts)),
+            ),
+            span,
+        ),
+        ExprKind::Neg(inner) => Expr::spanned(
+            ExprKind::Neg(Box::new(substitute_consts(inner, consts))),
+            span,
+        ),
+        ExprKind::Inv(inner) => Expr::spanned(
+            ExprKind::Inv(Box::new(substitute_consts(inner, consts))),
+            span,
+        ),
+        ExprKind::Fn(kind, inner) => Expr::spanned(
+            ExprKind::Fn(kind.clone(), Box::new(substitute_consts(inner, consts))),
+            span,
+        ),
+        ExprKind::FnN(kind, args) => Expr::spanned(
+            ExprKind::FnN(
+                kind.clone(),
+                args.iter().map(|a| substitute_consts(a, consts)).collect(),
+            ),
+            span,
+        ),
+        ExprKind::Quantity(inner, unit) => Expr::spanned(
+            ExprKind::Quantity(Box::new(substitute_consts(inner, consts)), unit.clone()),
+            span,
+        ),
         ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => expr.clone(),
     }
 }
@@ -670,15 +894,19 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                 let expanded = expand_funcs(&result, funcs);
                 respan_tree(&expanded, span)
             } else {
-                Expr::spanned(ExprKind::Fn(
-                    crate::expr::FnKind::Custom(name.clone()),
-                    Box::new(expand_funcs(arg, funcs)),
-                ), span)
+                Expr::spanned(
+                    ExprKind::Fn(
+                        crate::expr::FnKind::Custom(name.clone()),
+                        Box::new(expand_funcs(arg, funcs)),
+                    ),
+                    span,
+                )
             }
         }
         ExprKind::FnN(crate::expr::FnKind::Custom(name), args) => {
             if let Some(def) = funcs.get(name) {
-                let expanded_args: Vec<Expr> = args.iter().map(|a| expand_funcs(a, funcs)).collect();
+                let expanded_args: Vec<Expr> =
+                    args.iter().map(|a| expand_funcs(a, funcs)).collect();
                 let mut bindings = HashMap::new();
                 for (param, arg) in def.params.iter().zip(expanded_args) {
                     bindings.insert(param.clone(), arg);
@@ -687,39 +915,69 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                 let expanded = expand_funcs(&result, funcs);
                 respan_tree(&expanded, span)
             } else {
-                Expr::spanned(ExprKind::FnN(
-                    crate::expr::FnKind::Custom(name.clone()),
-                    args.iter().map(|a| expand_funcs(a, funcs)).collect(),
-                ), span)
+                Expr::spanned(
+                    ExprKind::FnN(
+                        crate::expr::FnKind::Custom(name.clone()),
+                        args.iter().map(|a| expand_funcs(a, funcs)).collect(),
+                    ),
+                    span,
+                )
             }
         }
-        ExprKind::Add(a, b) => Expr::spanned(ExprKind::Add(
-            Box::new(expand_funcs(a, funcs)),
-            Box::new(expand_funcs(b, funcs)),
-        ), span),
-        ExprKind::Mul(a, b) => Expr::spanned(ExprKind::Mul(
-            Box::new(expand_funcs(a, funcs)),
-            Box::new(expand_funcs(b, funcs)),
-        ), span),
-        ExprKind::Pow(a, b) => Expr::spanned(ExprKind::Pow(
-            Box::new(expand_funcs(a, funcs)),
-            Box::new(expand_funcs(b, funcs)),
-        ), span),
-        ExprKind::Neg(inner) => Expr::spanned(ExprKind::Neg(Box::new(expand_funcs(inner, funcs))), span),
-        ExprKind::Inv(inner) => Expr::spanned(ExprKind::Inv(Box::new(expand_funcs(inner, funcs))), span),
-        ExprKind::Fn(kind, inner) => Expr::spanned(ExprKind::Fn(kind.clone(), Box::new(expand_funcs(inner, funcs))), span),
-        ExprKind::FnN(kind, args) => Expr::spanned(ExprKind::FnN(
-            kind.clone(),
-            args.iter().map(|a| expand_funcs(a, funcs)).collect(),
-        ), span),
-        ExprKind::Quantity(inner, unit) => {
-            Expr::spanned(ExprKind::Quantity(Box::new(expand_funcs(inner, funcs)), unit.clone()), span)
+        ExprKind::Add(a, b) => Expr::spanned(
+            ExprKind::Add(
+                Box::new(expand_funcs(a, funcs)),
+                Box::new(expand_funcs(b, funcs)),
+            ),
+            span,
+        ),
+        ExprKind::Mul(a, b) => Expr::spanned(
+            ExprKind::Mul(
+                Box::new(expand_funcs(a, funcs)),
+                Box::new(expand_funcs(b, funcs)),
+            ),
+            span,
+        ),
+        ExprKind::Pow(a, b) => Expr::spanned(
+            ExprKind::Pow(
+                Box::new(expand_funcs(a, funcs)),
+                Box::new(expand_funcs(b, funcs)),
+            ),
+            span,
+        ),
+        ExprKind::Neg(inner) => {
+            Expr::spanned(ExprKind::Neg(Box::new(expand_funcs(inner, funcs))), span)
         }
-        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => expr.clone(),
+        ExprKind::Inv(inner) => {
+            Expr::spanned(ExprKind::Inv(Box::new(expand_funcs(inner, funcs))), span)
+        }
+        ExprKind::Fn(kind, inner) => Expr::spanned(
+            ExprKind::Fn(kind.clone(), Box::new(expand_funcs(inner, funcs))),
+            span,
+        ),
+        ExprKind::FnN(kind, args) => Expr::spanned(
+            ExprKind::FnN(
+                kind.clone(),
+                args.iter().map(|a| expand_funcs(a, funcs)).collect(),
+            ),
+            span,
+        ),
+        ExprKind::Quantity(inner, unit) => Expr::spanned(
+            ExprKind::Quantity(Box::new(expand_funcs(inner, funcs)), unit.clone()),
+            span,
+        ),
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => {
+            expr.clone()
+        }
     }
 }
 
-fn try_rule_produces_inner(from: &Expr, rule: &crate::rule::Rule, to: &Expr, ctx: &Context) -> bool {
+fn try_rule_produces_inner(
+    from: &Expr,
+    rule: &crate::rule::Rule,
+    to: &Expr,
+    ctx: &Context,
+) -> bool {
     if let Some(result) = rule.apply_ltr(from) {
         if ctx.exprs_equivalent(&result, to) {
             return true;
@@ -735,13 +993,14 @@ fn try_rule_produces_inner(from: &Expr, rule: &crate::rule::Rule, to: &Expr, ctx
 
     match &from.kind {
         ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-            try_rule_produces_inner(a, rule, to, ctx)
-                || try_rule_produces_inner(b, rule, to, ctx)
+            try_rule_produces_inner(a, rule, to, ctx) || try_rule_produces_inner(b, rule, to, ctx)
         }
         ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
             try_rule_produces_inner(inner, rule, to, ctx)
         }
-        ExprKind::FnN(_, args) => args.iter().any(|a| try_rule_produces_inner(a, rule, to, ctx)),
+        ExprKind::FnN(_, args) => args
+            .iter()
+            .any(|a| try_rule_produces_inner(a, rule, to, ctx)),
         _ => false,
     }
 }
@@ -750,6 +1009,7 @@ fn try_rule_produces_inner(from: &Expr, rule: &crate::rule::Rule, to: &Expr, ctx
 mod tests {
     use super::*;
     use crate::dim::BaseDim;
+    use crate::expr::Ty;
     use crate::parser::parse_expr;
 
     #[test]
@@ -759,7 +1019,10 @@ mod tests {
         let expr = parse_expr("b + 4 [s]").unwrap();
         let result = ctx.check_expr_dim(&expr);
         assert!(result.is_some());
-        assert!(result.unwrap().is_err(), "adding length to time should fail");
+        assert!(
+            result.unwrap().is_err(),
+            "adding length to time should fail"
+        );
     }
 
     #[test]
@@ -769,7 +1032,10 @@ mod tests {
         let expr = parse_expr("b + 4 [m]").unwrap();
         let result = ctx.check_expr_dim(&expr);
         assert!(result.is_some());
-        assert!(result.unwrap().is_ok(), "adding length to meters should pass");
+        assert!(
+            result.unwrap().is_ok(),
+            "adding length to meters should pass"
+        );
     }
 
     #[test]
@@ -778,7 +1044,10 @@ mod tests {
         let ctx = Context::new();
         let expr = parse_expr("x + 4 [s]").unwrap();
         let result = ctx.check_expr_dim(&expr);
-        assert!(result.is_some(), "should not suppress when expression has units");
+        assert!(
+            result.is_some(),
+            "should not suppress when expression has units"
+        );
         assert!(result.unwrap().is_err());
     }
 
@@ -830,9 +1099,15 @@ mod tests {
         ctx.declare_var("a", Some(Dimension::single(BaseDim::L, 1)));
         ctx.declare_var("b", Some(Dimension::single(BaseDim::L, 1)));
         let expr = parse_expr("a + b").unwrap();
-        assert_eq!(ctx.infer_type(&expr), Some(Dimension::single(BaseDim::L, 1)));
+        assert_eq!(
+            ctx.infer_type(&expr),
+            Some(Dimension::single(BaseDim::L, 1))
+        );
         let expr = parse_expr("a * b").unwrap();
-        assert_eq!(ctx.infer_type(&expr), Some(Dimension::single(BaseDim::L, 2)));
+        assert_eq!(
+            ctx.infer_type(&expr),
+            Some(Dimension::single(BaseDim::L, 2))
+        );
     }
 
     #[test]
@@ -840,7 +1115,10 @@ mod tests {
         // No :var declarations — should still infer type from explicit units
         let ctx = Context::new();
         let expr = parse_expr("3 [m]").unwrap();
-        assert_eq!(ctx.infer_type(&expr), Some(Dimension::single(BaseDim::L, 1)));
+        assert_eq!(
+            ctx.infer_type(&expr),
+            Some(Dimension::single(BaseDim::L, 1))
+        );
     }
 
     #[test]
@@ -858,6 +1136,51 @@ mod tests {
     }
 
     #[test]
+    fn elaborate_expr_marks_dimensionless_literals_as_concrete() {
+        let ctx = Context::new();
+        let expr = ctx.elaborate_expr(&parse_expr("4.5").unwrap()).unwrap();
+        assert_eq!(expr.ty, Ty::Concrete(Dimension::dimensionless()));
+    }
+
+    #[test]
+    fn elaborate_expr_marks_quantities_with_unit_dimension() {
+        let ctx = Context::new();
+        let expr = ctx.elaborate_expr(&parse_expr("4.5 [m]").unwrap()).unwrap();
+        assert_eq!(expr.ty, Ty::Concrete(Dimension::single(BaseDim::L, 1)));
+    }
+
+    #[test]
+    fn elaborate_expr_keeps_undeclared_vars_unresolved() {
+        let ctx = Context::new();
+        let expr = ctx.elaborate_expr(&parse_expr("x + 1").unwrap()).unwrap();
+        match &expr.kind {
+            ExprKind::Add(lhs, rhs) => {
+                assert_eq!(lhs.ty, Ty::Unresolved);
+                assert_eq!(rhs.ty, Ty::Concrete(Dimension::dimensionless()));
+                assert_eq!(expr.ty, Ty::Unresolved);
+            }
+            other => panic!("expected addition, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn elaborate_expr_uses_declared_dimensions_for_vars() {
+        let mut ctx = Context::new();
+        ctx.declare_var("x", Some(Dimension::single(BaseDim::L, 1)));
+        let expr = ctx
+            .elaborate_expr(&parse_expr("x + 4 [m]").unwrap())
+            .unwrap();
+        match &expr.kind {
+            ExprKind::Add(lhs, rhs) => {
+                assert_eq!(lhs.ty, Ty::Concrete(Dimension::single(BaseDim::L, 1)));
+                assert_eq!(rhs.ty, Ty::Concrete(Dimension::single(BaseDim::L, 1)));
+                assert_eq!(expr.ty, Ty::Concrete(Dimension::single(BaseDim::L, 1)));
+            }
+            other => panic!("expected addition, got {:?}", other),
+        }
+    }
+
+    #[test]
     fn check_expr_dim_const_with_units_no_vars() {
         // No :var declarations, but const has units — should still catch mismatch
         let mut ctx = Context::new();
@@ -865,7 +1188,10 @@ mod tests {
         let expr = parse_expr("c + 1").unwrap();
         let result = ctx.check_expr_dim(&expr);
         assert!(result.is_some(), "should check dims even without :var");
-        assert!(result.unwrap().is_err(), "adding [m/s] to dimensionless should fail");
+        assert!(
+            result.unwrap().is_err(),
+            "adding [m/s] to dimensionless should fail"
+        );
     }
 
     #[test]
@@ -892,7 +1218,10 @@ mod tests {
         let ctx = Context::new();
         let expr = parse_expr("1 [m] + 2 [km] + x").unwrap();
         let result = ctx.check_expr_dim(&expr);
-        assert!(result.is_some(), "should not suppress when expression has units");
+        assert!(
+            result.is_some(),
+            "should not suppress when expression has units"
+        );
         assert!(result.unwrap().is_err());
     }
 
@@ -922,7 +1251,10 @@ mod tests {
         let ctx = Context::new();
         let expr = parse_expr("x [L] + y").unwrap();
         let result = ctx.check_expr_dim(&expr);
-        assert!(result.is_some(), "should not suppress when expression has inline dims");
+        assert!(
+            result.is_some(),
+            "should not suppress when expression has inline dims"
+        );
         assert!(result.unwrap().is_err());
     }
 
@@ -972,7 +1304,10 @@ mod tests {
         // f(x) = x + 1
         ctx.declare_func("f", vec!["x".to_string()], parse_expr("x + 1").unwrap());
         // Build f(3) manually since the parser treats it as implicit multiplication
-        let expr = Expr::new(ExprKind::Fn(FnKind::Custom("f".to_string()), Box::new(parse_expr("3").unwrap())));
+        let expr = Expr::new(ExprKind::Fn(
+            FnKind::Custom("f".to_string()),
+            Box::new(parse_expr("3").unwrap()),
+        ));
         let expanded = ctx.apply_consts(&expr);
         assert_eq!(expanded, parse_expr("3 + 1").unwrap());
     }
@@ -1302,7 +1637,7 @@ mod tests {
         let expr = parse_expr(source).unwrap();
         let err = ctx.check_expr_dim(&expr).unwrap().unwrap_err();
         let formatted = format_dim_error(&err, source, 2); // 2 for "> " prompt
-        // Should contain carets
+                                                           // Should contain carets
         assert!(formatted.contains('^'), "should have caret underline");
         // Should contain the error message
         assert!(formatted.contains("dimension mismatch"));
@@ -1333,10 +1668,11 @@ mod tests {
         // First line is caret line — should have 4 spaces before the caret
         let caret_line = lines[0];
         // Strip ANSI escape
-        let plain: String = caret_line
-            .replace("\x1b[31m", "")
-            .replace("\x1b[0m", "");
-        assert!(plain.starts_with("    ^"), "carets should be offset by prefix_width");
+        let plain: String = caret_line.replace("\x1b[31m", "").replace("\x1b[0m", "");
+        assert!(
+            plain.starts_with("    ^"),
+            "carets should be offset by prefix_width"
+        );
     }
 
     // --- span provenance through apply_consts ---
@@ -1359,12 +1695,14 @@ mod tests {
                 span.end <= source_len,
                 "error span end {} exceeds source length {} — \
                  apply_consts likely corrupted spans",
-                span.end, source_len,
+                span.end,
+                source_len,
             );
             assert!(
                 span.start < source_len,
                 "error span start {} at or beyond source length {}",
-                span.start, source_len,
+                span.start,
+                source_len,
             );
         }
     }
@@ -1408,7 +1746,8 @@ mod tests {
                 span.end <= source_len,
                 "error span end {} exceeds source length {} — \
                  expand_funcs likely corrupted spans",
-                span.end, source_len,
+                span.end,
+                source_len,
             );
         }
     }

@@ -20,6 +20,7 @@ impl Span {
 pub struct Expr {
     pub kind: ExprKind,
     pub span: Span,
+    pub ty: Ty,
 }
 
 impl Expr {
@@ -27,11 +28,28 @@ impl Expr {
         Expr {
             kind,
             span: Span::default(),
+            ty: Ty::Unresolved,
         }
     }
 
     pub fn spanned(kind: ExprKind, span: Span) -> Self {
-        Expr { kind, span }
+        Expr {
+            kind,
+            span,
+            ty: Ty::Unresolved,
+        }
+    }
+
+    pub fn typed(kind: ExprKind, ty: Ty) -> Self {
+        Expr {
+            kind,
+            span: Span::default(),
+            ty,
+        }
+    }
+
+    pub fn spanned_typed(kind: ExprKind, span: Span, ty: Ty) -> Self {
+        Expr { kind, span, ty }
     }
 }
 
@@ -41,13 +59,24 @@ impl PartialEq for Expr {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Ty {
+    Concrete(Dimension),
+    #[default]
+    Unresolved,
+}
+
 #[derive(Debug, Clone)]
 pub enum ExprKind {
     // Atoms
     Rational(Rational), // Exact rational number
     FracPi(Rational),   // Rational multiple of π (value = r * π)
     Named(NamedConst),  // Named mathematical constant (e, √2, etc.)
-    Var { name: String, indices: Vec<Index>, dim: Option<Dimension> },
+    Var {
+        name: String,
+        indices: Vec<Index>,
+        dim: Option<Dimension>,
+    },
 
     // Arithmetic
     Add(Box<Expr>, Box<Expr>),
@@ -179,7 +208,10 @@ impl NamedConst {
 impl Expr {
     pub fn complexity(&self) -> usize {
         match &self.kind {
-            ExprKind::Rational(_) | ExprKind::Named(_) | ExprKind::FracPi(_) | ExprKind::Var { .. } => 1,
+            ExprKind::Rational(_)
+            | ExprKind::Named(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Var { .. } => 1,
             ExprKind::Quantity(inner, _) => 1 + inner.complexity(),
             ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => 1 + a.complexity(),
             ExprKind::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
@@ -216,7 +248,10 @@ impl Expr {
                     arg.collect_units_inner(out);
                 }
             }
-            ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => {}
+            ExprKind::Rational(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Named(_)
+            | ExprKind::Var { .. } => {}
         }
     }
 
@@ -227,9 +262,14 @@ impl Expr {
             ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
                 a.first_unit().or_else(|| b.first_unit())
             }
-            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => inner.first_unit(),
+            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
+                inner.first_unit()
+            }
             ExprKind::FnN(_, args) => args.iter().find_map(|a| a.first_unit()),
-            ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => None,
+            ExprKind::Rational(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Named(_)
+            | ExprKind::Var { .. } => None,
         }
     }
 
@@ -656,12 +696,18 @@ mod tests {
 
     #[test]
     fn named_const_from_value_e() {
-        assert_eq!(NamedConst::from_value(std::f64::consts::E), Some(NamedConst::E));
+        assert_eq!(
+            NamedConst::from_value(std::f64::consts::E),
+            Some(NamedConst::E)
+        );
     }
 
     #[test]
     fn named_const_from_value_sqrt2() {
-        assert_eq!(NamedConst::from_value(std::f64::consts::SQRT_2), Some(NamedConst::Sqrt2));
+        assert_eq!(
+            NamedConst::from_value(std::f64::consts::SQRT_2),
+            Some(NamedConst::Sqrt2)
+        );
     }
 
     #[test]

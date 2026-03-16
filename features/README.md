@@ -10,4 +10,4 @@
 | [declarations.md](declarations.md) | Variable, Constant, and Function Declarations | 2026-03-15 | 2026-03-15 | completed |
 | [test-coverage.md](test-coverage.md) | Test Coverage Improvement | 2026-03-15 | 2026-03-15 | completed |
 | [span-errors.md](span-errors.md) | Span-Based Error Reporting | 2026-03-15 | 2026-03-15 | completed |
-| [strict-typed-symbolic-core.md](strict-typed-symbolic-core.md) | Strictly Typed Symbolic Core | 2026-03-15 | 2026-03-15 | planned |
+| [strict-typed-symbolic-core.md](strict-typed-symbolic-core.md) | Strictly Typed Symbolic Core | 2026-03-15 | 2026-03-15 | wip |

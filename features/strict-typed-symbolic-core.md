@@ -198,6 +198,25 @@ The span-errors feature (completed) established the pattern for extending `Expr`
 
 Adding `ty: Ty` follows the same pattern. `PartialEq` will ignore both `span` and `ty`, comparing only structural `kind`. The span-errors migration touched 16 files; the `ty` migration will touch the same files.
 
+### Implemented in this session
+
+Phase 1 is now started in code:
+- `Expr` has a `ty: Ty` field in `expr.rs`
+- `Ty` is explicit: `Concrete(Dimension)` or `Unresolved`
+- `Expr::new` and `Expr::spanned` default to `Ty::Unresolved`
+- Added `Expr::typed` / `Expr::spanned_typed` helpers for metadata-preserving construction
+- Added `Context::elaborate_expr(&self, expr) -> Result<Expr, DimError>`
+- `infer_type` now reads the elaborated root `ty` instead of recomputing with `check_dim`
+
+The elaboration pass currently covers:
+- literals -> `Concrete([1])`
+- quantities -> `Concrete(unit.dimension)`
+- declared or inline-dimension variables -> `Concrete(dim)`
+- undeclared variables -> `Unresolved`
+- arithmetic/function nodes -> either a derived `Concrete(...)`, `Unresolved`, or the same `DimError` that the legacy checker would have reported for obviously ill-typed expressions
+
+This is intentionally not the full migration yet. `check_expr_dim`, `check_dims`, rewrite substitution, simplification, and tokenization still rely on the older dimension-checking path and do not preserve `ty` end-to-end.
+
 ### Open questions
 
 - Should `Ty` use `Unresolved` (simple) or `Symbol(TypeVarId)` (supports unification)? Start with `Unresolved`; add type variables only if unification is needed later.
@@ -235,3 +254,13 @@ Manual checks:
 - In the REPL, `4.5 [m]` reports `[L]`
 - A bare variable with no declaration is shown as having an unresolved type, not as silently dimensionless
 - Ill-typed equalities are rejected before symbolic or numerical equivalence fallback
+
+Completed this session:
+- `cargo test -p verso_symbolic`
+- `cargo test -p verso_doc`
+
+New automated coverage added:
+- elaboration marks plain literals as `Ty::Concrete([1])`
+- elaboration marks quantities with the unit dimension
+- elaboration keeps undeclared variables `Ty::Unresolved`
+- elaboration uses declared dimensions to type variables and typed addition
