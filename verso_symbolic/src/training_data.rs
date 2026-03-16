@@ -104,14 +104,15 @@ pub fn search_run_to_example(run: &SearchRun) -> Option<TrainingExample> {
         return None;
     }
 
-    // Tokenize the initial expression
-    let (input_tokens, _db) = tokenize(&run.initial);
+    // Training data is defined over the explicit untyped token projection.
+    let initial = run.initial.strip_types();
+    let (input_tokens, _db) = tokenize(&initial);
     let input_token_strings: Vec<String> = input_tokens.iter().map(token_to_string).collect();
-    let input_complexity = run.initial.complexity();
+    let input_complexity = initial.complexity();
 
     // Convert each trace step to an action
     let mut actions = Vec::new();
-    let mut current_expr = run.initial.clone();
+    let mut current_expr = initial;
 
     for step in &run.trace {
         // Tokenize the current expression (before this step was applied)
@@ -129,22 +130,19 @@ pub fn search_run_to_example(run: &SearchRun) -> Option<TrainingExample> {
         });
 
         // Advance to the result of this step
-        current_expr = step.expr.clone();
+        current_expr = step.expr.strip_types();
     }
 
     Some(TrainingExample {
         input_tokens: input_token_strings,
         actions,
-        output_complexity: run.final_complexity,
+        output_complexity: run.result.strip_types().complexity(),
         input_complexity,
     })
 }
 
 /// Write a batch of TrainingExamples to a writer in JSONL format (one JSON object per line).
-pub fn write_jsonl<W: Write>(
-    examples: &[TrainingExample],
-    writer: &mut W,
-) -> std::io::Result<()> {
+pub fn write_jsonl<W: Write>(examples: &[TrainingExample], writer: &mut W) -> std::io::Result<()> {
     for example in examples {
         serde_json::to_writer(&mut *writer, example)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -482,6 +480,36 @@ mod tests {
         assert_eq!(example.actions[0].rule_direction, 0);
         assert_eq!(example.input_complexity, 3); // Add + Var + Rational
         assert_eq!(example.output_complexity, 1); // just Var
+    }
+
+    #[test]
+    fn search_run_to_example_strips_quantity_boundary() {
+        let unit = crate::unit::Unit {
+            dimension: crate::dim::Dimension::single(crate::dim::BaseDim::L, 1),
+            scale: 1.0,
+            display: "m".to_string(),
+        };
+        let initial = quantity(rational(5, 1), unit);
+        let result = rational(5, 1);
+        let run = SearchRun {
+            seed: 0,
+            initial,
+            result: result.clone(),
+            trace: vec![RichTraceStep {
+                expr: result,
+                rule_index: 0,
+                direction_id: RuleDirectionId(0),
+                direction: Direction::Ltr,
+                path: vec![],
+                rule_name: "strip_quantity".to_string(),
+            }],
+            final_complexity: 2,
+        };
+
+        let example = search_run_to_example(&run).unwrap();
+        assert_eq!(example.input_tokens, vec!["I_5"]);
+        assert_eq!(example.input_complexity, 1);
+        assert_eq!(example.output_complexity, 1);
     }
 
     #[test]

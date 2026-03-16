@@ -65,6 +65,69 @@ impl Expr {
         let ty = infer_ty_from_kind(&kind);
         Expr { kind, span, ty }
     }
+
+    /// Project a typed expression into the explicit untyped token/ML boundary.
+    pub fn strip_types(&self) -> Self {
+        match &self.kind {
+            ExprKind::Rational(r) => {
+                Expr::spanned_typed(ExprKind::Rational(*r), self.span, Ty::Unresolved)
+            }
+            ExprKind::FracPi(r) => {
+                Expr::spanned_typed(ExprKind::FracPi(*r), self.span, Ty::Unresolved)
+            }
+            ExprKind::Named(nc) => {
+                Expr::spanned_typed(ExprKind::Named(*nc), self.span, Ty::Unresolved)
+            }
+            ExprKind::Var { name, indices, .. } => Expr::spanned_typed(
+                ExprKind::Var {
+                    name: name.clone(),
+                    indices: indices.clone(),
+                    dim: None,
+                },
+                self.span,
+                Ty::Unresolved,
+            ),
+            ExprKind::Add(a, b) => Expr::spanned_typed(
+                ExprKind::Add(Box::new(a.strip_types()), Box::new(b.strip_types())),
+                self.span,
+                Ty::Unresolved,
+            ),
+            ExprKind::Mul(a, b) => Expr::spanned_typed(
+                ExprKind::Mul(Box::new(a.strip_types()), Box::new(b.strip_types())),
+                self.span,
+                Ty::Unresolved,
+            ),
+            ExprKind::Neg(inner) => Expr::spanned_typed(
+                ExprKind::Neg(Box::new(inner.strip_types())),
+                self.span,
+                Ty::Unresolved,
+            ),
+            ExprKind::Inv(inner) => Expr::spanned_typed(
+                ExprKind::Inv(Box::new(inner.strip_types())),
+                self.span,
+                Ty::Unresolved,
+            ),
+            ExprKind::Pow(base, exp) => Expr::spanned_typed(
+                ExprKind::Pow(Box::new(base.strip_types()), Box::new(exp.strip_types())),
+                self.span,
+                Ty::Unresolved,
+            ),
+            ExprKind::Fn(kind, inner) => Expr::spanned_typed(
+                ExprKind::Fn(kind.clone(), Box::new(inner.strip_types())),
+                self.span,
+                Ty::Unresolved,
+            ),
+            ExprKind::FnN(kind, args) => Expr::spanned_typed(
+                ExprKind::FnN(kind.clone(), args.iter().map(Expr::strip_types).collect()),
+                self.span,
+                Ty::Unresolved,
+            ),
+            ExprKind::Quantity(inner, _) => {
+                let stripped_inner = inner.strip_types();
+                Expr::spanned_typed(stripped_inner.kind, self.span, Ty::Unresolved)
+            }
+        }
+    }
 }
 
 impl PartialEq for Expr {
@@ -760,6 +823,43 @@ mod tests {
     fn neq_different_types() {
         assert_ne!(scalar("x"), constant(1.0));
         assert_ne!(pi(), e_const());
+    }
+
+    #[test]
+    fn strip_types_removes_inline_dims_and_ty() {
+        let dim = Dimension::single(BaseDim::L, 1);
+        let expr = Expr::spanned_typed(
+            ExprKind::Var {
+                name: "x".to_string(),
+                indices: vec![],
+                dim: Some(dim.clone()),
+            },
+            Span::new(2, 3),
+            Ty::Concrete(dim),
+        );
+
+        let stripped = expr.strip_types();
+        assert_eq!(stripped.span, Span::new(2, 3));
+        assert_eq!(stripped.ty, Ty::Unresolved);
+        match stripped.kind {
+            ExprKind::Var { dim, .. } => assert_eq!(dim, None),
+            other => panic!("expected stripped var, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn strip_types_unwraps_quantities() {
+        let unit = test_unit("m");
+        let expr = Expr::spanned_typed(
+            ExprKind::Quantity(Box::new(constant(5.0)), unit.clone()),
+            Span::new(0, 5),
+            Ty::Concrete(unit.dimension.clone()),
+        );
+
+        let stripped = expr.strip_types();
+        assert_eq!(stripped.span, Span::new(0, 5));
+        assert_eq!(stripped.ty, Ty::Unresolved);
+        assert_eq!(stripped, constant(5.0));
     }
 
     // --- NamedConst ---

@@ -1,7 +1,6 @@
 use crate::expr::{Expr, ExprKind, FnKind, IndexPosition, NamedConst};
 use crate::rational::Rational;
 
-
 /// A token in the pre-order serialization of an expression AST.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Token {
@@ -44,8 +43,8 @@ pub enum Token {
 /// Mapping between original variable/index names and De Bruijn indices.
 /// Used to reverse the canonicalization when converting tokens back to expressions.
 pub struct DeBruijn {
-    var_names: Vec<String>,  // index → original name
-    idx_names: Vec<String>,  // index → original index name
+    var_names: Vec<String>, // index → original name
+    idx_names: Vec<String>, // index → original index name
 }
 
 impl DeBruijn {
@@ -97,11 +96,13 @@ impl DeBruijn {
 }
 
 /// Tokenize an expression using pre-order traversal with De Bruijn variable naming.
-/// Returns the token sequence and the mapping needed to reverse the canonicalization.
+/// The token stream is defined over `Expr::strip_types()`, making the lossy
+/// typed-to-untyped projection explicit at the serialization boundary.
 pub fn tokenize(expr: &Expr) -> (Vec<Token>, DeBruijn) {
+    let expr = expr.strip_types();
     let mut tokens = Vec::new();
     let mut db = DeBruijn::new();
-    tokenize_rec(expr, &mut tokens, &mut db);
+    tokenize_rec(&expr, &mut tokens, &mut db);
     (tokens, db)
 }
 
@@ -170,10 +171,7 @@ fn tokenize_rec(expr: &Expr, tokens: &mut Vec<Token>, db: &mut DeBruijn) {
                 tokenize_rec(arg, tokens, db);
             }
         }
-        ExprKind::Quantity(inner, _unit) => {
-            // For now, tokenize just the inner expression (unit info is lost)
-            tokenize_rec(inner, tokens, db);
-        }
+        ExprKind::Quantity(_, _) => unreachable!("strip_types projects quantities away before tokenization"),
     }
 }
 
@@ -189,7 +187,9 @@ pub enum TokenError {
 }
 
 /// Convert a token sequence back into an expression, using the De Bruijn mapping
-/// to restore original variable and index names.
+/// to restore original variable and index names. The reconstructed tree is
+/// intentionally untyped: `ty` is unresolved, inline dims are absent, and
+/// quantities are not restored.
 pub fn detokenize(tokens: &[Token], db: &DeBruijn) -> Result<Expr, TokenError> {
     let mut pos = 0;
     let result = detokenize_rec(tokens, &mut pos, db)?;
@@ -251,7 +251,11 @@ fn detokenize_rec(tokens: &[Token], pos: &mut usize, db: &DeBruijn) -> Result<Ex
                     _ => break,
                 }
             }
-            Ok(Expr::new(ExprKind::Var { name, indices, dim: None }))
+            Ok(Expr::new(ExprKind::Var {
+                name,
+                indices,
+                dim: None,
+            }))
         }
         Token::Add => {
             let a = detokenize_rec(tokens, pos, db)?;
@@ -407,9 +411,7 @@ fn assign_paths(
 /// Find the token position corresponding to a given AST path.
 pub fn path_to_position(tokens: &[Token], target: &AstPath) -> Option<usize> {
     let paths = position_to_path(tokens);
-    paths
-        .iter()
-        .position(|p| p.as_ref() == Some(target))
+    paths.iter().position(|p| p.as_ref() == Some(target))
 }
 
 /// Get a reference to the sub-expression at the given AST path.
@@ -484,7 +486,9 @@ pub fn replace_subexpr(expr: &Expr, path: &[usize], replacement: Expr) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dim::{BaseDim, Dimension};
     use crate::expr::*;
+    use crate::unit::Unit;
 
     // ---- Tokenize + Detokenize roundtrip ----
 
@@ -546,7 +550,10 @@ mod tests {
     fn roundtrip_nested() {
         // x**2 + 2*x + 1
         let expr = add(
-            add(pow(scalar("x"), rational(2, 1)), mul(rational(2, 1), scalar("x"))),
+            add(
+                pow(scalar("x"), rational(2, 1)),
+                mul(rational(2, 1), scalar("x")),
+            ),
             rational(1, 1),
         );
         let (tokens, db) = tokenize(&expr);
@@ -558,10 +565,7 @@ mod tests {
     fn roundtrip_neg_inv() {
         let expr = neg(inv(scalar("x")));
         let (tokens, db) = tokenize(&expr);
-        assert_eq!(
-            tokens,
-            vec![Token::Neg, Token::Inv, Token::Var(0)]
-        );
+        assert_eq!(tokens, vec![Token::Neg, Token::Inv, Token::Var(0)]);
         let result = detokenize(&tokens, &db).unwrap();
         assert_eq!(result, expr);
     }
@@ -628,6 +632,44 @@ mod tests {
         assert_eq!(result, expr);
     }
 
+    #[test]
+    fn tokenize_quantity_uses_untyped_projection() {
+        let length = Dimension::single(BaseDim::L, 1);
+        let expr = Expr::spanned_typed(
+            ExprKind::Quantity(
+                Box::new(Expr::spanned_typed(
+                    ExprKind::Var {
+                        name: "x".to_string(),
+                        indices: vec![],
+                        dim: Some(length.clone()),
+                    },
+                    Span::new(1, 2),
+                    Ty::Concrete(length),
+                )),
+                Unit {
+                    dimension: Dimension::single(BaseDim::L, 1),
+                    scale: 1.0,
+                    display: "m".to_string(),
+                },
+            ),
+            Span::new(0, 5),
+            Ty::Concrete(Dimension::single(BaseDim::L, 1)),
+        );
+
+        let stripped = expr.strip_types();
+        let (tokens, db) = tokenize(&expr);
+        let (stripped_tokens, _) = tokenize(&stripped);
+        assert_eq!(tokens, stripped_tokens);
+
+        let detokenized = detokenize(&tokens, &db).unwrap();
+        assert_eq!(detokenized, stripped);
+        assert_eq!(detokenized.ty, Ty::Unresolved);
+        match detokenized.kind {
+            ExprKind::Var { dim, .. } => assert_eq!(dim, None),
+            other => panic!("expected projected var, got {:?}", other),
+        }
+    }
+
     // ---- De Bruijn canonicalization ----
 
     #[test]
@@ -647,23 +689,14 @@ mod tests {
         // x*x should have the same Var id for both occurrences
         let expr = mul(scalar("x"), scalar("x"));
         let (tokens, _) = tokenize(&expr);
-        assert_eq!(
-            tokens,
-            vec![Token::Mul, Token::Var(0), Token::Var(0)]
-        );
+        assert_eq!(tokens, vec![Token::Mul, Token::Var(0), Token::Var(0)]);
     }
 
     #[test]
     fn de_bruijn_index_naming() {
         // Tensor indices also get De Bruijn names
-        let expr1 = mul(
-            tensor("A", vec![upper("i")]),
-            tensor("B", vec![lower("i")]),
-        );
-        let expr2 = mul(
-            tensor("X", vec![upper("j")]),
-            tensor("Y", vec![lower("j")]),
-        );
+        let expr1 = mul(tensor("A", vec![upper("i")]), tensor("B", vec![lower("i")]));
+        let expr2 = mul(tensor("X", vec![upper("j")]), tensor("Y", vec![lower("j")]));
 
         let (tokens1, _) = tokenize(&expr1);
         let (tokens2, _) = tokenize(&expr2);
@@ -680,9 +713,9 @@ mod tests {
         let (tokens, _) = tokenize(&expr);
         let paths = position_to_path(&tokens);
 
-        assert_eq!(paths[0], Some(vec![]));       // Add = root
-        assert_eq!(paths[1], Some(vec![0]));      // Var(x) = left child
-        assert_eq!(paths[2], Some(vec![1]));      // Int(2) = right child
+        assert_eq!(paths[0], Some(vec![])); // Add = root
+        assert_eq!(paths[1], Some(vec![0])); // Var(x) = left child
+        assert_eq!(paths[2], Some(vec![1])); // Int(2) = right child
     }
 
     #[test]
@@ -693,13 +726,13 @@ mod tests {
         // tokens: [ADD, MUL, V0, V0, MUL, V1, V1]
         let paths = position_to_path(&tokens);
 
-        assert_eq!(paths[0], Some(vec![]));         // Add = root
-        assert_eq!(paths[1], Some(vec![0]));        // Mul = left child of Add
-        assert_eq!(paths[2], Some(vec![0, 0]));     // V0 = left child of Mul
-        assert_eq!(paths[3], Some(vec![0, 1]));     // V0 = right child of Mul
-        assert_eq!(paths[4], Some(vec![1]));        // Mul = right child of Add
-        assert_eq!(paths[5], Some(vec![1, 0]));     // V1 = left child of Mul
-        assert_eq!(paths[6], Some(vec![1, 1]));     // V1 = right child of Mul
+        assert_eq!(paths[0], Some(vec![])); // Add = root
+        assert_eq!(paths[1], Some(vec![0])); // Mul = left child of Add
+        assert_eq!(paths[2], Some(vec![0, 0])); // V0 = left child of Mul
+        assert_eq!(paths[3], Some(vec![0, 1])); // V0 = right child of Mul
+        assert_eq!(paths[4], Some(vec![1])); // Mul = right child of Add
+        assert_eq!(paths[5], Some(vec![1, 0])); // V1 = left child of Mul
+        assert_eq!(paths[6], Some(vec![1, 1])); // V1 = right child of Mul
     }
 
     #[test]
@@ -710,9 +743,9 @@ mod tests {
         // tokens: [FRAC, INT(3), INT(7)]
         let paths = position_to_path(&tokens);
 
-        assert_eq!(paths[0], Some(vec![]));  // Frac = root
-        assert_eq!(paths[1], None);          // continuation
-        assert_eq!(paths[2], None);          // continuation
+        assert_eq!(paths[0], Some(vec![])); // Frac = root
+        assert_eq!(paths[1], None); // continuation
+        assert_eq!(paths[2], None); // continuation
     }
 
     #[test]

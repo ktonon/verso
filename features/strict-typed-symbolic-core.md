@@ -230,6 +230,12 @@ Phase 3 is now in place:
 
 This is intentionally not the full migration yet. Tokenization and ML serialization still do not preserve `ty` end-to-end, and the consumer-facing integrations are still incomplete.
 
+Phase 4 is now in place:
+- added `Expr::strip_types()` as the explicit typed-to-untyped projection for token and ML consumers
+- `tokenize` now serializes the stripped projection instead of silently dropping metadata ad hoc
+- `detokenize` is documented as reconstructing intentionally untyped expressions
+- training-example generation now measures token and complexity data on the stripped projection so ML artifacts stay aligned with what is serialized
+
 ### Open questions
 
 - Should `Ty` use `Unresolved` (simple) or `Symbol(TypeVarId)` (supports unification)? Start with `Unresolved`; add type variables only if unification is needed later.
