@@ -420,7 +420,6 @@ mod tests {
         let mut chars = s.chars().peekable();
         while let Some(c) = chars.next() {
             if c == '\x1b' {
-                // Skip until 'm' (end of ANSI escape)
                 while let Some(&next) = chars.peek() {
                     chars.next();
                     if next == 'm' {
@@ -436,6 +435,60 @@ mod tests {
 
     fn eval(session: &mut Session, input: &str) -> String {
         strip_ansi(&session.eval(input).expect("expected output"))
+    }
+
+    /// Parse a REPL session transcript into (input, expected_output) pairs.
+    ///
+    /// Format:
+    /// ```text
+    /// > input line
+    /// expected output
+    ///
+    /// > next input
+    /// expected output
+    /// ```
+    ///
+    /// - Lines starting with `> ` begin a new input.
+    /// - Non-empty lines following an input are the expected output.
+    /// - A `> ` line with no following output runs the command without asserting.
+    fn parse_transcript(transcript: &str) -> Vec<(&str, String)> {
+        let mut pairs = Vec::new();
+        let mut current_input: Option<&str> = None;
+        let mut output_lines: Vec<&str> = Vec::new();
+
+        for line in transcript.trim().lines() {
+            if let Some(input) = line.strip_prefix("> ") {
+                if let Some(prev_input) = current_input.take() {
+                    pairs.push((prev_input, output_lines.join("\n").trim().to_string()));
+                    output_lines.clear();
+                }
+                current_input = Some(input);
+            } else if current_input.is_some() && !line.trim().is_empty() {
+                output_lines.push(line);
+            }
+        }
+
+        if let Some(input) = current_input {
+            pairs.push((input, output_lines.join("\n").trim().to_string()));
+        }
+
+        pairs
+    }
+
+    /// Run a REPL session transcript, asserting each output matches exactly.
+    /// Inputs with no expected output are executed without assertion.
+    macro_rules! session {
+        ($transcript:expr) => {{
+            let mut s = Session::new();
+            for (input, expected) in parse_transcript($transcript) {
+                if expected.is_empty() {
+                    s.eval(input).expect("expected output");
+                } else {
+                    let actual = eval(&mut s, input);
+                    assert_eq!(actual, expected, "\n  input: > {}", input);
+                }
+            }
+        }};
     }
 
     // ── format_type_suffix unit tests ─────────────────────────────
@@ -462,140 +515,202 @@ mod tests {
     // ── e2e session tests ─────────────────────────────────────────
 
     #[test]
-    fn session_bare_number_is_dimensionless() {
-        let mut s = Session::new();
-        assert_eq!(eval(&mut s, "42"), "42 [1]");
+    fn session_bare_values() {
+        session!(
+            r#"
+> 42
+42 [1]
+
+> x
+x [1]
+"#
+        );
     }
 
     #[test]
     fn session_arithmetic() {
-        let mut s = Session::new();
-        assert_eq!(eval(&mut s, "1 + 2"), "3 [1]");
-        assert_eq!(eval(&mut s, "3 * 4"), "12 [1]");
-    }
+        session!(
+            r#"
+> 1 + 2
+3 [1]
 
-    #[test]
-    fn session_bare_symbol_is_dimensionless() {
-        let mut s = Session::new();
-        assert_eq!(eval(&mut s, "x"), "x [1]");
+> 3 * 4
+12 [1]
+"#
+        );
     }
 
     #[test]
     fn session_var_declaration_persists() {
-        let mut s = Session::new();
-        eval(&mut s, ":var v [L T^-1]");
-        let out = eval(&mut s, "v");
-        assert!(out.contains("[L T^-1]"), "got: {}", out);
+        session!(
+            r#"
+> :var v [L T^-1]
+v: [L T^-1]
+
+> v
+v [L T^-1]
+"#
+        );
     }
 
     #[test]
     fn session_const_substitution() {
-        let mut s = Session::new();
-        eval(&mut s, ":const c = 3");
-        assert_eq!(eval(&mut s, "c + 1"), "4 [1]");
+        session!(
+            r#"
+> :const c = 3
+c = 3 [1]
+
+> c + 1
+4 [1]
+"#
+        );
     }
 
     #[test]
-    fn session_unit_quantity_shows_unit() {
-        let mut s = Session::new();
-        // Single unit quantity — Quantity wrapper preserved, no suffix needed
-        let out = eval(&mut s, "3 [m]");
-        assert!(out.contains("[m]"), "got: {}", out);
+    fn session_const_with_units() {
+        session!(
+            r#"
+> :const g = 3*10^8 [m/s]
+g = 300000000 [m/s]
+"#
+        );
     }
 
     #[test]
-    fn session_unit_addition_shows_dimension() {
-        let mut s = Session::new();
-        let out = eval(&mut s, "1 [mm] + 2 [m]");
-        // After simplification, units are converted to SI base.
-        // The suffix should show [m] (length), not [1] (dimensionless).
-        assert!(out.contains("[m]"), "got: {}", out);
-        assert!(!out.contains("[1]"), "should not be dimensionless: {}", out);
-    }
+    fn session_unit_quantity() {
+        session!(
+            r#"
+> 3 [m]
+3 [m]
 
-    #[test]
-    fn session_unit_multiplication_shows_dimension() {
-        let mut s = Session::new();
-        let out = eval(&mut s, "2 [m] * 3 [kg]");
-        // Should show some dimension, not [1]
-        assert!(!out.contains("[1]"), "should not be dimensionless: {}", out);
+> 1 [mm] + 2 [m]
+2001/1000 [m]
+"#
+        );
     }
 
     #[test]
     fn session_inline_dim_annotation() {
-        let mut s = Session::new();
-        let out = eval(&mut s, "a [L] / b [T]");
-        assert!(out.contains("a/b"), "got: {}", out);
-        assert!(out.contains("[L T^-1]"), "got: {}", out);
+        session!(
+            r#"
+> a [L] / b [T]
+a/b [L T^-1]
+"#
+        );
     }
 
     #[test]
     fn session_inline_dims_are_transient() {
-        let mut s = Session::new();
-        eval(&mut s, "a [L]");
-        // On the next line, 'a' should no longer have the [L] dimension
-        let out = eval(&mut s, "a");
-        assert_eq!(out, "a [1]");
+        session!(
+            r#"
+> a [L]
+a [L]
+
+> a
+a [1]
+"#
+        );
     }
 
     #[test]
     fn session_var_dims_persist() {
-        let mut s = Session::new();
-        eval(&mut s, ":var a [L]");
-        let out = eval(&mut s, "a");
-        assert!(out.contains("[L]"), "got: {}", out);
+        session!(
+            r#"
+> :var a [L]
+a: [L]
+
+> a
+a [L]
+"#
+        );
     }
 
     #[test]
-    fn session_equality_true() {
-        let mut s = Session::new();
-        let out = eval(&mut s, "a + b = b + a");
-        assert!(out.contains("true"), "got: {}", out);
-    }
+    fn session_equality() {
+        session!(
+            r#"
+> a + b = b + a
+true
 
-    #[test]
-    fn session_equality_false() {
-        let mut s = Session::new();
-        let out = eval(&mut s, "a + b = a - b");
-        assert!(out.contains("false"), "got: {}", out);
+> a + b = a - b
+false  residual: 2b
+"#
+        );
     }
 
     #[test]
     fn session_reset_clears_context() {
-        let mut s = Session::new();
-        eval(&mut s, ":var v [L T^-1]");
-        eval(&mut s, ":reset");
-        // After reset, v should be back to dimensionless
-        let out = eval(&mut s, "v");
-        assert_eq!(out, "v [1]");
-    }
+        session!(
+            r#"
+> :var v [L T^-1]
+v: [L T^-1]
 
-    #[test]
-    fn session_const_with_units_shows_dimension() {
-        let mut s = Session::new();
-        let out = eval(&mut s, ":const c = 3*10^8 [m/s]");
-        assert!(out.contains("c ="), "got: {}", out);
-        // Should show length/time dimension
-        assert!(out.contains("[m"), "got: {}", out);
+> :reset
+context reset
+
+> v
+v [1]
+"#
+        );
     }
 
     #[test]
     fn session_func_declaration_and_use() {
-        let mut s = Session::new();
-        // Single-char names are implicit multiplication, so use multi-char name
-        eval(&mut s, ":func sq(x) = x^2 + 1");
-        assert_eq!(eval(&mut s, "sq(3)"), "10 [1]");
+        session!(
+            r#"
+> :func sq(x) = x^2 + 1
+sq(x) = x^2 + 1
+
+> sq(3)
+10 [1]
+"#
+        );
     }
 
     #[test]
     fn session_claimed_equality_becomes_rule() {
-        let mut s = Session::new();
-        // Declare an identity
-        let out = eval(&mut s, "2*a = a + a");
-        assert!(out.contains("true"), "got: {}", out);
-        // The simplifier should now be able to use this
-        let out = eval(&mut s, "2*x");
-        // Could simplify to x + x or stay as 2x, either is fine
-        assert!(out.contains("x"), "got: {}", out);
+        session!(
+            r#"
+> 2*a = a + a
+true
+
+> 2*x
+2x [1]
+"#
+        );
+    }
+
+    // ── parse_transcript unit tests ───────────────────────────────
+
+    #[test]
+    fn parse_transcript_basic() {
+        let pairs = parse_transcript(
+            r#"
+> 1 + 2
+3
+
+> x
+x [1]
+"#,
+        );
+        assert_eq!(
+            pairs,
+            vec![("1 + 2", "3".to_string()), ("x", "x [1]".to_string())]
+        );
+    }
+
+    #[test]
+    fn parse_transcript_no_output_skips_assertion() {
+        let pairs = parse_transcript(
+            r#"
+> :var v [L]
+> v
+v [L]
+"#,
+        );
+        assert_eq!(
+            pairs,
+            vec![(":var v [L]", String::new()), ("v", "v [L]".to_string()),]
+        );
     }
 }
