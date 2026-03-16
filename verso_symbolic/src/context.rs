@@ -340,89 +340,14 @@ impl DimOutcome {
 }
 
 /// Infer the dimension of an expression given a dimension environment.
+///
+/// `elaborate_expr` validates all dimensional constraints (addition operand
+/// agreement, dimensionless function arguments, integer exponents for
+/// dimensioned bases) and stamps every node with `Ty::Concrete`.  After
+/// successful elaboration the root `Ty` already holds the answer.
 pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
     let expr = elaborate_expr(expr, env)?;
-    check_dim_typed(&expr)
-}
-
-/// Validate dimensions of a fully elaborated expression by reading `Ty` fields.
-///
-/// This function must only be called on expressions produced by `elaborate_expr`,
-/// which guarantees all nodes have `Ty::Concrete`. `Ty::Unresolved` is unreachable
-/// on atoms and vars after elaboration.
-fn check_dim_typed(expr: &Expr) -> Result<Dimension, DimError> {
-    match &expr.kind {
-        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Quantity(_, _) => {
-            Ok(ty_dimension(&expr.ty).expect("atom must be Concrete after elaboration"))
-        }
-        ExprKind::Var { .. } => {
-            Ok(ty_dimension(&expr.ty).expect("var must be Concrete after elaboration"))
-        }
-        ExprKind::Add(a, b) => {
-            let da = check_dim_typed(a)?;
-            let db = check_dim_typed(b)?;
-            if da != db {
-                return Err(DimError::Mismatch {
-                    expected: da,
-                    got: db,
-                    context: "addition".to_string(),
-                    span: b.span,
-                });
-            }
-            Ok(da)
-        }
-        ExprKind::Mul(a, b) => {
-            let da = check_dim_typed(a)?;
-            let db = check_dim_typed(b)?;
-            Ok(da.mul(&db))
-        }
-        ExprKind::Neg(inner) => check_dim_typed(inner),
-        ExprKind::Inv(inner) => {
-            let d = check_dim_typed(inner)?;
-            Ok(d.inv())
-        }
-        ExprKind::Pow(base, exp) => {
-            let db = check_dim_typed(base)?;
-            if db.is_dimensionless() {
-                let de = check_dim_typed(exp)?;
-                if !de.is_dimensionless() {
-                    return Err(DimError::Mismatch {
-                        expected: Dimension::dimensionless(),
-                        got: de,
-                        context: "exponent".to_string(),
-                        span: exp.span,
-                    });
-                }
-                return Ok(Dimension::dimensionless());
-            }
-            let n = expr_as_integer(exp).ok_or(DimError::NonIntegerPower(exp.span))?;
-            Ok(db.pow(n))
-        }
-        ExprKind::Fn(kind, arg) => {
-            let da = check_dim_typed(arg)?;
-            if !da.is_dimensionless() {
-                return Err(DimError::NonDimensionlessFnArg {
-                    func: format!("{:?}", kind).to_lowercase(),
-                    dim: da,
-                    span: arg.span,
-                });
-            }
-            Ok(Dimension::dimensionless())
-        }
-        ExprKind::FnN(kind, args) => {
-            for arg in args {
-                let da = check_dim_typed(arg)?;
-                if !da.is_dimensionless() {
-                    return Err(DimError::NonDimensionlessFnArg {
-                        func: format!("{:?}", kind).to_lowercase(),
-                        dim: da,
-                        span: arg.span,
-                    });
-                }
-            }
-            Ok(Dimension::dimensionless())
-        }
-    }
+    Ok(ty_dimension(&expr.ty).expect("root must be Concrete after successful elaboration"))
 }
 
 fn ty_dimension(ty: &Ty) -> Option<Dimension> {
@@ -676,62 +601,26 @@ pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
 /// into the dim environment.  Pushes the names of newly-inserted entries into `pushed`
 /// so callers can remove them later (transient scope).
 fn collect_dim_annotations(expr: &Expr, env: &mut DimEnv, pushed: &mut Vec<String>) {
-    match &expr.kind {
-        ExprKind::Var { name, dim: Some(d), .. } => {
+    expr.walk(&mut |e| {
+        if let ExprKind::Var { name, dim: Some(d), .. } = &e.kind {
             env.insert(name.clone(), d.clone());
             pushed.push(name.clone());
         }
-        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-            collect_dim_annotations(a, env, pushed);
-            collect_dim_annotations(b, env, pushed);
-        }
-        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
-            collect_dim_annotations(inner, env, pushed);
-        }
-        ExprKind::FnN(_, args) => {
-            for arg in args {
-                collect_dim_annotations(arg, env, pushed);
-            }
-        }
-        ExprKind::Quantity(inner, _) => {
-            collect_dim_annotations(inner, env, pushed);
-        }
-        _ => {}
-    }
+    });
 }
 
 fn collect_undeclared(expr: &Expr, env: &DimEnv) -> Vec<String> {
     let mut undeclared = Vec::new();
-    collect_undeclared_inner(expr, env, &mut undeclared);
+    expr.walk(&mut |e| {
+        if let ExprKind::Var { name, dim, .. } = &e.kind {
+            if dim.is_none() && !env.contains_key(name) {
+                undeclared.push(name.clone());
+            }
+        }
+    });
     undeclared.sort();
     undeclared.dedup();
     undeclared
-}
-
-fn collect_undeclared_inner(expr: &Expr, env: &DimEnv, out: &mut Vec<String>) {
-    match &expr.kind {
-        ExprKind::Var { name, dim, .. } => {
-            if dim.is_none() && !env.contains_key(name) {
-                out.push(name.clone());
-            }
-        }
-        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-            collect_undeclared_inner(a, env, out);
-            collect_undeclared_inner(b, env, out);
-        }
-        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
-            collect_undeclared_inner(inner, env, out);
-        }
-        ExprKind::FnN(_, args) => {
-            for arg in args {
-                collect_undeclared_inner(arg, env, out);
-            }
-        }
-        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => {}
-        ExprKind::Quantity(inner, _) => {
-            collect_undeclared_inner(inner, env, out);
-        }
-    }
 }
 
 /// Collect all unit display names from Quantity nodes in an expression.
@@ -741,18 +630,12 @@ pub fn collect_units(expr: &Expr) -> Vec<String> {
 
 /// Check if an expression contains any type information (units or inline dimensions).
 fn has_type_info(expr: &Expr) -> bool {
-    match &expr.kind {
-        ExprKind::Quantity(_, _) => true,
-        ExprKind::Var { dim: Some(_), .. } => true,
-        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-            has_type_info(a) || has_type_info(b)
-        }
-        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
-            has_type_info(inner)
-        }
-        ExprKind::FnN(_, args) => args.iter().any(has_type_info),
-        _ => false,
-    }
+    expr.any(&|e| {
+        matches!(
+            &e.kind,
+            ExprKind::Quantity(_, _) | ExprKind::Var { dim: Some(_), .. }
+        )
+    })
 }
 
 fn expr_as_integer(expr: &Expr) -> Option<i32> {

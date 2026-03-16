@@ -203,50 +203,21 @@ pub fn expr_depth(expr: &Expr) -> usize {
 #[cfg(test)]
 mod tests {
     fn collect_var_names(expr: &Expr, names: &mut Vec<String>) {
-        match &expr.kind {
-            ExprKind::Var { name, .. } => {
+        expr.walk(&mut |e| {
+            if let ExprKind::Var { name, .. } = &e.kind {
                 if !names.contains(name) {
                     names.push(name.clone());
                 }
             }
-            ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => collect_var_names(a, names),
-            ExprKind::FnN(_, args) => {
-                for arg in args {
-                    collect_var_names(arg, names);
-                }
-            }
-            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-                collect_var_names(a, names);
-                collect_var_names(b, names);
-            }
-            _ => {}
-        }
+        });
     }
 
     fn has_frac_pi(expr: &Expr) -> bool {
-        match &expr.kind {
-            ExprKind::FracPi(_) => true,
-            ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => has_frac_pi(a),
-            ExprKind::FnN(_, args) => args.iter().any(has_frac_pi),
-            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-                has_frac_pi(a) || has_frac_pi(b)
-            }
-            _ => false,
-        }
+        expr.any(&|e| matches!(&e.kind, ExprKind::FracPi(_)))
     }
 
     fn has_node_type(expr: &Expr, check: &dyn Fn(&Expr) -> bool) -> bool {
-        if check(expr) {
-            return true;
-        }
-        match &expr.kind {
-            ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => has_node_type(a, check),
-            ExprKind::FnN(_, args) => args.iter().any(|a| has_node_type(a, check)),
-            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-                has_node_type(a, check) || has_node_type(b, check)
-            }
-            _ => false,
-        }
+        expr.any(&|e| check(e))
     }
     use super::*;
     use crate::token::{detokenize, tokenize};

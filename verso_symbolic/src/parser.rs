@@ -827,16 +827,7 @@ impl Parser {
 
 /// Check if an expression contains any variable references.
 fn expr_has_vars(expr: &Expr) -> bool {
-    match &expr.kind {
-        ExprKind::Var { .. } => true,
-        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-            expr_has_vars(a) || expr_has_vars(b)
-        }
-        ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => expr_has_vars(a),
-        ExprKind::FnN(_, args) => args.iter().any(expr_has_vars),
-        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => false,
-        ExprKind::Quantity(inner, _) => expr_has_vars(inner),
-    }
+    expr.any(&|e| matches!(&e.kind, ExprKind::Var { .. }))
 }
 
 fn expect_arity(

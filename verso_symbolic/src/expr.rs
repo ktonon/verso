@@ -66,108 +66,75 @@ impl Expr {
         Expr { kind, span, ty }
     }
 
+}
+
+struct StripConfig {
+    clear_ty: bool,
+    unwrap_quantity: bool,
+}
+
+impl Expr {
     /// Project a typed expression into the explicit untyped token/ML boundary.
+    /// Clears all type info (`ty` → Unresolved, `dim` → None) and unwraps Quantity nodes.
     pub fn strip_types(&self) -> Self {
-        match &self.kind {
-            ExprKind::Rational(r) => {
-                Expr::spanned_typed(ExprKind::Rational(*r), self.span, Ty::Unresolved)
-            }
-            ExprKind::FracPi(r) => {
-                Expr::spanned_typed(ExprKind::FracPi(*r), self.span, Ty::Unresolved)
-            }
-            ExprKind::Named(nc) => {
-                Expr::spanned_typed(ExprKind::Named(*nc), self.span, Ty::Unresolved)
-            }
-            ExprKind::Var { name, indices, .. } => Expr::spanned_typed(
-                ExprKind::Var {
-                    name: name.clone(),
-                    indices: indices.clone(),
-                    dim: None,
-                },
-                self.span,
-                Ty::Unresolved,
-            ),
-            ExprKind::Add(a, b) => Expr::spanned_typed(
-                ExprKind::Add(Box::new(a.strip_types()), Box::new(b.strip_types())),
-                self.span,
-                Ty::Unresolved,
-            ),
-            ExprKind::Mul(a, b) => Expr::spanned_typed(
-                ExprKind::Mul(Box::new(a.strip_types()), Box::new(b.strip_types())),
-                self.span,
-                Ty::Unresolved,
-            ),
-            ExprKind::Neg(inner) => Expr::spanned_typed(
-                ExprKind::Neg(Box::new(inner.strip_types())),
-                self.span,
-                Ty::Unresolved,
-            ),
-            ExprKind::Inv(inner) => Expr::spanned_typed(
-                ExprKind::Inv(Box::new(inner.strip_types())),
-                self.span,
-                Ty::Unresolved,
-            ),
-            ExprKind::Pow(base, exp) => Expr::spanned_typed(
-                ExprKind::Pow(Box::new(base.strip_types()), Box::new(exp.strip_types())),
-                self.span,
-                Ty::Unresolved,
-            ),
-            ExprKind::Fn(kind, inner) => Expr::spanned_typed(
-                ExprKind::Fn(kind.clone(), Box::new(inner.strip_types())),
-                self.span,
-                Ty::Unresolved,
-            ),
-            ExprKind::FnN(kind, args) => Expr::spanned_typed(
-                ExprKind::FnN(kind.clone(), args.iter().map(Expr::strip_types).collect()),
-                self.span,
-                Ty::Unresolved,
-            ),
-            ExprKind::Quantity(inner, _) => {
-                let stripped_inner = inner.strip_types();
-                Expr::spanned_typed(stripped_inner.kind, self.span, Ty::Unresolved)
-            }
-        }
+        self.strip(&StripConfig {
+            clear_ty: true,
+            unwrap_quantity: true,
+        })
     }
 
-    /// Remove inline dimension annotations from Var nodes, preserving everything else.
+    /// Remove inline dimension annotations from Var nodes, preserving Ty and Quantity.
     /// Used before display so the combined type suffix is shown instead of per-variable dims.
     pub fn strip_dim_annotations(&self) -> Self {
+        self.strip(&StripConfig {
+            clear_ty: false,
+            unwrap_quantity: false,
+        })
+    }
+
+    fn strip(&self, cfg: &StripConfig) -> Self {
         let kind = match &self.kind {
             ExprKind::Var { name, indices, .. } => ExprKind::Var {
                 name: name.clone(),
                 indices: indices.clone(),
                 dim: None,
             },
-            ExprKind::Add(a, b) => ExprKind::Add(
-                Box::new(a.strip_dim_annotations()),
-                Box::new(b.strip_dim_annotations()),
-            ),
-            ExprKind::Mul(a, b) => ExprKind::Mul(
-                Box::new(a.strip_dim_annotations()),
-                Box::new(b.strip_dim_annotations()),
-            ),
-            ExprKind::Pow(a, b) => ExprKind::Pow(
-                Box::new(a.strip_dim_annotations()),
-                Box::new(b.strip_dim_annotations()),
-            ),
-            ExprKind::Neg(inner) => ExprKind::Neg(Box::new(inner.strip_dim_annotations())),
-            ExprKind::Inv(inner) => ExprKind::Inv(Box::new(inner.strip_dim_annotations())),
-            ExprKind::Fn(kind, inner) => {
-                ExprKind::Fn(kind.clone(), Box::new(inner.strip_dim_annotations()))
+            ExprKind::Add(a, b) => {
+                ExprKind::Add(Box::new(a.strip(cfg)), Box::new(b.strip(cfg)))
             }
-            ExprKind::FnN(kind, args) => ExprKind::FnN(
-                kind.clone(),
-                args.iter().map(Expr::strip_dim_annotations).collect(),
-            ),
+            ExprKind::Mul(a, b) => {
+                ExprKind::Mul(Box::new(a.strip(cfg)), Box::new(b.strip(cfg)))
+            }
+            ExprKind::Pow(a, b) => {
+                ExprKind::Pow(Box::new(a.strip(cfg)), Box::new(b.strip(cfg)))
+            }
+            ExprKind::Neg(inner) => ExprKind::Neg(Box::new(inner.strip(cfg))),
+            ExprKind::Inv(inner) => ExprKind::Inv(Box::new(inner.strip(cfg))),
+            ExprKind::Fn(kind, inner) => {
+                ExprKind::Fn(kind.clone(), Box::new(inner.strip(cfg)))
+            }
+            ExprKind::FnN(kind, args) => {
+                ExprKind::FnN(kind.clone(), args.iter().map(|a| a.strip(cfg)).collect())
+            }
             ExprKind::Quantity(inner, unit) => {
-                ExprKind::Quantity(Box::new(inner.strip_dim_annotations()), unit.clone())
+                if cfg.unwrap_quantity {
+                    let mut stripped = inner.strip(cfg);
+                    stripped.span = self.span;
+                    return stripped;
+                }
+                ExprKind::Quantity(Box::new(inner.strip(cfg)), unit.clone())
             }
             other => other.clone(),
+        };
+        let ty = if cfg.clear_ty {
+            Ty::Unresolved
+        } else {
+            self.ty.clone()
         };
         Expr {
             kind,
             span: self.span,
-            ty: self.ty.clone(),
+            ty,
         }
     }
 }
@@ -399,53 +366,22 @@ impl Expr {
     /// Collect all unit display names from Quantity nodes in this expression.
     pub fn collect_units(&self) -> Vec<String> {
         let mut units = Vec::new();
-        self.collect_units_inner(&mut units);
+        self.walk(&mut |e| {
+            if let ExprKind::Quantity(_, unit) = &e.kind {
+                units.push(unit.display.clone());
+            }
+        });
         units.sort();
         units.dedup();
         units
     }
 
-    fn collect_units_inner(&self, out: &mut Vec<String>) {
-        match &self.kind {
-            ExprKind::Quantity(inner, unit) => {
-                out.push(unit.display.clone());
-                inner.collect_units_inner(out);
-            }
-            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-                a.collect_units_inner(out);
-                b.collect_units_inner(out);
-            }
-            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
-                inner.collect_units_inner(out);
-            }
-            ExprKind::FnN(_, args) => {
-                for arg in args {
-                    arg.collect_units_inner(out);
-                }
-            }
-            ExprKind::Rational(_)
-            | ExprKind::FracPi(_)
-            | ExprKind::Named(_)
-            | ExprKind::Var { .. } => {}
-        }
-    }
-
     /// Return the first Unit found in the expression tree, if any.
     pub fn first_unit(&self) -> Option<&Unit> {
-        match &self.kind {
+        self.find_map(&|e| match &e.kind {
             ExprKind::Quantity(_, unit) => Some(unit),
-            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-                a.first_unit().or_else(|| b.first_unit())
-            }
-            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
-                inner.first_unit()
-            }
-            ExprKind::FnN(_, args) => args.iter().find_map(|a| a.first_unit()),
-            ExprKind::Rational(_)
-            | ExprKind::FracPi(_)
-            | ExprKind::Named(_)
-            | ExprKind::Var { .. } => None,
-        }
+            _ => None,
+        })
     }
 
     pub fn precedence(&self) -> u8 {
@@ -462,6 +398,95 @@ impl Expr {
             ExprKind::Mul(_, _) => 60,
             ExprKind::Add(_, _) => 50,
         }
+    }
+
+    /// Visit every node in the tree, calling `f` on each.
+    pub fn walk(&self, f: &mut impl FnMut(&Expr)) {
+        f(self);
+        self.walk_children(f);
+    }
+
+    /// Visit children (but not self) recursively.
+    fn walk_children(&self, f: &mut impl FnMut(&Expr)) {
+        match &self.kind {
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
+                a.walk(f);
+                b.walk(f);
+            }
+            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
+                inner.walk(f);
+            }
+            ExprKind::FnN(_, args) => {
+                for arg in args {
+                    arg.walk(f);
+                }
+            }
+            ExprKind::Quantity(inner, _) => inner.walk(f),
+            _ => {}
+        }
+    }
+
+    /// Return true if any node in the tree satisfies the predicate.
+    pub fn any(&self, predicate: &impl Fn(&Expr) -> bool) -> bool {
+        if predicate(self) {
+            return true;
+        }
+        match &self.kind {
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
+                a.any(predicate) || b.any(predicate)
+            }
+            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
+                inner.any(predicate)
+            }
+            ExprKind::FnN(_, args) => args.iter().any(|a| a.any(predicate)),
+            ExprKind::Quantity(inner, _) => inner.any(predicate),
+            _ => false,
+        }
+    }
+
+    /// Return the first value produced by `f` for any node in the tree.
+    pub fn find_map<'a, T>(&'a self, f: &impl Fn(&'a Expr) -> Option<T>) -> Option<T> {
+        if let Some(val) = f(self) {
+            return Some(val);
+        }
+        match &self.kind {
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
+                a.find_map(f).or_else(|| b.find_map(f))
+            }
+            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
+                inner.find_map(f)
+            }
+            ExprKind::FnN(_, args) => args.iter().find_map(|a| a.find_map(f)),
+            ExprKind::Quantity(inner, _) => inner.find_map(f),
+            _ => None,
+        }
+    }
+
+    /// True if this expression represents a sqrt exponent (1/2).
+    pub fn is_sqrt_exp(&self) -> bool {
+        match &self.kind {
+            ExprKind::Rational(r) => *r == Rational::new(1, 2),
+            ExprKind::Inv(inner) => {
+                matches!(&inner.kind, ExprKind::Rational(r) if *r == Rational::TWO)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// If `Mul(left, right)` represents `ln(arg) * 1/ln(base)` (i.e. log_base(arg)),
+/// return `(base, arg)`.
+pub fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a Expr)> {
+    match (&left.kind, &right.kind) {
+        (ExprKind::Fn(FnKind::Ln, arg), ExprKind::Inv(inner)) => match &inner.kind {
+            ExprKind::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+            _ => None,
+        },
+        (ExprKind::Inv(inner), ExprKind::Fn(FnKind::Ln, arg)) => match &inner.kind {
+            ExprKind::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+            _ => None,
+        },
+        _ => None,
     }
 }
 

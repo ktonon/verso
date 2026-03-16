@@ -1,5 +1,6 @@
 use crate::expr::{
-    classify_mul, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind, NamedConst,
+    classify_mul, match_log_base, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind,
+    NamedConst,
 };
 use crate::rational::Rational;
 
@@ -151,7 +152,7 @@ impl ToTex for Expr {
                 format!("\\frac{{1}}{{{}}}", a.to_tex())
             }
             ExprKind::Pow(base, exp) => {
-                if is_sqrt_exp(exp) {
+                if exp.is_sqrt_exp() {
                     return format!("\\sqrt{{{}}}", base.to_tex());
                 }
                 format!("{}^{{{}}}", maybe_paren(base, self), exp.to_tex())
@@ -198,27 +199,6 @@ fn is_numeric_like(expr: &Expr) -> bool {
     }
 }
 
-fn is_sqrt_exp(exp: &Expr) -> bool {
-    match &exp.kind {
-        ExprKind::Rational(r) => *r == Rational::new(1, 2),
-        ExprKind::Inv(inner) => matches!(&inner.kind, ExprKind::Rational(r) if *r == Rational::TWO),
-        _ => false,
-    }
-}
-
-fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a Expr)> {
-    match (&left.kind, &right.kind) {
-        (ExprKind::Fn(FnKind::Ln, arg), ExprKind::Inv(inner)) => match &inner.kind {
-            ExprKind::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
-            _ => None,
-        },
-        (ExprKind::Inv(inner), ExprKind::Fn(FnKind::Ln, arg)) => match &inner.kind {
-            ExprKind::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
-            _ => None,
-        },
-        _ => None,
-    }
-}
 
 #[cfg(test)]
 mod tests {

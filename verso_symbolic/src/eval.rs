@@ -4,32 +4,12 @@ use std::collections::{HashMap, HashSet};
 /// Collect all free variable names from an expression.
 pub fn free_vars(expr: &Expr) -> HashSet<String> {
     let mut vars = HashSet::new();
-    collect_vars(expr, &mut vars);
-    vars
-}
-
-fn collect_vars(expr: &Expr, vars: &mut HashSet<String>) {
-    match &expr.kind {
-        ExprKind::Var { name, .. } => {
+    expr.walk(&mut |e| {
+        if let ExprKind::Var { name, .. } = &e.kind {
             vars.insert(name.clone());
         }
-        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-            collect_vars(a, vars);
-            collect_vars(b, vars);
-        }
-        ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => {
-            collect_vars(a, vars);
-        }
-        ExprKind::FnN(_, args) => {
-            for a in args {
-                collect_vars(a, vars);
-            }
-        }
-        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => {}
-        ExprKind::Quantity(inner, _) => {
-            collect_vars(inner, vars);
-        }
-    }
+    });
+    vars
 }
 
 /// Evaluate an expression to f64 given variable bindings.
