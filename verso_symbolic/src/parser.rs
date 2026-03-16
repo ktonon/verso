@@ -2,7 +2,7 @@ use crate::dim::Dimension;
 use crate::expr::{
     acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
     min, mul, named, neg, pow, quantity, round, scalar, sign, sin, sinh, sqrt, tan, tanh, Expr,
-    ExprKind, FnKind, Index, IndexPosition, NamedConst,
+    ExprKind, FnKind, Index, IndexPosition, NamedConst, Span,
 };
 use crate::rational::Rational;
 use crate::unit::Unit;
@@ -62,26 +62,31 @@ pub fn parse_expr(src: &str) -> Result<crate::expr::Expr, ParseError> {
     Ok(expr)
 }
 
-fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
+fn tokenize(src: &str) -> Result<Vec<(Token, Span)>, ParseError> {
     let mut chars = src.chars().peekable();
     let mut tokens = Vec::new();
+    let mut pos: usize = 0;
 
     while let Some(&ch) = chars.peek() {
         if ch.is_whitespace() {
             chars.next();
+            pos += 1;
             continue;
         }
 
         if ch.is_ascii_digit() || ch == '.' {
+            let start = pos;
             let mut s = String::new();
             let mut dot_count = 0;
             while let Some(&c) = chars.peek() {
                 if c.is_ascii_digit() {
                     s.push(c);
                     chars.next();
+                    pos += 1;
                 } else if c == '_' {
                     // Skip visual separators (e.g. 1_000_000)
                     chars.next();
+                    pos += 1;
                 } else if c == '.' {
                     dot_count += 1;
                     if dot_count > 1 {
@@ -89,114 +94,69 @@ fn tokenize(src: &str) -> Result<Vec<Token>, ParseError> {
                     }
                     s.push(c);
                     chars.next();
+                    pos += 1;
                 } else {
                     break;
                 }
             }
-            tokens.push(Token::Number(s));
+            tokens.push((Token::Number(s), Span::new(start, pos)));
             continue;
         }
 
         if ch.is_ascii_alphabetic() {
+            let start = pos;
             let mut s = String::new();
             while let Some(&c) = chars.peek() {
                 if c.is_ascii_alphanumeric() {
                     s.push(c);
                     chars.next();
+                    pos += 1;
                 } else {
                     break;
                 }
             }
-            tokens.push(Token::Ident(s));
+            tokens.push((Token::Ident(s), Span::new(start, pos)));
             continue;
         }
 
-        match ch {
-            'π' => {
-                chars.next();
-                tokens.push(Token::Pi);
-            }
-            '+' => {
-                chars.next();
-                tokens.push(Token::Plus);
-            }
-            '-' => {
-                chars.next();
-                tokens.push(Token::Minus);
-            }
-            '*' => {
-                chars.next();
-                tokens.push(Token::Star);
-            }
-            '/' => {
-                chars.next();
-                tokens.push(Token::Slash);
-            }
-            '(' => {
-                chars.next();
-                tokens.push(Token::LParen);
-            }
-            ')' => {
-                chars.next();
-                tokens.push(Token::RParen);
-            }
-            ',' => {
-                chars.next();
-                tokens.push(Token::Comma);
-            }
-            '_' => {
-                chars.next();
-                tokens.push(Token::Underscore);
-            }
-            '^' => {
-                chars.next();
-                tokens.push(Token::Caret);
-            }
-            '{' => {
-                chars.next();
-                tokens.push(Token::LBrace);
-            }
-            '}' => {
-                chars.next();
-                tokens.push(Token::RBrace);
-            }
-            '[' => {
-                chars.next();
-                tokens.push(Token::LBracket);
-            }
-            ']' => {
-                chars.next();
-                tokens.push(Token::RBracket);
-            }
-            '⊗' => {
-                chars.next();
-                tokens.push(Token::Tensor);
-            }
-            '⋅' => {
-                chars.next();
-                tokens.push(Token::DotOp);
-            }
-            ':' => {
-                chars.next();
-                tokens.push(Token::Colon);
-            }
+        let start = pos;
+        let tok = match ch {
+            'π' => { chars.next(); pos += 1; Token::Pi }
+            '+' => { chars.next(); pos += 1; Token::Plus }
+            '-' => { chars.next(); pos += 1; Token::Minus }
+            '*' => { chars.next(); pos += 1; Token::Star }
+            '/' => { chars.next(); pos += 1; Token::Slash }
+            '(' => { chars.next(); pos += 1; Token::LParen }
+            ')' => { chars.next(); pos += 1; Token::RParen }
+            ',' => { chars.next(); pos += 1; Token::Comma }
+            '_' => { chars.next(); pos += 1; Token::Underscore }
+            '^' => { chars.next(); pos += 1; Token::Caret }
+            '{' => { chars.next(); pos += 1; Token::LBrace }
+            '}' => { chars.next(); pos += 1; Token::RBrace }
+            '[' => { chars.next(); pos += 1; Token::LBracket }
+            ']' => { chars.next(); pos += 1; Token::RBracket }
+            '⊗' => { chars.next(); pos += 1; Token::Tensor }
+            '⋅' => { chars.next(); pos += 1; Token::DotOp }
+            ':' => { chars.next(); pos += 1; Token::Colon }
             _ => {
                 return Err(ParseError::UnexpectedToken(ch.to_string()));
             }
-        }
+        };
+        tokens.push((tok, Span::new(start, pos)));
     }
 
     Ok(tokens)
 }
 
 struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<(Token, Span)>,
     pos: usize,
+    prev_end: usize,
 }
 
 impl Parser {
-    fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens, pos: 0 }
+    fn new(tokens: Vec<(Token, Span)>) -> Self {
+        Self { tokens, pos: 0, prev_end: 0 }
     }
 
     fn is_eof(&self) -> bool {
@@ -204,19 +164,26 @@ impl Parser {
     }
 
     fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.pos)
+        self.tokens.get(self.pos).map(|(t, _)| t)
     }
 
     fn peek_at(&self, offset: usize) -> Option<&Token> {
-        self.tokens.get(self.pos + offset)
+        self.tokens.get(self.pos + offset).map(|(t, _)| t)
     }
 
     fn next(&mut self) -> Option<Token> {
-        let tok = self.tokens.get(self.pos).cloned();
-        if tok.is_some() {
+        if let Some((tok, span)) = self.tokens.get(self.pos).cloned() {
             self.pos += 1;
+            self.prev_end = span.end;
+            Some(tok)
+        } else {
+            None
         }
-        tok
+    }
+
+    /// Character offset where the current token starts (or prev_end if at EOF).
+    fn start_pos(&self) -> usize {
+        self.tokens.get(self.pos).map(|(_, s)| s.start).unwrap_or(self.prev_end)
     }
 
     fn peek_string(&self) -> String {
@@ -236,6 +203,7 @@ impl Parser {
     }
 
     fn parse_additive(&mut self) -> Result<crate::expr::Expr, ParseError> {
+        let start = self.start_pos();
         let mut expr = self.parse_multiplicative()?;
         loop {
             match self.peek() {
@@ -243,11 +211,13 @@ impl Parser {
                     self.next();
                     let rhs = self.parse_multiplicative()?;
                     expr = add(expr, rhs);
+                    expr.span = Span::new(start, self.prev_end);
                 }
                 Some(Token::Minus) => {
                     self.next();
                     let rhs = self.parse_multiplicative()?;
                     expr = add(expr, neg(rhs));
+                    expr.span = Span::new(start, self.prev_end);
                 }
                 _ => break,
             }
@@ -256,6 +226,7 @@ impl Parser {
     }
 
     fn parse_multiplicative(&mut self) -> Result<crate::expr::Expr, ParseError> {
+        let start = self.start_pos();
         let mut expr = self.parse_unary()?;
 
         loop {
@@ -268,12 +239,14 @@ impl Parser {
                         Token::Slash => mul(expr, inv(rhs)),
                         _ => mul(expr, rhs),
                     };
+                    expr.span = Span::new(start, self.prev_end);
                 }
                 _ => {
                     // implicit multiplication (e.g. 2x or 2(x+1))
                     if self.next_starts_primary() {
                         let rhs = self.parse_unary()?;
                         expr = mul(expr, rhs);
+                        expr.span = Span::new(start, self.prev_end);
                         continue;
                     }
                     break;
@@ -286,12 +259,14 @@ impl Parser {
             self.next(); // consume [
             let unit = self.parse_unit_bracket()?;
             expr = quantity(expr, unit);
+            expr.span = Span::new(start, self.prev_end);
         }
 
         Ok(expr)
     }
 
     fn parse_power(&mut self) -> Result<crate::expr::Expr, ParseError> {
+        let start = self.start_pos();
         let mut expr = self.parse_primary()?;
         if matches!(self.peek(), Some(Token::Caret))
             && !matches!(self.peek_at(1), Some(Token::LBrace))
@@ -299,6 +274,7 @@ impl Parser {
             self.next();
             let rhs = self.parse_power()?;
             expr = pow(expr, rhs);
+            expr.span = Span::new(start, self.prev_end);
         }
         Ok(expr)
     }
@@ -306,53 +282,72 @@ impl Parser {
     fn parse_unary(&mut self) -> Result<crate::expr::Expr, ParseError> {
         match self.peek() {
             Some(Token::Minus) => {
+                let start = self.start_pos();
                 self.next();
-                Ok(neg(self.parse_power()?))
+                let mut expr = neg(self.parse_power()?);
+                expr.span = Span::new(start, self.prev_end);
+                Ok(expr)
             }
             _ => self.parse_power(),
         }
     }
 
     fn parse_primary(&mut self) -> Result<crate::expr::Expr, ParseError> {
+        let start = self.start_pos();
         match self.next() {
             Some(Token::Number(s)) => {
+                let span = Span::new(start, self.prev_end);
                 if !s.contains('.') {
                     if let Ok(n) = s.parse::<i64>() {
-                        return Ok(Expr::new(ExprKind::Rational(Rational::from_i64(n))));
+                        return Ok(Expr::spanned(ExprKind::Rational(Rational::from_i64(n)), span));
                     }
                 }
                 let n: f64 = s
                     .parse()
                     .map_err(|_| ParseError::InvalidNumber(s.clone()))?;
-                Ok(constant(n))
+                let mut expr = constant(n);
+                expr.span = span;
+                Ok(expr)
             }
-            Some(Token::Pi) => Ok(frac_pi(1, 1)),
+            Some(Token::Pi) => {
+                let mut expr = frac_pi(1, 1);
+                expr.span = Span::new(start, self.prev_end);
+                Ok(expr)
+            }
             Some(Token::Ident(name)) => {
                 if name == "pi" {
-                    return Ok(frac_pi(1, 1));
+                    let mut expr = frac_pi(1, 1);
+                    expr.span = Span::new(start, self.prev_end);
+                    return Ok(expr);
                 }
                 if name == "e" {
-                    return Ok(named(NamedConst::E));
+                    let mut expr = named(NamedConst::E);
+                    expr.span = Span::new(start, self.prev_end);
+                    return Ok(expr);
                 }
                 if name == "log" && self.peek() == Some(&Token::Underscore) {
-                    return self.parse_log_base_tokens();
+                    return self.parse_log_base_tokens_spanned(start);
                 }
                 if name.starts_with("log_") {
-                    return self.parse_log_base(name);
+                    return self.parse_log_base_spanned(name, start);
                 }
                 // Multi-character names followed by ( are function calls;
                 // single-character names are implicit multiplication: x(y+1) = x*(y+1)
                 if self.peek() == Some(&Token::LParen) && name.len() > 1 {
-                    return self.parse_function_call(name);
+                    return self.parse_function_call_spanned(name, start);
                 }
                 let mut expr = scalar(&name);
+                expr.span = Span::new(start, self.prev_end);
                 expr = self.parse_indices(expr)?;
                 Ok(expr)
             }
             Some(Token::LParen) => {
                 let expr = self.parse_additive()?;
                 self.expect(Token::RParen)?;
-                Ok(expr)
+                // Span covers the parentheses
+                let mut wrapped = expr;
+                wrapped.span = Span::new(start, self.prev_end);
+                Ok(wrapped)
             }
             Some(tok) => Err(ParseError::UnexpectedToken(format!("{:?}", tok))),
             None => Err(ParseError::UnexpectedEof),
@@ -360,6 +355,10 @@ impl Parser {
     }
 
     fn parse_function_call(&mut self, name: String) -> Result<crate::expr::Expr, ParseError> {
+        self.parse_function_call_spanned(name, self.start_pos())
+    }
+
+    fn parse_function_call_spanned(&mut self, name: String, start: usize) -> Result<crate::expr::Expr, ParseError> {
         self.expect(Token::LParen)?;
         let mut args = Vec::new();
         if self.peek() != Some(&Token::RParen) {
@@ -374,48 +373,55 @@ impl Parser {
             }
         }
         self.expect(Token::RParen)?;
+        let span = Span::new(start, self.prev_end);
 
-        match name.as_str() {
-            "sin" => Ok(sin(expect_arity(args, 1, "sin")?)),
-            "cos" => Ok(cos(expect_arity(args, 1, "cos")?)),
-            "tan" => Ok(tan(expect_arity(args, 1, "tan")?)),
-            "asin" => Ok(asin(expect_arity(args, 1, "asin")?)),
-            "acos" => Ok(acos(expect_arity(args, 1, "acos")?)),
-            "atan" => Ok(atan(expect_arity(args, 1, "atan")?)),
-            "sinh" => Ok(sinh(expect_arity(args, 1, "sinh")?)),
-            "cosh" => Ok(cosh(expect_arity(args, 1, "cosh")?)),
-            "tanh" => Ok(tanh(expect_arity(args, 1, "tanh")?)),
-            "exp" => Ok(exp(expect_arity(args, 1, "exp")?)),
-            "ln" => Ok(ln(expect_arity(args, 1, "ln")?)),
-            "sign" => Ok(sign(expect_arity(args, 1, "sign")?)),
-            "floor" => Ok(floor(expect_arity(args, 1, "floor")?)),
-            "ceil" => Ok(ceil(expect_arity(args, 1, "ceil")?)),
-            "round" => Ok(round(expect_arity(args, 1, "round")?)),
-            "sqrt" => Ok(sqrt(expect_arity(args, 1, "sqrt")?)),
+        let mut expr = match name.as_str() {
+            "sin" => sin(expect_arity(args, 1, "sin")?),
+            "cos" => cos(expect_arity(args, 1, "cos")?),
+            "tan" => tan(expect_arity(args, 1, "tan")?),
+            "asin" => asin(expect_arity(args, 1, "asin")?),
+            "acos" => acos(expect_arity(args, 1, "acos")?),
+            "atan" => atan(expect_arity(args, 1, "atan")?),
+            "sinh" => sinh(expect_arity(args, 1, "sinh")?),
+            "cosh" => cosh(expect_arity(args, 1, "cosh")?),
+            "tanh" => tanh(expect_arity(args, 1, "tanh")?),
+            "exp" => exp(expect_arity(args, 1, "exp")?),
+            "ln" => ln(expect_arity(args, 1, "ln")?),
+            "sign" => sign(expect_arity(args, 1, "sign")?),
+            "floor" => floor(expect_arity(args, 1, "floor")?),
+            "ceil" => ceil(expect_arity(args, 1, "ceil")?),
+            "round" => round(expect_arity(args, 1, "round")?),
+            "sqrt" => sqrt(expect_arity(args, 1, "sqrt")?),
             "min" => {
                 let mut args = expect_n(args, 2, "min")?;
-                Ok(min(args.remove(0), args.remove(0)))
+                min(args.remove(0), args.remove(0))
             }
             "max" => {
                 let mut args = expect_n(args, 2, "max")?;
-                Ok(max(args.remove(0), args.remove(0)))
+                max(args.remove(0), args.remove(0))
             }
             "clamp" => {
                 let mut args = expect_n(args, 3, "clamp")?;
-                Ok(clamp(args.remove(0), args.remove(0), args.remove(0)))
+                clamp(args.remove(0), args.remove(0), args.remove(0))
             }
             _ => {
                 // User-defined function call
                 if args.len() == 1 {
-                    Ok(Expr::new(ExprKind::Fn(FnKind::Custom(name), Box::new(args.into_iter().next().unwrap()))))
+                    Expr::new(ExprKind::Fn(FnKind::Custom(name), Box::new(args.into_iter().next().unwrap())))
                 } else {
-                    Ok(Expr::new(ExprKind::FnN(FnKind::Custom(name), args)))
+                    Expr::new(ExprKind::FnN(FnKind::Custom(name), args))
                 }
             }
-        }
+        };
+        expr.span = span;
+        Ok(expr)
     }
 
     fn parse_log_base(&mut self, name: String) -> Result<crate::expr::Expr, ParseError> {
+        self.parse_log_base_spanned(name, self.start_pos())
+    }
+
+    fn parse_log_base_spanned(&mut self, name: String, start: usize) -> Result<crate::expr::Expr, ParseError> {
         let base = if name == "log_" {
             // log_(base)(arg)
             self.expect(Token::LParen)?;
@@ -438,10 +444,16 @@ impl Parser {
         let arg = self.parse_additive()?;
         self.expect(Token::RParen)?;
 
-        Ok(mul(ln(arg), inv(ln(base))))
+        let mut expr = mul(ln(arg), inv(ln(base)));
+        expr.span = Span::new(start, self.prev_end);
+        Ok(expr)
     }
 
     fn parse_log_base_tokens(&mut self) -> Result<crate::expr::Expr, ParseError> {
+        self.parse_log_base_tokens_spanned(self.start_pos())
+    }
+
+    fn parse_log_base_tokens_spanned(&mut self, start: usize) -> Result<crate::expr::Expr, ParseError> {
         self.expect(Token::Underscore)?;
         let base = if self.peek() == Some(&Token::LParen) {
             self.next();
@@ -461,13 +473,16 @@ impl Parser {
         self.expect(Token::LParen)?;
         let arg = self.parse_additive()?;
         self.expect(Token::RParen)?;
-        Ok(mul(ln(arg), inv(ln(base))))
+        let mut expr = mul(ln(arg), inv(ln(base)));
+        expr.span = Span::new(start, self.prev_end);
+        Ok(expr)
     }
 
     fn parse_indices(
         &mut self,
         mut expr: crate::expr::Expr,
     ) -> Result<crate::expr::Expr, ParseError> {
+        let start = expr.span.start;
         let mut lowers: Vec<Index> = Vec::new();
         let mut uppers: Vec<Index> = Vec::new();
 
@@ -504,7 +519,7 @@ impl Parser {
             all.extend(lowers);
             all.extend(uppers);
             if let ExprKind::Var { name, .. } = expr.kind {
-                expr = Expr::new(ExprKind::Var { name, indices: all, dim });
+                expr = Expr::spanned(ExprKind::Var { name, indices: all, dim }, Span::new(start, self.prev_end));
             }
         }
 
@@ -1294,5 +1309,83 @@ mod tests {
     fn parse_underscore_in_expression() {
         let e = parse_expr("2 * 1_000").unwrap();
         assert_eq!(e, mul(constant(2.0), constant(1_000.0)));
+    }
+
+    // --- Span tests ---
+
+    #[test]
+    fn span_number() {
+        let e = parse_expr("42").unwrap();
+        assert_eq!(e.span, Span::new(0, 2));
+    }
+
+    #[test]
+    fn span_variable() {
+        let e = parse_expr("x").unwrap();
+        assert_eq!(e.span, Span::new(0, 1));
+    }
+
+    #[test]
+    fn span_addition() {
+        //                  0123456
+        let e = parse_expr("x + 42").unwrap();
+        assert_eq!(e.span, Span::new(0, 6));
+        // lhs: x at 0..1
+        if let ExprKind::Add(a, b) = &e.kind {
+            assert_eq!(a.span, Span::new(0, 1));
+            assert_eq!(b.span, Span::new(4, 6));
+        } else {
+            panic!("expected Add");
+        }
+    }
+
+    #[test]
+    fn span_quantity() {
+        //                  0123456
+        let e = parse_expr("3 [m/s]").unwrap();
+        assert_eq!(e.span, Span::new(0, 7));
+    }
+
+    #[test]
+    fn span_power_with_unit() {
+        //                  01234567890123456789
+        let e = parse_expr("3 * 10 ^ (8 [m/s])").unwrap();
+        // The whole expression
+        assert_eq!(e.span, Span::new(0, 18));
+        // Dig into: Mul(3, Pow(10, Quantity(8, m/s)))
+        if let ExprKind::Mul(lhs, rhs) = &e.kind {
+            assert_eq!(lhs.span, Span::new(0, 1)); // "3"
+            // rhs is 10 ^ (8 [m/s])
+            assert_eq!(rhs.span, Span::new(4, 18)); // "10 ^ (8 [m/s])"
+            if let ExprKind::Pow(base, exp) = &rhs.kind {
+                assert_eq!(base.span, Span::new(4, 6)); // "10"
+                // exp is (8 [m/s]) — parens set the span
+                assert_eq!(exp.span, Span::new(9, 18)); // "(8 [m/s])"
+                // inner of parens: Quantity(8, m/s)
+                if let ExprKind::Quantity(inner, _) = &exp.kind {
+                    assert_eq!(inner.span, Span::new(10, 11)); // "8"
+                } else {
+                    panic!("expected Quantity");
+                }
+            } else {
+                panic!("expected Pow");
+            }
+        } else {
+            panic!("expected Mul");
+        }
+    }
+
+    #[test]
+    fn span_function_call() {
+        //                  0123456
+        let e = parse_expr("sin(x)").unwrap();
+        assert_eq!(e.span, Span::new(0, 6));
+    }
+
+    #[test]
+    fn span_var_with_dimension() {
+        //                  0123456789
+        let e = parse_expr("v [L T^-1]").unwrap();
+        assert_eq!(e.span, Span::new(0, 10));
     }
 }
