@@ -173,3 +173,125 @@ pub struct SpotCheckFailure {
     pub lhs_val: f64,
     pub rhs_val: f64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parse_expr;
+    use crate::unit::Unit;
+
+    fn eval(s: &str) -> Option<f64> {
+        let expr = parse_expr(s).unwrap();
+        eval_f64(&expr, &HashMap::new())
+    }
+
+    fn eval_with(s: &str, bindings: &[(&str, f64)]) -> Option<f64> {
+        let expr = parse_expr(s).unwrap();
+        let b: HashMap<String, f64> = bindings.iter().map(|(k, v)| (k.to_string(), *v)).collect();
+        eval_f64(&expr, &b)
+    }
+
+    #[test]
+    fn sign_positive() {
+        assert_eq!(
+            eval_f64(
+                &Expr::Fn(FnKind::Sign, Box::new(Expr::Rational(5.into()))),
+                &HashMap::new()
+            ),
+            Some(1.0)
+        );
+    }
+
+    #[test]
+    fn sign_negative() {
+        assert_eq!(
+            eval_f64(
+                &Expr::Fn(FnKind::Sign, Box::new(Expr::Rational((-3).into()))),
+                &HashMap::new()
+            ),
+            Some(-1.0)
+        );
+    }
+
+    #[test]
+    fn sign_zero() {
+        assert_eq!(
+            eval_f64(
+                &Expr::Fn(FnKind::Sign, Box::new(Expr::Rational(0.into()))),
+                &HashMap::new()
+            ),
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn custom_fn_returns_none() {
+        let expr = Expr::Fn(
+            FnKind::Custom("foo".to_string()),
+            Box::new(Expr::Rational(1.into())),
+        );
+        assert_eq!(eval_f64(&expr, &HashMap::new()), None);
+    }
+
+    #[test]
+    fn inv_zero_returns_none() {
+        assert_eq!(eval("1/0"), None);
+    }
+
+    #[test]
+    fn pow_non_finite_returns_none() {
+        // (-1)^0.5 = NaN
+        assert_eq!(eval_with("x^y", &[("x", -1.0), ("y", 0.5)]), None);
+    }
+
+    #[test]
+    fn fn_non_finite_returns_none() {
+        // ln(0) = -inf
+        assert_eq!(eval("ln(0)"), None);
+    }
+
+    #[test]
+    fn quantity_applies_unit_scale() {
+        use crate::dim::{BaseDim, Dimension};
+        let unit = Unit {
+            dimension: Dimension::single(BaseDim::L, 1),
+            scale: 1000.0,
+            display: "km".to_string(),
+        };
+        let expr = Expr::Quantity(Box::new(Expr::Rational(3.into())), unit);
+        assert_eq!(eval_f64(&expr, &HashMap::new()), Some(3000.0));
+    }
+
+    #[test]
+    fn fnn_wrong_arity_returns_none() {
+        // min with 3 args
+        let expr = Expr::FnN(
+            FnKind::Min,
+            vec![
+                Expr::Rational(1.into()),
+                Expr::Rational(2.into()),
+                Expr::Rational(3.into()),
+            ],
+        );
+        assert_eq!(eval_f64(&expr, &HashMap::new()), None);
+    }
+
+    #[test]
+    fn unbound_var_returns_none() {
+        assert_eq!(eval_with("x + 1", &[]), None);
+    }
+
+    #[test]
+    fn spot_check_equal() {
+        let lhs = parse_expr("x + 1").unwrap();
+        let rhs = parse_expr("1 + x").unwrap();
+        assert!(spot_check(&lhs, &rhs, 100).is_ok());
+    }
+
+    #[test]
+    fn spot_check_unequal() {
+        let lhs = parse_expr("x").unwrap();
+        let rhs = parse_expr("x + 1").unwrap();
+        assert!(spot_check(&lhs, &rhs, 100).is_err());
+    }
+}

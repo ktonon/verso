@@ -641,4 +641,206 @@ mod tests {
         );
         assert_eq!(format!("{}", e), "x^2 + 2x + 1");
     }
+
+    // --- fmt_frac_pi tests ---
+
+    use super::{fmt_colored, fmt_frac_pi, Colored};
+    use crate::rational::Rational;
+
+    #[test]
+    fn frac_pi_zero() {
+        assert_eq!(fmt_frac_pi(&Rational::new(0, 1)), "0");
+    }
+
+    #[test]
+    fn frac_pi_one_pi() {
+        assert_eq!(fmt_frac_pi(&Rational::new(1, 1)), "π");
+    }
+
+    #[test]
+    fn frac_pi_neg_pi() {
+        assert_eq!(fmt_frac_pi(&Rational::new(-1, 1)), "-π");
+    }
+
+    #[test]
+    fn frac_pi_integer_multiple() {
+        assert_eq!(fmt_frac_pi(&Rational::new(3, 1)), "3π");
+    }
+
+    #[test]
+    fn frac_pi_over_d() {
+        assert_eq!(fmt_frac_pi(&Rational::new(1, 4)), "π/4");
+    }
+
+    #[test]
+    fn frac_pi_neg_over_d() {
+        assert_eq!(fmt_frac_pi(&Rational::new(-1, 4)), "-π/4");
+    }
+
+    #[test]
+    fn frac_pi_general() {
+        assert_eq!(fmt_frac_pi(&Rational::new(3, 4)), "3π/4");
+    }
+
+    // --- fmt_colored tests ---
+
+    #[test]
+    fn colored_rational() {
+        let s = fmt_colored(&constant(3.0));
+        assert!(s.contains("3"));
+        assert!(s.contains("\x1b["));
+    }
+
+    #[test]
+    fn colored_named_const() {
+        let s = fmt_colored(&Expr::Named(NamedConst::E));
+        assert!(s.contains("e"));
+    }
+
+    #[test]
+    fn colored_frac_pi() {
+        let s = fmt_colored(&Expr::FracPi(Rational::new(1, 2)));
+        assert!(s.contains("π/2"));
+    }
+
+    #[test]
+    fn colored_scalar() {
+        let s = fmt_colored(&scalar("x"));
+        assert!(s.contains("x"));
+    }
+
+    #[test]
+    fn colored_tensor_lower() {
+        let s = fmt_colored(&tensor("A", vec![lower("i")]));
+        assert!(s.contains("A"));
+        assert!(s.contains("i"));
+    }
+
+    #[test]
+    fn colored_tensor_upper() {
+        let s = fmt_colored(&tensor("A", vec![upper("i")]));
+        assert!(s.contains("A"));
+    }
+
+    #[test]
+    fn colored_tensor_mixed() {
+        let s = fmt_colored(&tensor("T", vec![lower("i"), upper("j")]));
+        assert!(s.contains("T"));
+    }
+
+    #[test]
+    fn colored_var_with_dim() {
+        use crate::dim::Dimension;
+        let s = fmt_colored(&scalar_dim("v", Dimension::parse("[L]").unwrap()));
+        assert!(s.contains("v"));
+    }
+
+    #[test]
+    fn colored_add() {
+        let s = fmt_colored(&add(scalar("x"), constant(2.0)));
+        assert!(s.contains("x"));
+        assert!(s.contains("2"));
+    }
+
+    #[test]
+    fn colored_add_neg_as_sub() {
+        let s = fmt_colored(&add(scalar("x"), neg(scalar("y"))));
+        assert!(s.contains("-"));
+    }
+
+    #[test]
+    fn colored_add_negative_rational() {
+        let s = fmt_colored(&add(scalar("x"), constant(-2.0)));
+        assert!(s.contains("-"));
+        assert!(s.contains("2"));
+    }
+
+    #[test]
+    fn colored_mul_coefficient() {
+        let s = fmt_colored(&mul(constant(2.0), scalar("x")));
+        assert!(s.contains("2"));
+        assert!(s.contains("x"));
+    }
+
+    #[test]
+    fn colored_mul_scalars() {
+        let s = fmt_colored(&mul(scalar("x"), scalar("y")));
+        assert!(s.contains("x"));
+        assert!(s.contains("y"));
+    }
+
+    #[test]
+    fn colored_neg() {
+        let s = fmt_colored(&neg(scalar("x")));
+        assert!(s.contains("-"));
+        assert!(s.contains("x"));
+    }
+
+    #[test]
+    fn colored_inv() {
+        let s = fmt_colored(&inv(scalar("x")));
+        assert!(s.contains("1"));
+        assert!(s.contains("x"));
+    }
+
+    #[test]
+    fn colored_pow() {
+        let s = fmt_colored(&pow(scalar("x"), constant(2.0)));
+        assert!(s.contains("x"));
+        assert!(s.contains("2"));
+    }
+
+    #[test]
+    fn colored_sqrt() {
+        let s = fmt_colored(&sqrt(scalar("x")));
+        assert!(s.contains("sqrt"));
+    }
+
+    #[test]
+    fn colored_fn_sin() {
+        let s = fmt_colored(&sin(scalar("x")));
+        assert!(s.contains("sin"));
+    }
+
+    #[test]
+    fn colored_fn_multi_arg() {
+        let s = fmt_colored(&min(scalar("a"), scalar("b")));
+        assert!(s.contains("min"));
+    }
+
+    #[test]
+    fn colored_quantity() {
+        use crate::dim::Dimension;
+        use crate::unit::Unit;
+        let m = Unit {
+            dimension: Dimension::parse("[L]").unwrap(),
+            scale: 1.0,
+            display: "m".to_string(),
+        };
+        let s = fmt_colored(&quantity(constant(5.0), m));
+        assert!(s.contains("5"));
+        assert!(s.contains("m"));
+    }
+
+    #[test]
+    fn colored_log_base() {
+        let e = mul(ln(scalar("x")), inv(ln(constant(10.0))));
+        let s = fmt_colored(&e);
+        assert!(s.contains("log"));
+        assert!(s.contains("10"));
+    }
+
+    #[test]
+    fn colored_wrapper_display() {
+        let e = constant(42.0);
+        let s = format!("{}", Colored(&e));
+        assert!(s.contains("42"));
+    }
+
+    #[test]
+    fn colored_div() {
+        let s = fmt_colored(&div(scalar("x"), scalar("y")));
+        assert!(s.contains("x"));
+        assert!(s.contains("y"));
+    }
 }

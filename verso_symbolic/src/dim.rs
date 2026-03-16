@@ -211,4 +211,48 @@ mod tests {
         let area = length.pow(2);
         assert_eq!(area, dim("[L^2]"));
     }
+
+    #[test]
+    fn dimension_pow_zero() {
+        let length = dim("[L]");
+        assert!(length.pow(0).is_dimensionless());
+    }
+
+    #[test]
+    fn dimension_pow_negative() {
+        let length = dim("[L]");
+        assert_eq!(length.pow(-2), dim("[L^-2]"));
+    }
+
+    #[test]
+    fn single_zero_exponent_is_dimensionless() {
+        let d = Dimension::single(BaseDim::L, 0);
+        assert!(d.is_dimensionless());
+    }
+
+    #[test]
+    fn parse_missing_brackets() {
+        assert!(Dimension::parse("M L T").is_err());
+    }
+
+    #[test]
+    fn parse_invalid_exponent() {
+        assert!(Dimension::parse("[L^abc]").is_err());
+    }
+
+    #[test]
+    fn parse_unknown_base_dim() {
+        assert!(Dimension::parse("[X]").is_err());
+    }
+
+    #[test]
+    fn parse_empty_brackets() {
+        assert!(Dimension::parse("[]").unwrap().is_dimensionless());
+    }
+
+    #[test]
+    fn base_dim_from_str_unknown_returns_none() {
+        assert_eq!(BaseDim::from_str("X"), None);
+        assert_eq!(BaseDim::from_str(""), None);
+    }
 }
