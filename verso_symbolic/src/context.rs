@@ -53,6 +53,22 @@ impl Context {
             .insert(name.to_string(), FuncDef { params, body });
     }
 
+    /// Push inline dimension annotations from the expression into the dim environment
+    /// and return the stripped expression. Returns the list of pushed names so they
+    /// can be popped later with [`pop_dims`].
+    pub fn push_inline_dims(&mut self, expr: &Expr) -> (Expr, Vec<String>) {
+        let mut pushed = Vec::new();
+        collect_dim_annotations(expr, &mut self.dims, &mut pushed);
+        (expr.strip_dim_annotations(), pushed)
+    }
+
+    /// Remove transient dimension bindings that were pushed by [`push_inline_dims`].
+    pub fn pop_dims(&mut self, names: &[String]) {
+        for name in names {
+            self.dims.remove(name);
+        }
+    }
+
     /// Apply const/function expansion and elaborate explicit type state onto the tree.
     pub fn elaborate_expr(&self, expr: &Expr) -> Result<Expr, DimError> {
         let expr = self.apply_consts(expr);
@@ -653,6 +669,34 @@ pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
         DimOutcome::Pass
     } else {
         DimOutcome::LhsRhsMismatch { lhs: dl, rhs: dr }
+    }
+}
+
+/// Walk the expression tree and insert any inline `dim` annotations from Var nodes
+/// into the dim environment.  Pushes the names of newly-inserted entries into `pushed`
+/// so callers can remove them later (transient scope).
+fn collect_dim_annotations(expr: &Expr, env: &mut DimEnv, pushed: &mut Vec<String>) {
+    match &expr.kind {
+        ExprKind::Var { name, dim: Some(d), .. } => {
+            env.insert(name.clone(), d.clone());
+            pushed.push(name.clone());
+        }
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
+            collect_dim_annotations(a, env, pushed);
+            collect_dim_annotations(b, env, pushed);
+        }
+        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
+            collect_dim_annotations(inner, env, pushed);
+        }
+        ExprKind::FnN(_, args) => {
+            for arg in args {
+                collect_dim_annotations(arg, env, pushed);
+            }
+        }
+        ExprKind::Quantity(inner, _) => {
+            collect_dim_annotations(inner, env, pushed);
+        }
+        _ => {}
     }
 }
 

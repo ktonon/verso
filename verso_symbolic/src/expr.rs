@@ -128,6 +128,48 @@ impl Expr {
             }
         }
     }
+
+    /// Remove inline dimension annotations from Var nodes, preserving everything else.
+    /// Used before display so the combined type suffix is shown instead of per-variable dims.
+    pub fn strip_dim_annotations(&self) -> Self {
+        let kind = match &self.kind {
+            ExprKind::Var { name, indices, .. } => ExprKind::Var {
+                name: name.clone(),
+                indices: indices.clone(),
+                dim: None,
+            },
+            ExprKind::Add(a, b) => ExprKind::Add(
+                Box::new(a.strip_dim_annotations()),
+                Box::new(b.strip_dim_annotations()),
+            ),
+            ExprKind::Mul(a, b) => ExprKind::Mul(
+                Box::new(a.strip_dim_annotations()),
+                Box::new(b.strip_dim_annotations()),
+            ),
+            ExprKind::Pow(a, b) => ExprKind::Pow(
+                Box::new(a.strip_dim_annotations()),
+                Box::new(b.strip_dim_annotations()),
+            ),
+            ExprKind::Neg(inner) => ExprKind::Neg(Box::new(inner.strip_dim_annotations())),
+            ExprKind::Inv(inner) => ExprKind::Inv(Box::new(inner.strip_dim_annotations())),
+            ExprKind::Fn(kind, inner) => {
+                ExprKind::Fn(kind.clone(), Box::new(inner.strip_dim_annotations()))
+            }
+            ExprKind::FnN(kind, args) => ExprKind::FnN(
+                kind.clone(),
+                args.iter().map(Expr::strip_dim_annotations).collect(),
+            ),
+            ExprKind::Quantity(inner, unit) => {
+                ExprKind::Quantity(Box::new(inner.strip_dim_annotations()), unit.clone())
+            }
+            other => other.clone(),
+        };
+        Expr {
+            kind,
+            span: self.span,
+            ty: self.ty.clone(),
+        }
+    }
 }
 
 impl PartialEq for Expr {

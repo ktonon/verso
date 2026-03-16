@@ -81,15 +81,18 @@ pub fn run() -> Result<(), ReadlineError> {
                     let rest = input[":const".len()..].trim();
                     match parse_const_decl(rest) {
                         Ok((name, value)) => {
-                            if let Some(Err(e)) = ctx.check_expr_dim(&value) {
+                            let (stripped, inline_dims) = ctx.push_inline_dims(&value);
+
+                            if let Some(Err(e)) = ctx.check_expr_dim(&stripped) {
                                 let value_str = rest[rest.find('=').unwrap() + 1..].trim();
                                 let value_offset =
                                     input.chars().count() - value_str.chars().count();
                                 println!("{}", format_dim_error(&e, value_str, 2 + value_offset));
                             }
-                            let simplified = ctx.simplify(&value);
+                            let simplified = ctx.simplify(&stripped);
                             let expr_ty = ctx.infer_ty(&simplified);
-                            let type_suffix = format_type_suffix(&simplified, expr_ty.as_ref());
+                            let type_suffix =
+                                format_type_suffix(&simplified, expr_ty.as_ref());
                             println!(
                                 "\x1b[90m{} = {}{}\x1b[0m\n",
                                 name,
@@ -97,6 +100,8 @@ pub fn run() -> Result<(), ReadlineError> {
                                 type_suffix
                             );
                             ctx.declare_const(&name, value);
+
+                            ctx.pop_dims(&inline_dims);
                         }
                         Err(msg) => println!("Error: {}\n", msg),
                     }
@@ -128,6 +133,9 @@ pub fn run() -> Result<(), ReadlineError> {
                     let rhs_str = input[eq_pos + 1..].trim();
                     match (parse_expr(lhs_str), parse_expr(rhs_str)) {
                         (Ok(lhs), Ok(rhs)) => {
+                            let (lhs, lhs_dims) = ctx.push_inline_dims(&lhs);
+                            let (rhs, rhs_dims) = ctx.push_inline_dims(&rhs);
+
                             // Dimensional check on equality
                             match ctx.check_dims(&lhs, &rhs) {
                                 DimOutcome::Pass => {}
@@ -176,6 +184,9 @@ pub fn run() -> Result<(), ReadlineError> {
                             ));
                             let simplified = ctx.simplify(&diff);
                             record_result(&mut result_history, &mut rl, history_mode, &simplified);
+
+                            ctx.pop_dims(&lhs_dims);
+                            ctx.pop_dims(&rhs_dims);
                         }
                         (Err(err), _) | (_, Err(err)) => {
                             println!("Error: {:?}\n", err);
@@ -184,6 +195,9 @@ pub fn run() -> Result<(), ReadlineError> {
                 } else {
                     match parse_expr(input) {
                         Ok(expr) => {
+                            // Absorb inline dim annotations into a transient scope
+                            let (expr, inline_dims) = ctx.push_inline_dims(&expr);
+
                             // Dimensional consistency check
                             if let Some(Err(e)) = ctx.check_expr_dim(&expr) {
                                 println!("{}", format_dim_error(&e, input, 2));
@@ -234,7 +248,8 @@ pub fn run() -> Result<(), ReadlineError> {
                             } else {
                                 let simplified = ctx.simplify(&expr);
                                 let expr_ty = ctx.infer_ty(&simplified);
-                                let type_suffix = format_type_suffix(&simplified, expr_ty.as_ref());
+                                let type_suffix =
+                                    format_type_suffix(&simplified, expr_ty.as_ref());
                                 println!("{}{}\n", fmt_colored(&simplified), type_suffix);
                                 record_result(
                                     &mut result_history,
@@ -243,6 +258,8 @@ pub fn run() -> Result<(), ReadlineError> {
                                     &simplified,
                                 );
                             }
+
+                            ctx.pop_dims(&inline_dims);
                         }
                         Err(err) => {
                             println!("Error: {:?}\n", err);
@@ -347,7 +364,7 @@ fn format_type_suffix(simplified: &Expr, ty: Option<&Ty>) -> String {
         Some(ty) => ty,
         None => return String::new(),
     };
-    if simplified.first_unit().is_some() || has_inline_dim_annotation(simplified) {
+    if simplified.first_unit().is_some() {
         return String::new();
     }
     match ty {
@@ -359,21 +376,6 @@ fn format_type_suffix(simplified: &Expr, ty: Option<&Ty>) -> String {
             }
         }
         Ty::Unresolved => " \x1b[33m[?]\x1b[0m".to_string(),
-    }
-}
-
-fn has_inline_dim_annotation(expr: &Expr) -> bool {
-    match &expr.kind {
-        ExprKind::Var { dim: Some(_), .. } => true,
-        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-            has_inline_dim_annotation(a) || has_inline_dim_annotation(b)
-        }
-        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
-            has_inline_dim_annotation(inner)
-        }
-        ExprKind::FnN(_, args) => args.iter().any(has_inline_dim_annotation),
-        ExprKind::Quantity(_, _) => false,
-        _ => false,
     }
 }
 
@@ -418,11 +420,37 @@ mod tests {
     }
 
     #[test]
-    fn inline_dim_var_does_not_duplicate_type_suffix() {
-        let ctx = Context::new();
+    fn inline_dim_shows_combined_type_suffix() {
+        let mut ctx = Context::new();
         let expr = parse_expr("a [L]").unwrap();
-        let ty = ctx.infer_ty(&expr);
-        let suffix = format_type_suffix(&expr, ty.as_ref());
-        assert_eq!(suffix, "");
+        let (stripped, inline_dims) = ctx.push_inline_dims(&expr);
+        let ty = ctx.infer_ty(&stripped);
+        let suffix = format_type_suffix(&stripped, ty.as_ref());
+        assert!(suffix.contains("[L]"));
+        ctx.pop_dims(&inline_dims);
+    }
+
+    #[test]
+    fn inline_dims_combine_through_division() {
+        let mut ctx = Context::new();
+        let expr = parse_expr("a [L] / b [T]").unwrap();
+        let (stripped, inline_dims) = ctx.push_inline_dims(&expr);
+        // Stripped expression has no inline dim annotations
+        assert_eq!(format!("{}", stripped), "a/b");
+        // Combined type is L T^-1
+        let ty = ctx.infer_ty(&stripped);
+        let suffix = format_type_suffix(&stripped, ty.as_ref());
+        assert!(suffix.contains("[L T^-1]"), "got: {}", suffix);
+        ctx.pop_dims(&inline_dims);
+    }
+
+    #[test]
+    fn inline_dims_are_transient() {
+        let mut ctx = Context::new();
+        let expr = parse_expr("a [L]").unwrap();
+        let (_, inline_dims) = ctx.push_inline_dims(&expr);
+        assert!(ctx.dims.contains_key("a"));
+        ctx.pop_dims(&inline_dims);
+        assert!(!ctx.dims.contains_key("a"));
     }
 }
