@@ -62,7 +62,10 @@ impl Session {
             let rest = input[":const".len()..].trim();
             return Some(match parse_const_decl(rest) {
                 Ok((name, value)) => {
-                    let (stripped, inline_dims) = self.ctx.push_inline_dims(&value);
+                    let (stripped, inline_dims) = match self.ctx.push_inline_dims(&value) {
+                        Ok(r) => r,
+                        Err(e) => return Some(format!("Error: {}", e)),
+                    };
                     let mut out = String::new();
 
                     if let Some(Err(e)) = self.ctx.check_expr_dim(&stripped) {
@@ -112,8 +115,17 @@ impl Session {
             let rhs_str = input[eq_pos + 1..].trim();
             return Some(match (parse_expr(lhs_str), parse_expr(rhs_str)) {
                 (Ok(lhs), Ok(rhs)) => {
-                    let (lhs, lhs_dims) = self.ctx.push_inline_dims(&lhs);
-                    let (rhs, rhs_dims) = self.ctx.push_inline_dims(&rhs);
+                    let (lhs, lhs_dims) = match self.ctx.push_inline_dims(&lhs) {
+                        Ok(r) => r,
+                        Err(e) => return Some(format!("Error: {}", e)),
+                    };
+                    let (rhs, rhs_dims) = match self.ctx.push_inline_dims(&rhs) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            self.ctx.pop_dims(&lhs_dims);
+                            return Some(format!("Error: {}", e));
+                        }
+                    };
                     let mut out = String::new();
 
                     match self.ctx.check_dims(&lhs, &rhs) {
@@ -168,7 +180,10 @@ impl Session {
         // Expression evaluation
         Some(match parse_expr(input) {
             Ok(expr) => {
-                let (expr, inline_dims) = self.ctx.push_inline_dims(&expr);
+                let (expr, inline_dims) = match self.ctx.push_inline_dims(&expr) {
+                    Ok(r) => r,
+                    Err(e) => return Some(format!("Error: {}", e)),
+                };
                 let mut out = String::new();
 
                 if let Some(Err(e)) = self.ctx.check_expr_dim(&expr) {
@@ -276,15 +291,17 @@ pub fn run() -> Result<(), ReadlineError> {
                         // Record simplified result for result history (expression lines only)
                         if !input.starts_with(':') && !input.contains('=') {
                             if let Ok(expr) = parse_expr(input) {
-                                let (expr, inline_dims) = session.ctx.push_inline_dims(&expr);
-                                let simplified = session.ctx.simplify(&expr);
-                                record_result(
-                                    &mut result_history,
-                                    &mut rl,
-                                    history_mode,
-                                    &simplified,
-                                );
-                                session.ctx.pop_dims(&inline_dims);
+                                if let Ok((expr, inline_dims)) = session.ctx.push_inline_dims(&expr)
+                                {
+                                    let simplified = session.ctx.simplify(&expr);
+                                    record_result(
+                                        &mut result_history,
+                                        &mut rl,
+                                        history_mode,
+                                        &simplified,
+                                    );
+                                    session.ctx.pop_dims(&inline_dims);
+                                }
                             }
                         }
                     }
@@ -621,6 +638,22 @@ a: [L]
 
 > a
 a [L]
+
+> a [L]
+a [L]
+"#
+        );
+    }
+
+    #[test]
+    fn session_var_dims_prevents_inline_override() {
+        session!(
+            r#"
+> :var a [L]
+a: [L]
+
+> a [T]
+Error: 'a' is declared [L], cannot override with inline [T]
 "#
         );
     }
@@ -676,6 +709,22 @@ true
 
 > 2*x
 2x [1]
+"#
+        );
+    }
+
+    #[test]
+    fn session_inline_dim_cannot_override_declared() {
+        session!(
+            r#"
+> :var a [T]
+a: [T]
+
+> a [L]
+Error: 'a' is declared [T], cannot override with inline [L]
+
+> a [T]
+a [T]
 "#
         );
     }

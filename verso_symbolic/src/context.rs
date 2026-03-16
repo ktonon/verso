@@ -56,10 +56,13 @@ impl Context {
     /// Push inline dimension annotations from the expression into the dim environment
     /// and return the stripped expression. Returns the list of pushed names so they
     /// can be popped later with [`pop_dims`].
-    pub fn push_inline_dims(&mut self, expr: &Expr) -> (Expr, Vec<String>) {
+    pub fn push_inline_dims(
+        &mut self,
+        expr: &Expr,
+    ) -> Result<(Expr, Vec<String>), DimError> {
         let mut pushed = Vec::new();
-        collect_dim_annotations(expr, &mut self.dims, &mut pushed);
-        (expr.strip_dim_annotations(), pushed)
+        collect_dim_annotations(expr, &mut self.dims, &mut pushed)?;
+        Ok((expr.strip_dim_annotations(), pushed))
     }
 
     /// Remove transient dimension bindings that were pushed by [`push_inline_dims`].
@@ -258,6 +261,12 @@ pub enum DimError {
         span: Span,
     },
     NonIntegerPower(Span),
+    InlineDimConflict {
+        name: String,
+        declared: Dimension,
+        inline: Dimension,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for DimError {
@@ -284,6 +293,16 @@ impl std::fmt::Display for DimError {
             DimError::NonIntegerPower(_) => {
                 write!(f, "cannot raise dimensional quantity to non-integer power")
             }
+            DimError::InlineDimConflict {
+                name,
+                declared,
+                inline,
+                ..
+            } => write!(
+                f,
+                "'{}' is declared {}, cannot override with inline {}",
+                name, declared, inline
+            ),
         }
     }
 }
@@ -296,6 +315,7 @@ impl DimError {
             DimError::Mismatch { span, .. } => *span,
             DimError::NonDimensionlessFnArg { span, .. } => *span,
             DimError::NonIntegerPower(span) => *span,
+            DimError::InlineDimConflict { span, .. } => *span,
         }
     }
 }
@@ -600,13 +620,40 @@ pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
 /// Walk the expression tree and insert any inline `dim` annotations from Var nodes
 /// into the dim environment.  Pushes the names of newly-inserted entries into `pushed`
 /// so callers can remove them later (transient scope).
-fn collect_dim_annotations(expr: &Expr, env: &mut DimEnv, pushed: &mut Vec<String>) {
+fn collect_dim_annotations(
+    expr: &Expr,
+    env: &mut DimEnv,
+    pushed: &mut Vec<String>,
+) -> Result<(), DimError> {
+    // Check for conflicts first (before mutating env)
+    let conflict = expr.find_map(&|e| {
+        if let ExprKind::Var { name, dim: Some(d), .. } = &e.kind {
+            if let Some(declared) = env.get(name) {
+                if declared != d {
+                    return Some(DimError::InlineDimConflict {
+                        name: name.clone(),
+                        declared: declared.clone(),
+                        inline: d.clone(),
+                        span: e.span,
+                    });
+                }
+            }
+        }
+        None
+    });
+    if let Some(err) = conflict {
+        return Err(err);
+    }
+    // No conflicts — push new bindings
     expr.walk(&mut |e| {
         if let ExprKind::Var { name, dim: Some(d), .. } = &e.kind {
-            env.insert(name.clone(), d.clone());
-            pushed.push(name.clone());
+            if !env.contains_key(name) {
+                env.insert(name.clone(), d.clone());
+                pushed.push(name.clone());
+            }
         }
     });
+    Ok(())
 }
 
 fn collect_undeclared(expr: &Expr, env: &DimEnv) -> Vec<String> {
