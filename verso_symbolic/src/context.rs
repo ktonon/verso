@@ -147,6 +147,16 @@ impl Context {
         Some(infer_dim(&expr, &self.dims))
     }
 
+    /// Infer the type (dimension) of an expression for display purposes.
+    /// Always attempts inference — works with explicit units even without
+    /// :var declarations. Returns None if dimensionless or inference fails.
+    pub fn infer_type(&self, expr: &Expr) -> Option<Dimension> {
+        let expr = self.apply_consts(expr);
+        infer_dim(&expr, &self.dims)
+            .ok()
+            .filter(|d| !d.is_dimensionless())
+    }
+
     /// Check dimensional consistency of an equality.
     /// Constants and functions are expanded before checking.
     pub fn check_dims(
@@ -677,5 +687,38 @@ mod tests {
             DimOutcome::LhsRhsMismatch { .. } => {} // expected
             other => panic!("expected LhsRhsMismatch, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn infer_type_with_declared_vars() {
+        let mut ctx = Context::new();
+        ctx.declare_var("a", Some(Dimension::single(BaseDim::L, 1)));
+        ctx.declare_var("b", Some(Dimension::single(BaseDim::L, 1)));
+        let expr = parse_expr("a + b").unwrap();
+        assert_eq!(ctx.infer_type(&expr), Some(Dimension::single(BaseDim::L, 1)));
+        let expr = parse_expr("a * b").unwrap();
+        assert_eq!(ctx.infer_type(&expr), Some(Dimension::single(BaseDim::L, 2)));
+    }
+
+    #[test]
+    fn infer_type_with_units_no_vars() {
+        // No :var declarations — should still infer type from explicit units
+        let ctx = Context::new();
+        let expr = parse_expr("3 [m]").unwrap();
+        assert_eq!(ctx.infer_type(&expr), Some(Dimension::single(BaseDim::L, 1)));
+    }
+
+    #[test]
+    fn infer_type_dimensionless_returns_none() {
+        let ctx = Context::new();
+        let expr = parse_expr("3 + 2").unwrap();
+        assert_eq!(ctx.infer_type(&expr), None);
+    }
+
+    #[test]
+    fn infer_type_undeclared_var_returns_none() {
+        let ctx = Context::new();
+        let expr = parse_expr("x + 3").unwrap();
+        assert_eq!(ctx.infer_type(&expr), None);
     }
 }

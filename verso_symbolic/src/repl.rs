@@ -1,5 +1,6 @@
 use crate::context::{Context, DimOutcome, EqualityResult};
 use crate::dim::Dimension;
+use crate::eval::free_vars;
 use crate::expr::Expr;
 use crate::fmt::fmt_colored;
 use crate::parser::parse_expr;
@@ -83,11 +84,15 @@ pub fn run() -> Result<(), ReadlineError> {
                             if let Some(Err(e)) = ctx.check_expr_dim(&value) {
                                 println!("\x1b[31mdim error: {}\x1b[0m", e);
                             }
+                            let expr_type = ctx.infer_type(&value);
                             let simplified = ctx.simplify(&value);
+                            let type_suffix =
+                                format_type_suffix(&simplified, expr_type.as_ref());
                             println!(
-                                "\x1b[90m{} = {}\x1b[0m\n",
+                                "\x1b[90m{} = {}{}\x1b[0m\n",
                                 name,
-                                fmt_colored(&simplified)
+                                fmt_colored(&simplified),
+                                type_suffix
                             );
                             ctx.declare_const(&name, value);
                         }
@@ -181,11 +186,7 @@ pub fn run() -> Result<(), ReadlineError> {
                             if let Some(Err(e)) = ctx.check_expr_dim(&expr) {
                                 println!("\x1b[31mdim error: {}\x1b[0m", e);
                             }
-                            let unit_dim = expr.first_unit().map(|u| u.dimension.clone());
-                            let inferred_dim = ctx
-                                .check_expr_dim(&expr)
-                                .and_then(|r| r.ok())
-                                .filter(|d| !d.is_dimensionless());
+                            let expr_type = ctx.infer_type(&expr);
                             if show_trace {
                                 let applied = ctx.apply_consts(&expr);
                                 let (simplified, trace) =
@@ -231,12 +232,9 @@ pub fn run() -> Result<(), ReadlineError> {
                                 );
                             } else {
                                 let simplified = ctx.simplify(&expr);
-                                let unit_suffix = format_unit_suffix(
-                                    &simplified,
-                                    unit_dim.as_ref(),
-                                    inferred_dim.as_ref(),
-                                );
-                                println!("{}{}\n", fmt_colored(&simplified), unit_suffix);
+                                let type_suffix =
+                                    format_type_suffix(&simplified, expr_type.as_ref());
+                                println!("{}{}\n", fmt_colored(&simplified), type_suffix);
                                 record_result(
                                     &mut result_history,
                                     &mut rl,
@@ -340,21 +338,23 @@ fn record_result(
     }
 }
 
-fn format_unit_suffix(
-    simplified: &Expr,
-    unit_dim: Option<&Dimension>,
-    inferred_dim: Option<&Dimension>,
-) -> String {
+/// Format the type suffix for a REPL result.
+/// - Symbolic results (containing variables) → dimension notation: `[L]`, `[M L T^-2]`
+/// - Numeric results → unit notation: `[m]`, `[N]`
+/// - Results already displaying units (Quantity nodes) → no suffix needed
+fn format_type_suffix(simplified: &Expr, dim: Option<&Dimension>) -> String {
+    let dim = match dim {
+        Some(d) => d,
+        None => return String::new(),
+    };
     if simplified.first_unit().is_some() {
         return String::new();
     }
-    if let Some(d) = unit_dim {
-        return format!(" \x1b[36m[{}]\x1b[0m", base_si_display(d));
+    if free_vars(simplified).is_empty() {
+        format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
+    } else {
+        format!(" \x1b[36m{}\x1b[0m", dim)
     }
-    if let Some(d) = inferred_dim {
-        return format!(" \x1b[36m{}\x1b[0m", d);
-    }
-    String::new()
 }
 
 fn reload_history(rl: &mut DefaultEditor, entries: &[String]) {
