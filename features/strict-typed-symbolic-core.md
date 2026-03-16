@@ -236,6 +236,13 @@ Phase 4 is now in place:
 - `detokenize` is documented as reconstructing intentionally untyped expressions
 - training-example generation now measures token and complexity data on the stripped projection so ML artifacts stay aligned with what is serialized
 
+Phase 5 is now in place:
+- `Context::infer_ty()` exposes `Ty` directly to consumer code instead of collapsing everything to `Option<Dimension>`
+- the REPL now distinguishes dimensionless results (`[1]`) from unresolved ones (`[?]`)
+- proof verification uses the typed equivalence path before reporting residuals
+
+Editor hover/type display is still deferred; the current editor integration only reports diagnostics. That is now treated as a separate UX follow-up rather than part of the strict-typed symbolic-core migration.
+
 ### Open questions
 
 - Should `Ty` use `Unresolved` (simple) or `Symbol(TypeVarId)` (supports unification)? Start with `Unresolved`; add type variables only if unification is needed later.

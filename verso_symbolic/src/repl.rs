@@ -1,7 +1,7 @@
 use crate::context::{format_dim_error, Context, DimOutcome, EqualityResult};
 use crate::dim::Dimension;
 use crate::eval::free_vars;
-use crate::expr::{Expr, ExprKind};
+use crate::expr::{Expr, ExprKind, Ty};
 use crate::fmt::fmt_colored;
 use crate::parser::parse_expr;
 use crate::search;
@@ -83,13 +83,13 @@ pub fn run() -> Result<(), ReadlineError> {
                         Ok((name, value)) => {
                             if let Some(Err(e)) = ctx.check_expr_dim(&value) {
                                 let value_str = rest[rest.find('=').unwrap() + 1..].trim();
-                                let value_offset = input.chars().count() - value_str.chars().count();
+                                let value_offset =
+                                    input.chars().count() - value_str.chars().count();
                                 println!("{}", format_dim_error(&e, value_str, 2 + value_offset));
                             }
-                            let expr_type = ctx.infer_type(&value);
                             let simplified = ctx.simplify(&value);
-                            let type_suffix =
-                                format_type_suffix(&simplified, expr_type.as_ref());
+                            let expr_ty = ctx.infer_ty(&simplified);
+                            let type_suffix = format_type_suffix(&simplified, expr_ty.as_ref());
                             println!(
                                 "\x1b[90m{} = {}{}\x1b[0m\n",
                                 name,
@@ -188,7 +188,6 @@ pub fn run() -> Result<(), ReadlineError> {
                             if let Some(Err(e)) = ctx.check_expr_dim(&expr) {
                                 println!("{}", format_dim_error(&e, input, 2));
                             }
-                            let expr_type = ctx.infer_type(&expr);
                             if show_trace {
                                 let applied = ctx.apply_consts(&expr);
                                 let (simplified, trace) =
@@ -234,8 +233,8 @@ pub fn run() -> Result<(), ReadlineError> {
                                 );
                             } else {
                                 let simplified = ctx.simplify(&expr);
-                                let type_suffix =
-                                    format_type_suffix(&simplified, expr_type.as_ref());
+                                let expr_ty = ctx.infer_ty(&simplified);
+                                let type_suffix = format_type_suffix(&simplified, expr_ty.as_ref());
                                 println!("{}{}\n", fmt_colored(&simplified), type_suffix);
                                 record_result(
                                     &mut result_history,
@@ -290,9 +289,7 @@ fn parse_const_decl(rest: &str) -> Result<(String, Expr), String> {
 }
 
 fn parse_func_decl(rest: &str) -> Result<(String, Vec<String>, Expr), String> {
-    let lparen = rest
-        .find('(')
-        .ok_or(":func requires name(params) = expr")?;
+    let lparen = rest.find('(').ok_or(":func requires name(params) = expr")?;
     let name = rest[..lparen].trim().to_string();
     if name.is_empty() {
         return Err(":func requires a name".into());
@@ -343,19 +340,25 @@ fn record_result(
 /// Format the type suffix for a REPL result.
 /// - Symbolic results (containing variables) → dimension notation: `[L]`, `[M L T^-2]`
 /// - Numeric results → unit notation: `[m]`, `[N]`
+/// - Unresolved results → `"[?]"`
 /// - Results already displaying units (Quantity nodes) → no suffix needed
-fn format_type_suffix(simplified: &Expr, dim: Option<&Dimension>) -> String {
-    let dim = match dim {
-        Some(d) => d,
+fn format_type_suffix(simplified: &Expr, ty: Option<&Ty>) -> String {
+    let ty = match ty {
+        Some(ty) => ty,
         None => return String::new(),
     };
     if simplified.first_unit().is_some() {
         return String::new();
     }
-    if free_vars(simplified).is_empty() {
-        format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
-    } else {
-        format!(" \x1b[36m{}\x1b[0m", dim)
+    match ty {
+        Ty::Concrete(dim) => {
+            if free_vars(simplified).is_empty() {
+                format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
+            } else {
+                format!(" \x1b[36m{}\x1b[0m", dim)
+            }
+        }
+        Ty::Unresolved => " \x1b[33m[?]\x1b[0m".to_string(),
     }
 }
 
@@ -363,5 +366,25 @@ fn reload_history(rl: &mut DefaultEditor, entries: &[String]) {
     let _ = rl.clear_history();
     for entry in entries {
         let _ = rl.add_history_entry(entry);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_type_suffix_shows_dimensionless_numeric_type() {
+        let suffix = format_type_suffix(
+            &Expr::new(ExprKind::Rational(crate::rational::Rational::from_i64(4))),
+            Some(&Ty::Concrete(Dimension::dimensionless())),
+        );
+        assert!(suffix.contains("[1]"));
+    }
+
+    #[test]
+    fn format_type_suffix_shows_unresolved_marker() {
+        let suffix = format_type_suffix(&crate::expr::scalar("x"), Some(&Ty::Unresolved));
+        assert!(suffix.contains("[?]"));
     }
 }

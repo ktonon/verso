@@ -1,6 +1,6 @@
 use crate::ast::{Block, Claim, Document, Proof, Span};
 use crate::dim::{collect_units, DimOutcome};
-use verso_symbolic::{Context, Expr, ExprKind, is_zero};
+use verso_symbolic::{Context, Expr, ExprKind};
 
 #[derive(Debug)]
 pub struct VerificationReport {
@@ -38,10 +38,7 @@ impl VerificationResult {
             self.outcome,
             Outcome::Pass | Outcome::NumericalPass { .. } | Outcome::ProofPass { .. }
         );
-        let dim_pass = self
-            .dim_outcome
-            .as_ref()
-            .map_or(true, |d| d.passed());
+        let dim_pass = self.dim_outcome.as_ref().map_or(true, |d| d.passed());
         symbolic_pass && dim_pass
     }
 }
@@ -50,9 +47,16 @@ impl VerificationResult {
 pub enum Outcome {
     Pass,
     /// Symbolic simplification failed, but numerical spot-checks passed.
-    NumericalPass { samples: usize, residual: Expr },
-    Fail { residual: Expr },
-    ProofPass { steps: usize },
+    NumericalPass {
+        samples: usize,
+        residual: Expr,
+    },
+    Fail {
+        residual: Expr,
+    },
+    ProofPass {
+        steps: usize,
+    },
     ProofStepFail {
         step_index: usize,
         from: Expr,
@@ -102,9 +106,7 @@ fn verify_claim(claim: &Claim, ctx: &Context) -> VerificationResult {
         verso_symbolic::EqualityResult::NumericallyEqual { samples, residual } => {
             Outcome::NumericalPass { samples, residual }
         }
-        verso_symbolic::EqualityResult::NotEqual { residual } => {
-            Outcome::Fail { residual }
-        }
+        verso_symbolic::EqualityResult::NotEqual { residual } => Outcome::Fail { residual },
     };
     let dim_outcome = if ctx.has_dims() {
         Some(ctx.check_dims(&claim.lhs, &claim.rhs))
@@ -155,14 +157,12 @@ fn verify_proof(proof: &Proof, ctx: &Context) -> VerificationResult {
             }
         }
 
-        // General check: simplify(from - to) == 0
-        let diff = Expr::new(ExprKind::Add(
-            Box::new(from.expr.clone()),
-            Box::new(Expr::new(ExprKind::Neg(Box::new(to.expr.clone())))),
-        ));
-        let result = ctx.simplify(&diff);
-
-        if !is_zero(&result) {
+        if !ctx.exprs_equivalent(&from.expr, &to.expr) {
+            let diff = Expr::derived(ExprKind::Add(
+                Box::new(from.expr.clone()),
+                Box::new(Expr::derived(ExprKind::Neg(Box::new(to.expr.clone())))),
+            ));
+            let result = ctx.simplify(&diff);
             return VerificationResult {
                 name: format!("proof:{}", proof.claim_name),
                 span: proof.span,
@@ -219,8 +219,7 @@ mod tests {
 
     #[test]
     fn verify_pythagorean() {
-        let doc =
-            parse_document(":claim pythag\n  sin(x)^2 + cos(x)^2 = 1").unwrap();
+        let doc = parse_document(":claim pythag\n  sin(x)^2 + cos(x)^2 = 1").unwrap();
         let report = verify_document(&doc);
         assert!(report.all_passed(), "pythagorean identity should pass");
     }
@@ -316,7 +315,11 @@ mod tests {
 ";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
-        assert!(report.all_passed(), "const substitution should pass: {:?}", report.results);
+        assert!(
+            report.all_passed(),
+            "const substitution should pass: {:?}",
+            report.results
+        );
     }
 
     #[test]
@@ -329,7 +332,11 @@ mod tests {
 ";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
-        assert!(report.all_passed(), "const in proof should pass: {:?}", report.results);
+        assert!(
+            report.all_passed(),
+            "const in proof should pass: {:?}",
+            report.results
+        );
     }
 
     #[test]
@@ -341,7 +348,11 @@ mod tests {
 ";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
-        assert!(report.all_passed(), "func expansion should pass: {:?}", report.results);
+        assert!(
+            report.all_passed(),
+            "func expansion should pass: {:?}",
+            report.results
+        );
     }
 
     #[test]
@@ -353,7 +364,11 @@ mod tests {
 ";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
-        assert!(report.all_passed(), "multi-param func should pass: {:?}", report.results);
+        assert!(
+            report.all_passed(),
+            "multi-param func should pass: {:?}",
+            report.results
+        );
     }
 
     #[test]
@@ -366,7 +381,11 @@ mod tests {
 ";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
-        assert!(report.all_passed(), "func with const should pass: {:?}", report.results);
+        assert!(
+            report.all_passed(),
+            "func with const should pass: {:?}",
+            report.results
+        );
     }
 
     #[test]

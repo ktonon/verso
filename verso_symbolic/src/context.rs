@@ -132,8 +132,10 @@ impl Context {
         if a == b {
             return true;
         }
-        let a = elaborate_expr(a, &self.dims).unwrap_or_else(|_| a.clone());
-        let b = elaborate_expr(b, &self.dims).unwrap_or_else(|_| b.clone());
+        let a = self.apply_consts(a);
+        let b = self.apply_consts(b);
+        let a = elaborate_expr(&a, &self.dims).unwrap_or(a);
+        let b = elaborate_expr(&b, &self.dims).unwrap_or(b);
         let diff = Expr::derived(ExprKind::Add(
             Box::new(a),
             Box::new(Expr::derived(ExprKind::Neg(Box::new(b)))),
@@ -162,12 +164,21 @@ impl Context {
         }
     }
 
-    /// Infer the type (dimension) of an expression for display purposes.
+    /// Infer the explicit type state of an expression for display/consumer use.
     /// Always attempts inference — works with explicit units even without
-    /// :var declarations. Returns None if dimensionless or inference fails.
-    pub fn infer_type(&self, expr: &Expr) -> Option<Dimension> {
+    /// :var declarations. Returns None only when elaboration fails.
+    pub fn infer_ty(&self, expr: &Expr) -> Option<Ty> {
         let expr = self.elaborate_expr(expr).ok()?;
-        ty_dimension(&expr.ty).filter(|d| !d.is_dimensionless())
+        Some(expr.ty)
+    }
+
+    /// Infer the non-dimensionless physical dimension of an expression.
+    /// Returns None if the type is unresolved, dimensionless, or inference fails.
+    pub fn infer_type(&self, expr: &Expr) -> Option<Dimension> {
+        match self.infer_ty(expr)? {
+            Ty::Concrete(dim) if !dim.is_dimensionless() => Some(dim),
+            _ => None,
+        }
     }
 
     /// Check dimensional consistency of an equality.
@@ -1149,6 +1160,23 @@ mod tests {
     }
 
     #[test]
+    fn infer_ty_dimensionless_returns_concrete_one() {
+        let ctx = Context::new();
+        let expr = parse_expr("4.5").unwrap();
+        assert_eq!(
+            ctx.infer_ty(&expr),
+            Some(Ty::Concrete(Dimension::dimensionless()))
+        );
+    }
+
+    #[test]
+    fn infer_ty_undeclared_var_returns_unresolved() {
+        let ctx = Context::new();
+        let expr = parse_expr("x + 3").unwrap();
+        assert_eq!(ctx.infer_ty(&expr), Some(Ty::Unresolved));
+    }
+
+    #[test]
     fn elaborate_expr_marks_dimensionless_literals_as_concrete() {
         let ctx = Context::new();
         let expr = ctx.elaborate_expr(&parse_expr("4.5").unwrap()).unwrap();
@@ -1640,6 +1668,16 @@ mod tests {
         let ctx = Context::new();
         let a = parse_expr("x + 0").unwrap();
         let b = parse_expr("x").unwrap();
+        assert!(ctx.exprs_equivalent(&a, &b));
+    }
+
+    #[test]
+    fn exprs_equivalent_substitutes_consts() {
+        let mut ctx = Context::new();
+        ctx.declare_const("a", parse_expr("3").unwrap());
+
+        let a = parse_expr("a * (x + 1)").unwrap();
+        let b = parse_expr("3 * x + 3").unwrap();
         assert!(ctx.exprs_equivalent(&a, &b));
     }
 
