@@ -753,4 +753,340 @@ mod tests {
         let expr = parse_expr("x + 3").unwrap();
         assert!(ctx.check_expr_dim(&expr).is_none());
     }
+
+    // --- check_equal branches ---
+
+    #[test]
+    fn check_equal_symbolically_equal() {
+        let ctx = Context::new();
+        let lhs = parse_expr("x + 0").unwrap();
+        let rhs = parse_expr("x").unwrap();
+        let result = ctx.check_equal(&lhs, &rhs);
+        assert!(result.passed());
+        assert!(matches!(result, EqualityResult::Equal));
+    }
+
+    #[test]
+    fn check_equal_not_equal() {
+        let ctx = Context::new();
+        let lhs = parse_expr("x").unwrap();
+        let rhs = parse_expr("x + 1").unwrap();
+        let result = ctx.check_equal(&lhs, &rhs);
+        assert!(!result.passed());
+        assert!(matches!(result, EqualityResult::NotEqual { .. }));
+    }
+
+    #[test]
+    fn check_equal_numerically_equal() {
+        let ctx = Context::new();
+        // sin(x)*cos(x) = sin(2*x)/2 — trig identity the simplifier can't prove but spot_check can
+        let lhs = parse_expr("sin(x) * cos(x)").unwrap();
+        let rhs = parse_expr("sin(2 * x) / 2").unwrap();
+        let result = ctx.check_equal(&lhs, &rhs);
+        assert!(result.passed());
+        // If the simplifier can't prove it, it should fall back to numerical
+        match result {
+            EqualityResult::Equal | EqualityResult::NumericallyEqual { .. } => {}
+            EqualityResult::NotEqual { .. } => panic!("should be equal"),
+        }
+    }
+
+    // --- expand_funcs ---
+
+    #[test]
+    fn expand_single_arg_func() {
+        use crate::expr::FnKind;
+        let mut ctx = Context::new();
+        // f(x) = x + 1
+        ctx.declare_func("f", vec!["x".to_string()], parse_expr("x + 1").unwrap());
+        // Build f(3) manually since the parser treats it as implicit multiplication
+        let expr = Expr::Fn(FnKind::Custom("f".to_string()), Box::new(parse_expr("3").unwrap()));
+        let expanded = ctx.apply_consts(&expr);
+        assert_eq!(expanded, parse_expr("3 + 1").unwrap());
+    }
+
+    #[test]
+    fn expand_multi_arg_func() {
+        use crate::eval::eval_f64;
+        let mut ctx = Context::new();
+        // g(a, b) = a + b
+        ctx.declare_func(
+            "g",
+            vec!["a".to_string(), "b".to_string()],
+            parse_expr("a + b").unwrap(),
+        );
+        let expr = Expr::FnN(
+            crate::expr::FnKind::Custom("g".to_string()),
+            vec![parse_expr("2").unwrap(), parse_expr("3").unwrap()],
+        );
+        let expanded = ctx.apply_consts(&expr);
+        assert_eq!(eval_f64(&expanded, &HashMap::new()), Some(5.0));
+    }
+
+    #[test]
+    fn expand_unknown_custom_fn_unchanged() {
+        use crate::expr::FnKind;
+        let ctx = Context::new();
+        let expr = Expr::Fn(
+            FnKind::Custom("f".to_string()),
+            Box::new(parse_expr("x").unwrap()),
+        );
+        let expanded = ctx.apply_consts(&expr);
+        assert_eq!(expanded, expr);
+    }
+
+    // --- DimError Display ---
+
+    #[test]
+    fn dim_error_display_undeclared_var() {
+        let err = DimError::UndeclaredVar("x".to_string());
+        assert!(err.to_string().contains("x"));
+        assert!(err.to_string().contains("no :var declaration"));
+    }
+
+    #[test]
+    fn dim_error_display_mismatch() {
+        let err = DimError::Mismatch {
+            expected: Dimension::single(BaseDim::L, 1),
+            got: Dimension::single(BaseDim::T, 1),
+            context: "addition".to_string(),
+        };
+        let s = err.to_string();
+        assert!(s.contains("addition"));
+        assert!(s.contains("mismatch"));
+    }
+
+    #[test]
+    fn dim_error_display_non_dimensionless_fn_arg() {
+        let err = DimError::NonDimensionlessFnArg {
+            func: "sin".to_string(),
+            dim: Dimension::single(BaseDim::L, 1),
+        };
+        let s = err.to_string();
+        assert!(s.contains("sin"));
+        assert!(s.contains("dimensionless"));
+    }
+
+    #[test]
+    fn dim_error_display_non_integer_power() {
+        let err = DimError::NonIntegerPower;
+        assert!(err.to_string().contains("non-integer power"));
+    }
+
+    // --- DimOutcome::passed ---
+
+    #[test]
+    fn dim_outcome_passed_for_pass() {
+        assert!(DimOutcome::Pass.passed());
+    }
+
+    #[test]
+    fn dim_outcome_passed_for_skipped() {
+        assert!(DimOutcome::Skipped {
+            undeclared: vec!["x".into()]
+        }
+        .passed());
+    }
+
+    #[test]
+    fn dim_outcome_not_passed_for_mismatch() {
+        assert!(!DimOutcome::LhsRhsMismatch {
+            lhs: Dimension::single(BaseDim::L, 1),
+            rhs: Dimension::single(BaseDim::T, 1),
+        }
+        .passed());
+    }
+
+    #[test]
+    fn dim_outcome_not_passed_for_expr_error() {
+        assert!(!DimOutcome::ExprError {
+            side: "lhs".to_string(),
+            error: DimError::NonIntegerPower,
+        }
+        .passed());
+    }
+
+    // --- infer_dim branches ---
+
+    #[test]
+    fn infer_dim_mul() {
+        let mut env = DimEnv::new();
+        env.insert("a".into(), Dimension::single(BaseDim::L, 1));
+        env.insert("b".into(), Dimension::single(BaseDim::T, -1));
+        let expr = parse_expr("a * b").unwrap();
+        let dim = infer_dim(&expr, &env).unwrap();
+        assert_eq!(
+            dim,
+            Dimension::single(BaseDim::L, 1).mul(&Dimension::single(BaseDim::T, -1))
+        );
+    }
+
+    #[test]
+    fn infer_dim_inv() {
+        let mut env = DimEnv::new();
+        env.insert("t".into(), Dimension::single(BaseDim::T, 1));
+        let expr = parse_expr("1/t").unwrap();
+        let dim = infer_dim(&expr, &env).unwrap();
+        assert_eq!(dim, Dimension::single(BaseDim::T, -1));
+    }
+
+    #[test]
+    fn infer_dim_pow_dimensional_base() {
+        let mut env = DimEnv::new();
+        env.insert("x".into(), Dimension::single(BaseDim::L, 1));
+        let expr = parse_expr("x^3").unwrap();
+        let dim = infer_dim(&expr, &env).unwrap();
+        assert_eq!(dim, Dimension::single(BaseDim::L, 3));
+    }
+
+    #[test]
+    fn infer_dim_pow_non_integer_exponent_error() {
+        let mut env = DimEnv::new();
+        env.insert("x".into(), Dimension::single(BaseDim::L, 1));
+        // x^(1/3) — non-integer power of dimensional quantity
+        let expr = parse_expr("x^(1/3)").unwrap();
+        let result = infer_dim(&expr, &env);
+        assert!(matches!(result, Err(DimError::NonIntegerPower)));
+    }
+
+    #[test]
+    fn infer_dim_pow_dimensional_exponent_error() {
+        let mut env = DimEnv::new();
+        env.insert("x".into(), Dimension::single(BaseDim::T, 1));
+        // 2^x where x has dimension [T] — exponent must be dimensionless
+        let expr = parse_expr("2^x").unwrap();
+        let result = infer_dim(&expr, &env);
+        assert!(matches!(result, Err(DimError::Mismatch { .. })));
+    }
+
+    #[test]
+    fn infer_dim_fn_dimensional_arg_error() {
+        let mut env = DimEnv::new();
+        env.insert("x".into(), Dimension::single(BaseDim::L, 1));
+        let expr = parse_expr("sin(x)").unwrap();
+        let result = infer_dim(&expr, &env);
+        assert!(matches!(
+            result,
+            Err(DimError::NonDimensionlessFnArg { .. })
+        ));
+    }
+
+    #[test]
+    fn infer_dim_fnn_dimensional_arg_error() {
+        let mut env = DimEnv::new();
+        env.insert("x".into(), Dimension::single(BaseDim::L, 1));
+        let expr = Expr::FnN(
+            crate::expr::FnKind::Min,
+            vec![parse_expr("x").unwrap(), parse_expr("1").unwrap()],
+        );
+        let result = infer_dim(&expr, &env);
+        assert!(matches!(
+            result,
+            Err(DimError::NonDimensionlessFnArg { .. })
+        ));
+    }
+
+    // --- check_claim_dim paths ---
+
+    #[test]
+    fn check_claim_dim_rhs_undeclared_skips() {
+        let mut env = DimEnv::new();
+        env.insert("a".into(), Dimension::single(BaseDim::L, 1));
+        // lhs declared, rhs undeclared
+        let lhs = parse_expr("a").unwrap();
+        let rhs = parse_expr("b").unwrap();
+        let result = check_claim_dim(&lhs, &rhs, &env);
+        assert!(matches!(result, DimOutcome::Skipped { .. }));
+    }
+
+    #[test]
+    fn check_claim_dim_rhs_expr_error() {
+        let mut env = DimEnv::new();
+        env.insert("a".into(), Dimension::single(BaseDim::L, 1));
+        env.insert("b".into(), Dimension::single(BaseDim::T, 1));
+        // rhs has internal dim error: a + b (length + time)
+        let lhs = parse_expr("a").unwrap();
+        let rhs = parse_expr("a + b").unwrap();
+        let result = check_claim_dim(&lhs, &rhs, &env);
+        assert!(matches!(
+            result,
+            DimOutcome::ExprError {
+                side,
+                ..
+            } if side == "rhs"
+        ));
+    }
+
+    #[test]
+    fn check_claim_dim_lhs_expr_error() {
+        let mut env = DimEnv::new();
+        env.insert("a".into(), Dimension::single(BaseDim::L, 1));
+        env.insert("b".into(), Dimension::single(BaseDim::T, 1));
+        let lhs = parse_expr("a + b").unwrap();
+        let rhs = parse_expr("a").unwrap();
+        let result = check_claim_dim(&lhs, &rhs, &env);
+        assert!(matches!(
+            result,
+            DimOutcome::ExprError {
+                side,
+                ..
+            } if side == "lhs"
+        ));
+    }
+
+    // --- expr_as_integer ---
+
+    #[test]
+    fn expr_as_integer_rational() {
+        assert_eq!(expr_as_integer(&parse_expr("5").unwrap()), Some(5));
+    }
+
+    #[test]
+    fn expr_as_integer_negative() {
+        assert_eq!(expr_as_integer(&parse_expr("-3").unwrap()), Some(-3));
+    }
+
+    #[test]
+    fn expr_as_integer_fraction_returns_none() {
+        assert_eq!(expr_as_integer(&parse_expr("1/2").unwrap()), None);
+    }
+
+    #[test]
+    fn expr_as_integer_var_returns_none() {
+        assert_eq!(expr_as_integer(&parse_expr("x").unwrap()), None);
+    }
+
+    // --- exprs_equivalent ---
+
+    #[test]
+    fn exprs_equivalent_identical() {
+        let ctx = Context::new();
+        let a = parse_expr("x").unwrap();
+        assert!(ctx.exprs_equivalent(&a, &a));
+    }
+
+    #[test]
+    fn exprs_equivalent_simplified() {
+        let ctx = Context::new();
+        let a = parse_expr("x + 0").unwrap();
+        let b = parse_expr("x").unwrap();
+        assert!(ctx.exprs_equivalent(&a, &b));
+    }
+
+    // --- is_zero ---
+
+    #[test]
+    fn is_zero_rational() {
+        assert!(is_zero(&parse_expr("0").unwrap()));
+    }
+
+    #[test]
+    fn is_zero_non_zero() {
+        assert!(!is_zero(&parse_expr("1").unwrap()));
+    }
+
+    #[test]
+    fn is_zero_var() {
+        assert!(!is_zero(&parse_expr("x").unwrap()));
+    }
 }

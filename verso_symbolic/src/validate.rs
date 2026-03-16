@@ -420,6 +420,132 @@ mod tests {
     }
 
     #[test]
+    fn validate_with_trace_empty_sequence() {
+        let rules = full_rules();
+        let expr = add(scalar("x"), rational(0, 1));
+        let (result, trace) = validate_with_trace(&expr, &[], &rules);
+        assert_eq!(result.valid_steps, 0);
+        assert_eq!(result.total_steps, 0);
+        // Trace starts with the initial expression
+        assert_eq!(trace.len(), 1);
+        assert!(trace[0].rule_name.is_none());
+    }
+
+    #[test]
+    fn validate_with_trace_single_valid_action() {
+        let rules = full_rules();
+        let expr = add(scalar("x"), rational(0, 1)); // x + 0
+
+        let dir_id = find_direction_id(&rules, "add_zero_right", Direction::Ltr)
+            .expect("add_zero_right should exist");
+
+        let actions = vec![PredictedAction {
+            rule_direction: dir_id,
+            position: 0,
+        }];
+
+        let (result, trace) = validate_with_trace(&expr, &actions, &rules);
+        assert_eq!(result.valid_steps, 1);
+        // Trace: initial + 1 successful step
+        assert_eq!(trace.len(), 2);
+        assert!(trace[0].rule_name.is_none());
+        assert_eq!(trace[1].rule_name.as_deref(), Some("add_zero_right"));
+        assert!(trace[1].rule_display.as_ref().unwrap().contains("→"));
+    }
+
+    #[test]
+    fn validate_with_trace_invalid_direction_id() {
+        let rules = full_rules();
+        let expr = scalar("x");
+        let actions = vec![PredictedAction {
+            rule_direction: 9999,
+            position: 0,
+        }];
+
+        let (result, trace) = validate_with_trace(&expr, &actions, &rules);
+        assert_eq!(result.valid_steps, 0);
+        // Only the initial expression in trace
+        assert_eq!(trace.len(), 1);
+        assert!(!result.step_details[0].success);
+        assert!(result.step_details[0]
+            .failure_reason
+            .as_ref()
+            .unwrap()
+            .contains("invalid direction ID"));
+    }
+
+    #[test]
+    fn validate_with_trace_invalid_position() {
+        let rules = full_rules();
+        let expr = scalar("x");
+
+        let dir_id = find_direction_id(&rules, "add_zero_right", Direction::Ltr).unwrap();
+        let actions = vec![PredictedAction {
+            rule_direction: dir_id,
+            position: 99,
+        }];
+
+        let (result, trace) = validate_with_trace(&expr, &actions, &rules);
+        assert_eq!(result.valid_steps, 0);
+        assert_eq!(trace.len(), 1);
+        assert!(result.step_details[0]
+            .failure_reason
+            .as_ref()
+            .unwrap()
+            .contains("no AST path"));
+    }
+
+    #[test]
+    fn validate_with_trace_rule_no_match() {
+        let rules = full_rules();
+        let expr = add(scalar("x"), scalar("y")); // x + y, not x + 0
+
+        let dir_id = find_direction_id(&rules, "add_zero_right", Direction::Ltr).unwrap();
+        let actions = vec![PredictedAction {
+            rule_direction: dir_id,
+            position: 0,
+        }];
+
+        let (result, trace) = validate_with_trace(&expr, &actions, &rules);
+        assert_eq!(result.valid_steps, 0);
+        assert_eq!(trace.len(), 1);
+        assert!(result.step_details[0]
+            .failure_reason
+            .as_ref()
+            .unwrap()
+            .contains("did not match"));
+    }
+
+    #[test]
+    fn validate_with_trace_multi_step() {
+        let rules = full_rules();
+        let expr = add(
+            add(scalar("x"), rational(0, 1)),
+            add(scalar("y"), rational(0, 1)),
+        );
+
+        let dir_id = find_direction_id(&rules, "add_zero_right", Direction::Ltr).unwrap();
+
+        let actions = vec![
+            PredictedAction {
+                rule_direction: dir_id,
+                position: 1,
+            },
+            PredictedAction {
+                rule_direction: dir_id,
+                position: 2,
+            },
+        ];
+
+        let (result, trace) = validate_with_trace(&expr, &actions, &rules);
+        assert_eq!(result.valid_steps, 2);
+        assert_eq!(trace.len(), 3); // initial + 2 steps
+        assert!(trace[0].rule_name.is_none());
+        assert!(trace[1].rule_name.is_some());
+        assert!(trace[2].rule_name.is_some());
+    }
+
+    #[test]
     fn validate_position_relative_to_current() {
         let rules = full_rules();
         // (x + 0) + (y + 0) → x + (y + 0) → x + y
