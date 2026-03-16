@@ -215,7 +215,12 @@ The elaboration pass currently covers:
 - undeclared variables -> `Unresolved`
 - arithmetic/function nodes -> either a derived `Concrete(...)`, `Unresolved`, or the same `DimError` that the legacy checker would have reported for obviously ill-typed expressions
 
-This is intentionally not the full migration yet. `check_expr_dim`, `check_dims`, rewrite substitution, simplification, and tokenization still rely on the older dimension-checking path and do not preserve `ty` end-to-end.
+Phase 2 is also now in place:
+- `check_dim` elaborates first, then validates typed expressions instead of inferring directly from `DimEnv`
+- typed expressions can now be dimension-checked again without requiring the original environment for already-resolved variables
+- `check_expr_dim` and `check_dims` therefore consume the typed elaboration path through `check_dim`
+
+This is intentionally not the full migration yet. Rewrite substitution, simplification/search, and tokenization still do not preserve `ty` end-to-end.
 
 ### Open questions
 
@@ -264,3 +269,4 @@ New automated coverage added:
 - elaboration marks quantities with the unit dimension
 - elaboration keeps undeclared variables `Ty::Unresolved`
 - elaboration uses declared dimensions to type variables and typed addition
+- `check_dim` accepts an already-elaborated expression without needing the original `DimEnv`

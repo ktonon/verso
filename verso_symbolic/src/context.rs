@@ -309,24 +309,29 @@ impl DimOutcome {
 
 /// Infer the dimension of an expression given a dimension environment.
 pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
+    let expr = elaborate_expr(expr, env)?;
+    check_dim_typed(&expr)
+}
+
+fn check_dim_typed(expr: &Expr) -> Result<Dimension, DimError> {
     match &expr.kind {
-        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => {
-            Ok(Dimension::dimensionless())
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Quantity(_, _) => {
+            ty_dimension(&expr.ty).ok_or_else(|| {
+                DimError::Mismatch {
+                    expected: Dimension::dimensionless(),
+                    got: Dimension::dimensionless(),
+                    context: "typed expression".to_string(),
+                    span: expr.span,
+                }
+            })
         }
-        ExprKind::Quantity(_inner, unit) => Ok(unit.dimension.clone()),
-        ExprKind::Var { name, dim, .. } => {
-            if let Some(d) = dim {
-                return Ok(d.clone());
-            }
-            env.get(name)
-                .cloned()
-                .ok_or_else(|| DimError::UndeclaredVar(name.clone(), expr.span))
-        }
+        ExprKind::Var { name, .. } => ty_dimension(&expr.ty)
+            .ok_or_else(|| DimError::UndeclaredVar(name.clone(), expr.span)),
         ExprKind::Add(a, b) => {
-            let da = match check_dim(a, env) {
+            let da = match check_dim_typed(a) {
                 Ok(d) => d,
                 Err(DimError::UndeclaredVar(v, span)) => {
-                    if let Ok(db) = check_dim(b, env) {
+                    if let Ok(db) = check_dim_typed(b) {
                         if !db.is_dimensionless() {
                             return Err(DimError::Mismatch {
                                 expected: db,
@@ -340,7 +345,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                 }
                 Err(e) => return Err(e),
             };
-            let db = match check_dim(b, env) {
+            let db = match check_dim_typed(b) {
                 Ok(d) => d,
                 Err(DimError::UndeclaredVar(v, span)) => {
                     if !da.is_dimensionless() {
@@ -366,19 +371,19 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
             Ok(da)
         }
         ExprKind::Mul(a, b) => {
-            let da = check_dim(a, env)?;
-            let db = check_dim(b, env)?;
+            let da = check_dim_typed(a)?;
+            let db = check_dim_typed(b)?;
             Ok(da.mul(&db))
         }
-        ExprKind::Neg(inner) => check_dim(inner, env),
+        ExprKind::Neg(inner) => check_dim_typed(inner),
         ExprKind::Inv(inner) => {
-            let d = check_dim(inner, env)?;
+            let d = check_dim_typed(inner)?;
             Ok(d.inv())
         }
         ExprKind::Pow(base, exp) => {
-            let db = check_dim(base, env)?;
+            let db = check_dim_typed(base)?;
             if db.is_dimensionless() {
-                let de = check_dim(exp, env)?;
+                let de = check_dim_typed(exp)?;
                 if !de.is_dimensionless() {
                     return Err(DimError::Mismatch {
                         expected: Dimension::dimensionless(),
@@ -393,7 +398,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
             Ok(db.pow(n))
         }
         ExprKind::Fn(kind, arg) => {
-            let da = check_dim(arg, env)?;
+            let da = check_dim_typed(arg)?;
             if !da.is_dimensionless() {
                 return Err(DimError::NonDimensionlessFnArg {
                     func: format!("{:?}", kind).to_lowercase(),
@@ -405,7 +410,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
         }
         ExprKind::FnN(kind, args) => {
             for arg in args {
-                let da = check_dim(arg, env)?;
+                let da = check_dim_typed(arg)?;
                 if !da.is_dimensionless() {
                     return Err(DimError::NonDimensionlessFnArg {
                         func: format!("{:?}", kind).to_lowercase(),
@@ -450,13 +455,16 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
             Ty::Concrete(unit.dimension.clone()),
         )),
         ExprKind::Var { name, indices, dim } => {
-            let ty = match dim {
-                Some(dim) => Ty::Concrete(dim.clone()),
-                None => env
-                    .get(name)
-                    .cloned()
-                    .map(Ty::Concrete)
-                    .unwrap_or(Ty::Unresolved),
+            let ty = match &expr.ty {
+                Ty::Concrete(dim) => Ty::Concrete(dim.clone()),
+                Ty::Unresolved => match dim {
+                    Some(dim) => Ty::Concrete(dim.clone()),
+                    None => env
+                        .get(name)
+                        .cloned()
+                        .map(Ty::Concrete)
+                        .unwrap_or(Ty::Unresolved),
+                },
             };
             Ok(Expr::spanned_typed(
                 ExprKind::Var {
@@ -1506,6 +1514,15 @@ mod tests {
             result,
             Err(DimError::NonDimensionlessFnArg { .. })
         ));
+    }
+
+    #[test]
+    fn check_dim_uses_elaborated_ty_without_env_lookup() {
+        let mut ctx = Context::new();
+        ctx.declare_var("x", Some(Dimension::single(BaseDim::L, 1)));
+        let expr = ctx.elaborate_expr(&parse_expr("x * x").unwrap()).unwrap();
+        let dim = check_dim(&expr, &DimEnv::new()).unwrap();
+        assert_eq!(dim, Dimension::single(BaseDim::L, 2));
     }
 
     // --- check_claim_dim paths ---
