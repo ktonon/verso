@@ -105,6 +105,8 @@ pub fn search_run_to_example(run: &SearchRun) -> Option<TrainingExample> {
     }
 
     // Training data is defined over the explicit untyped token projection.
+    // strip_types() here so that complexity and token-position measurements
+    // operate on the same untyped shape that tokenize() serializes.
     let initial = run.initial.strip_types();
     let (input_tokens, _db) = tokenize(&initial);
     let input_token_strings: Vec<String> = input_tokens.iter().map(token_to_string).collect();

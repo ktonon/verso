@@ -193,8 +193,8 @@ pub fn infer_ty_from_kind(kind: &ExprKind) -> Ty {
 
 fn expr_as_integer(expr: &Expr) -> Option<i32> {
     match &expr.kind {
-        ExprKind::Rational(r) if r.den() == 1 => Some(r.num() as i32),
-        ExprKind::Neg(inner) => expr_as_integer(inner).map(|n| -n),
+        ExprKind::Rational(r) if r.den() == 1 => i32::try_from(r.num()).ok(),
+        ExprKind::Neg(inner) => expr_as_integer(inner).and_then(|n| n.checked_neg()),
         _ => None,
     }
 }

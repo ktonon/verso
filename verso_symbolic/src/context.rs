@@ -329,53 +329,22 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
     check_dim_typed(&expr)
 }
 
+/// Validate dimensions of a fully elaborated expression by reading `Ty` fields.
+///
+/// This function must only be called on expressions produced by `elaborate_expr`,
+/// which guarantees all nodes have `Ty::Concrete`. `Ty::Unresolved` is unreachable
+/// on atoms and vars after elaboration.
 fn check_dim_typed(expr: &Expr) -> Result<Dimension, DimError> {
     match &expr.kind {
         ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Quantity(_, _) => {
-            ty_dimension(&expr.ty).ok_or_else(|| {
-                DimError::Mismatch {
-                    expected: Dimension::dimensionless(),
-                    got: Dimension::dimensionless(),
-                    context: "typed expression".to_string(),
-                    span: expr.span,
-                }
-            })
+            Ok(ty_dimension(&expr.ty).expect("atom must be Concrete after elaboration"))
         }
-        ExprKind::Var { name, .. } => ty_dimension(&expr.ty)
-            .ok_or_else(|| DimError::UndeclaredVar(name.clone(), expr.span)),
+        ExprKind::Var { .. } => {
+            Ok(ty_dimension(&expr.ty).expect("var must be Concrete after elaboration"))
+        }
         ExprKind::Add(a, b) => {
-            let da = match check_dim_typed(a) {
-                Ok(d) => d,
-                Err(DimError::UndeclaredVar(v, span)) => {
-                    if let Ok(db) = check_dim_typed(b) {
-                        if !db.is_dimensionless() {
-                            return Err(DimError::Mismatch {
-                                expected: db,
-                                got: Dimension::dimensionless(),
-                                context: "addition".to_string(),
-                                span: a.span,
-                            });
-                        }
-                    }
-                    return Err(DimError::UndeclaredVar(v, span));
-                }
-                Err(e) => return Err(e),
-            };
-            let db = match check_dim_typed(b) {
-                Ok(d) => d,
-                Err(DimError::UndeclaredVar(v, span)) => {
-                    if !da.is_dimensionless() {
-                        return Err(DimError::Mismatch {
-                            expected: da,
-                            got: Dimension::dimensionless(),
-                            context: "addition".to_string(),
-                            span: b.span,
-                        });
-                    }
-                    return Err(DimError::UndeclaredVar(v, span));
-                }
-                Err(e) => return Err(e),
-            };
+            let da = check_dim_typed(a)?;
+            let db = check_dim_typed(b)?;
             if da != db {
                 return Err(DimError::Mismatch {
                     expected: da,
@@ -544,10 +513,11 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
         }
         ExprKind::Neg(inner) => {
             let inner = elaborate_expr(inner, env)?;
+            let ty = inner.ty.clone();
             Ok(Expr::spanned_typed(
-                ExprKind::Neg(Box::new(inner.clone())),
+                ExprKind::Neg(Box::new(inner)),
                 span,
-                inner.ty,
+                ty,
             ))
         }
         ExprKind::Inv(inner) => {
@@ -743,14 +713,8 @@ fn has_type_info(expr: &Expr) -> bool {
 
 fn expr_as_integer(expr: &Expr) -> Option<i32> {
     match &expr.kind {
-        ExprKind::Rational(r) => {
-            if r.den() == 1 {
-                Some(r.num() as i32)
-            } else {
-                None
-            }
-        }
-        ExprKind::Neg(inner) => expr_as_integer(inner).map(|n| -n),
+        ExprKind::Rational(r) if r.den() == 1 => i32::try_from(r.num()).ok(),
+        ExprKind::Neg(inner) => expr_as_integer(inner).and_then(|n| n.checked_neg()),
         _ => None,
     }
 }
