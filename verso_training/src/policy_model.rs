@@ -90,9 +90,9 @@ impl<B: Backend> PolicyModel<B> {
         // Position head: per-token logit → [B, S]
         let pos_scores = self.pos_head.forward(hidden); // [B, S, 1]
         let pos_logits = pos_scores.reshape([batch_size, enc_len]); // [B, S]
-        // Mask pad positions to large negative value so they get ~zero probability.
-        // Using -1e4 (not -inf or -1e9) to avoid blowing up CrossEntropyLoss
-        // if a target accidentally lands on a masked position.
+                                                                    // Mask pad positions to large negative value so they get ~zero probability.
+                                                                    // Using -1e4 (not -inf or -1e9) to avoid blowing up CrossEntropyLoss
+                                                                    // if a target accidentally lands on a masked position.
         let neg_large = Tensor::<B, 2>::full([batch_size, enc_len], -1e4, device);
         let pos_logits = pos_logits.mask_where(enc_pad_mask, neg_large);
 
@@ -197,9 +197,13 @@ fn log_prob_at<B: Backend>(logits: &Tensor<B, 2>, indices: &[i64]) -> Vec<f64> {
     let [_batch_size, vocab_size] = logits.dims();
 
     // Extract values - try f32 first (most common), fall back
-    let flat: Vec<f32> = data
-        .to_vec::<f32>()
-        .unwrap_or_else(|_| data.to_vec::<f64>().unwrap().into_iter().map(|x| x as f32).collect());
+    let flat: Vec<f32> = data.to_vec::<f32>().unwrap_or_else(|_| {
+        data.to_vec::<f64>()
+            .unwrap()
+            .into_iter()
+            .map(|x| x as f32)
+            .collect()
+    });
 
     indices
         .iter()
@@ -251,10 +255,8 @@ mod tests {
             TensorData::new(vec![1i64; batch_size * enc_len], [batch_size, enc_len]),
             &device,
         );
-        let enc_pad_mask = Tensor::<TestBackend, 2, Bool>::from_data(
-            TensorData::from([[false; 5]; 2]),
-            &device,
-        );
+        let enc_pad_mask =
+            Tensor::<TestBackend, 2, Bool>::from_data(TensorData::from([[false; 5]; 2]), &device);
 
         let (rule_logits, pos_logits) = model.forward(enc_ids, enc_pad_mask);
         assert_eq!(rule_logits.dims(), [batch_size, num_rules]);
@@ -283,10 +285,8 @@ mod tests {
             TensorData::new(vec![1i64, 2, 3, 4, 5], [1, 5]),
             &device,
         );
-        let enc_pad_mask = Tensor::<TestBackend, 2, Bool>::from_data(
-            TensorData::from([[false; 5]]),
-            &device,
-        );
+        let enc_pad_mask =
+            Tensor::<TestBackend, 2, Bool>::from_data(TensorData::from([[false; 5]]), &device);
 
         let predictions = model.predict(enc_ids, enc_pad_mask);
         assert_eq!(predictions.len(), 1);
@@ -313,6 +313,10 @@ mod tests {
         let predictions = model.predict(enc_ids, enc_pad_mask);
         let (_, pos) = predictions[0];
         // Position should be in non-padded region (0-2)
-        assert!(pos < 3, "predicted pos {} should be < 3 (non-pad region)", pos);
+        assert!(
+            pos < 3,
+            "predicted pos {} should be < 3 (non-pad region)",
+            pos
+        );
     }
 }

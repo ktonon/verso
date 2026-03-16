@@ -3,7 +3,11 @@ use std::path::Path;
 use std::process;
 
 #[derive(Parser)]
-#[command(name = "verso", version, about = "Verso — verifiable source for scientific papers")]
+#[command(
+    name = "verso",
+    version,
+    about = "Verso — verifiable source for scientific papers"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -78,11 +82,9 @@ fn main() {
                     .map(|paper| {
                         let input = paper.input.clone();
                         let input2 = input.clone();
-                        let out = output
-                            .clone()
-                            .unwrap_or_else(|| {
-                                format!("{}/{}.pdf", config.output_dir, paper.output)
-                            });
+                        let out = output.clone().unwrap_or_else(|| {
+                            format!("{}/{}.pdf", config.output_dir, paper.output)
+                        });
                         WatchTask::new(&input, move || cmd_build(&input2, Some(&out)))
                     })
                     .collect();
@@ -104,9 +106,7 @@ fn main() {
             if watch {
                 let f2 = f.clone();
                 let out = output;
-                let tasks = vec![WatchTask::new(&f, move || {
-                    cmd_build(&f2, out.as_deref())
-                })];
+                let tasks = vec![WatchTask::new(&f, move || cmd_build(&f2, out.as_deref()))];
                 watch_and_run(tasks);
             } else {
                 cmd_build(&f, output.as_deref());
@@ -269,9 +269,9 @@ fn cmd_build_from_config_resolved(
 }
 
 fn cmd_build(file: &str, output: Option<&str>) {
+    use std::process::Command;
     use verso_doc::compile_tex::compile_to_tex;
     use verso_doc::parse::parse_document_from_file;
-    use std::process::Command;
 
     let path = Path::new(file);
 
@@ -280,7 +280,9 @@ fn cmd_build(file: &str, output: Option<&str>) {
         Some(o) => std::path::PathBuf::from(o),
         None => {
             let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-            path.parent().unwrap_or(Path::new(".")).join(format!("{}.pdf", stem))
+            path.parent()
+                .unwrap_or(Path::new("."))
+                .join(format!("{}.pdf", stem))
         }
     };
     let is_tex = output_path.extension().map_or(false, |e| e == "tex");
@@ -439,8 +441,8 @@ fn watch_and_run(tasks: Vec<WatchTask>) {
     println!("\n\x1b[32mWatching for changes... (Ctrl+C to stop)\x1b[0m");
 
     let (tx, rx) = mpsc::channel();
-    let mut debouncer = new_debouncer(Duration::from_millis(300), tx)
-        .expect("failed to create file watcher");
+    let mut debouncer =
+        new_debouncer(Duration::from_millis(300), tx).expect("failed to create file watcher");
 
     // Watch parent directories of all dependencies
     let mut watched = HashSet::new();
@@ -498,14 +500,14 @@ fn watch_and_run(tasks: Vec<WatchTask>) {
 
 #[tokio::main]
 async fn cmd_lsp() {
-    use verso_doc::compile_tex::find_unresolved_refs_against;
-    use verso_doc::dim::DimOutcome;
-    use verso_doc::parse::{parse_document, parse_document_from_file};
-    use verso_doc::verify::{verify_document, Outcome};
     use std::path::PathBuf;
     use tower_lsp::jsonrpc::Result;
     use tower_lsp::lsp_types::*;
     use tower_lsp::{Client, LanguageServer, LspService, Server};
+    use verso_doc::compile_tex::find_unresolved_refs_against;
+    use verso_doc::dim::DimOutcome;
+    use verso_doc::parse::{parse_document, parse_document_from_file};
+    use verso_doc::verify::{verify_document, Outcome};
 
     struct VersoServer {
         client: Client,
@@ -667,11 +669,13 @@ async fn cmd_lsp() {
         }
 
         if let Some(path) = file_path {
-            let ref_doc = find_root_document(path)
-                .and_then(|root| parse_document_from_file(&root).ok());
+            let ref_doc =
+                find_root_document(path).and_then(|root| parse_document_from_file(&root).ok());
             let check_doc = ref_doc.as_ref().unwrap_or(&doc);
             for label in find_unresolved_refs_against(check_doc, &doc) {
-                let line = text.lines().enumerate()
+                let line = text
+                    .lines()
+                    .enumerate()
                     .find(|(_, l)| l.contains(&format!("ref`{}", label)))
                     .map(|(i, _)| i + 1)
                     .unwrap_or(0);
@@ -692,7 +696,10 @@ async fn cmd_lsp() {
         let line = (line.saturating_sub(1)) as u32;
         Range {
             start: Position { line, character: 0 },
-            end: Position { line, character: u32::MAX },
+            end: Position {
+                line,
+                character: u32::MAX,
+            },
         }
     }
 

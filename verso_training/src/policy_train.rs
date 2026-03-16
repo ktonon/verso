@@ -157,8 +157,7 @@ pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, de
         for batch in train_dl.iter() {
             let lr = cosine_lr(global_step, config.warmup_steps, total_steps, config.lr);
 
-            let (rule_logits, pos_logits) =
-                model.forward(batch.enc_ids, batch.enc_pad_mask);
+            let (rule_logits, pos_logits) = model.forward(batch.enc_ids, batch.enc_pad_mask);
 
             // Rule loss: [B, R] vs [B]
             let rule_loss = rule_criterion.forward(rule_logits, batch.rule_targets);
@@ -220,7 +219,13 @@ pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, de
         if val_loss < best_val_loss {
             best_val_loss = val_loss;
             epochs_without_improvement = 0;
-            save_policy_checkpoint(&model, epoch, val_loss, &config.checkpoint_dir, "policy_best");
+            save_policy_checkpoint(
+                &model,
+                epoch,
+                val_loss,
+                &config.checkpoint_dir,
+                "policy_best",
+            );
         } else {
             epochs_without_improvement += 1;
             if epochs_without_improvement >= config.patience {
@@ -250,8 +255,7 @@ fn policy_validate<B: AutodiffBackend>(
     let mut num_batches = 0usize;
 
     for batch in val_dl.iter() {
-        let (rule_logits, pos_logits) =
-            model.forward(batch.enc_ids, batch.enc_pad_mask);
+        let (rule_logits, pos_logits) = model.forward(batch.enc_ids, batch.enc_pad_mask);
 
         let rule_loss = rule_criterion.forward(rule_logits, batch.rule_targets);
         let pos_loss = pos_criterion.forward(pos_logits, batch.position_targets);

@@ -139,8 +139,7 @@ fn run<B: burn::prelude::Backend>(args: &Args) {
                                     if improved {
                                         (ml_result.final_expr, ml_trace, "ml")
                                     } else {
-                                        let (s, t) =
-                                            simplify_with_trace(&expr, &RuleSet::full());
+                                        let (s, t) = simplify_with_trace(&expr, &RuleSet::full());
                                         (s, t, "beam")
                                     }
                                 } else {
@@ -178,8 +177,7 @@ fn run<B: burn::prelude::Backend>(args: &Args) {
                                 }
                             }
                             Mode::BeamOnly => {
-                                let (s, t) =
-                                    simplify_with_trace(&expr, &RuleSet::full());
+                                let (s, t) = simplify_with_trace(&expr, &RuleSet::full());
                                 (s, t, "beam")
                             }
                         };
@@ -194,7 +192,12 @@ fn run<B: burn::prelude::Backend>(args: &Args) {
                         } else {
                             String::new()
                         };
-                        println!("{}{}{}\n", fmt_colored(&simplified), unit_suffix, engine_suffix);
+                        println!(
+                            "{}{}{}\n",
+                            fmt_colored(&simplified),
+                            unit_suffix,
+                            engine_suffix
+                        );
                         record_result(&mut result_history, &mut rl, history_mode, &simplified);
                     }
                     Err(err) => {

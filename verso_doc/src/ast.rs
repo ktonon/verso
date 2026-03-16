@@ -10,7 +10,12 @@ pub struct Document {
 #[derive(Debug)]
 pub enum Block {
     /// Section heading (level 1 = `#`, level 2 = `##`, etc.)
-    Section { level: u8, title: String, label: Option<String>, span: Span },
+    Section {
+        level: u8,
+        title: String,
+        label: Option<String>,
+        span: Span,
+    },
     /// Prose paragraph (may contain inline tagged expressions).
     Prose(Vec<ProseFragment>),
     /// A claim asserting that `lhs` equals `rhs`.

@@ -1,5 +1,5 @@
 use clap::Parser;
-use verso_training::policy_rl_train::{PolicyRLConfig, policy_rl_train};
+use verso_training::policy_rl_train::{policy_rl_train, PolicyRLConfig};
 
 fn main() {
     let config = PolicyRLConfig::parse();

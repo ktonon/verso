@@ -52,7 +52,13 @@ const SMALL_INTEGERS: &[i64] = &[-3, -2, -1, 1, 2, 3, 4, 5];
 const SIMPLE_FRACTIONS: &[(i64, i64)] = &[(1, 2), (1, 3), (2, 3), (1, 4), (3, 4)];
 const FRAC_PI_VALUES: &[(i64, i64)] = &[(1, 6), (1, 4), (1, 3), (1, 2), (1, 1), (2, 1)];
 const SMALL_EXPONENTS: &[i64] = &[-2, -1, 2, 3];
-const FN_POOL: &[FnKind] = &[FnKind::Sin, FnKind::Cos, FnKind::Tan, FnKind::Exp, FnKind::Ln];
+const FN_POOL: &[FnKind] = &[
+    FnKind::Sin,
+    FnKind::Cos,
+    FnKind::Tan,
+    FnKind::Exp,
+    FnKind::Ln,
+];
 
 /// Generate a random expression using the given RNG and config.
 pub fn gen_expr(rng: &mut StdRng, config: &GenExprConfig) -> Expr {
@@ -181,7 +187,10 @@ fn gen_leaf(rng: &mut StdRng, config: &GenExprConfig) -> Expr {
 /// Compute the depth of an expression tree.
 pub fn expr_depth(expr: &Expr) -> usize {
     match &expr.kind {
-        ExprKind::Rational(_) | ExprKind::Named(_) | ExprKind::FracPi(_) | ExprKind::Var { .. }
+        ExprKind::Rational(_)
+        | ExprKind::Named(_)
+        | ExprKind::FracPi(_)
+        | ExprKind::Var { .. }
         | ExprKind::Quantity(_, _) => 0,
         ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => 1 + expr_depth(a),
         ExprKind::FnN(_, args) => 1 + args.iter().map(expr_depth).max().unwrap_or(0),
@@ -320,10 +329,14 @@ mod tests {
             has_pow |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Pow(_, _)));
             has_fn |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Fn(_, _)));
             has_var |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Var { .. }));
-            has_int |=
-                has_node_type(&expr, &|e| matches!(&e.kind, ExprKind::Rational(r) if r.is_integer()));
-            has_frac |=
-                has_node_type(&expr, &|e| matches!(&e.kind, ExprKind::Rational(r) if !r.is_integer()));
+            has_int |= has_node_type(
+                &expr,
+                &|e| matches!(&e.kind, ExprKind::Rational(r) if r.is_integer()),
+            );
+            has_frac |= has_node_type(
+                &expr,
+                &|e| matches!(&e.kind, ExprKind::Rational(r) if !r.is_integer()),
+            );
         }
 
         assert!(has_add, "no Add nodes in 1000 expressions");
@@ -366,7 +379,10 @@ mod tests {
             let expr = gen_expr(&mut rng, &config);
             has_frac_pi(&expr)
         });
-        assert!(found, "no FracPi found in 1000 expressions with include_frac_pi=true");
+        assert!(
+            found,
+            "no FracPi found in 1000 expressions with include_frac_pi=true"
+        );
     }
 
     #[test]

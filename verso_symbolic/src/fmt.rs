@@ -1,4 +1,6 @@
-use crate::expr::{classify_mul, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind, NamedConst};
+use crate::expr::{
+    classify_mul, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind, NamedConst,
+};
 use crate::rational::Rational;
 use std::fmt::Display;
 
@@ -249,9 +251,7 @@ fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
 
 fn fmt_log_base_colored(base: &Expr) -> String {
     match &base.kind {
-        ExprKind::Rational(_) | ExprKind::Var { .. } => {
-            fmt_colored(base)
-        }
+        ExprKind::Rational(_) | ExprKind::Var { .. } => fmt_colored(base),
         _ => format!(
             "{}({}{}){}",
             color::DIM,
@@ -599,8 +599,8 @@ mod tests {
 
     #[test]
     fn display_quantity() {
-        use crate::unit::Unit;
         use crate::dim::Dimension;
+        use crate::unit::Unit;
         let km = Unit {
             dimension: Dimension::parse("[L]").unwrap(),
             scale: 1000.0,
@@ -612,8 +612,8 @@ mod tests {
 
     #[test]
     fn collect_units_from_quantity() {
-        use crate::unit::Unit;
         use crate::dim::Dimension;
+        use crate::unit::Unit;
         let km = Unit {
             dimension: Dimension::parse("[L]").unwrap(),
             scale: 1000.0,

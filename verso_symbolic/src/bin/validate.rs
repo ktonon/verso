@@ -1,10 +1,10 @@
+use serde::{Deserialize, Serialize};
+use std::io::{self, BufRead, BufWriter, Write};
 use verso_symbolic::random_search::IndexedRuleSet;
 use verso_symbolic::token::{detokenize, tokenize};
 use verso_symbolic::training_data::{parse_token_string, synthetic_debruijn, token_to_string};
 use verso_symbolic::validate::{validate_action_sequence, PredictedAction};
 use verso_symbolic::RuleSet;
-use serde::{Deserialize, Serialize};
-use std::io::{self, BufRead, BufWriter, Write};
 
 #[derive(Deserialize)]
 struct InputEntry {

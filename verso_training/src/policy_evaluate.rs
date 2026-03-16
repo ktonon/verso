@@ -51,10 +51,8 @@ pub fn policy_inference_loop<B: Backend>(
             .collect();
         let seq_len = enc_ids_vec.len();
 
-        let enc_ids = Tensor::<B, 2, Int>::from_data(
-            TensorData::new(enc_ids_vec, [1, seq_len]),
-            device,
-        );
+        let enc_ids =
+            Tensor::<B, 2, Int>::from_data(TensorData::new(enc_ids_vec, [1, seq_len]), device);
         let enc_pad_mask = enc_ids.clone().equal_elem(0);
 
         // Predict single action
@@ -146,7 +144,9 @@ pub fn policy_evaluate<B: Backend>(
                 all_results.push(ValidationResult {
                     valid_steps: 0,
                     total_steps: 0,
-                    final_expr: Expr::new(ExprKind::Rational(verso_symbolic::rational::Rational::ZERO)),
+                    final_expr: Expr::new(ExprKind::Rational(
+                        verso_symbolic::rational::Rational::ZERO,
+                    )),
                     final_complexity: 0,
                     input_complexity: 0,
                     step_details: Vec::new(),
@@ -215,7 +215,8 @@ pub fn run_policy_evaluation<B: Backend>(config: PolicyEvalConfig, device: B::De
     let num_rules = rules.total_directions as usize;
 
     println!("Loading data from {}...", config.data_dir);
-    let (_train, val) = crate::dataset::load_data(&config.data_dir, config.val_fraction, config.seed);
+    let (_train, val) =
+        crate::dataset::load_data(&config.data_dir, config.val_fraction, config.seed);
     println!("Validation examples: {}", val.len());
 
     println!("Loading model from {}...", config.checkpoint);

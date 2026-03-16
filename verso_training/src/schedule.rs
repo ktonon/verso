@@ -8,8 +8,7 @@ pub fn cosine_lr(step: usize, warmup_steps: usize, total_steps: usize, base_lr: 
     if step < warmup_steps {
         base_lr * step as f64 / warmup_steps.max(1) as f64
     } else {
-        let progress =
-            (step - warmup_steps) as f64 / (total_steps - warmup_steps).max(1) as f64;
+        let progress = (step - warmup_steps) as f64 / (total_steps - warmup_steps).max(1) as f64;
         base_lr * 0.5 * (1.0 + (PI * progress).cos())
     }
 }

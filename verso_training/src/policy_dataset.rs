@@ -3,9 +3,9 @@ use burn::data::dataset::Dataset;
 use burn::prelude::*;
 
 use verso_symbolic::random_search::IndexedRuleSet;
-use verso_symbolic::training_data::TrainingExample;
 use verso_symbolic::token::tokenize;
 use verso_symbolic::training_data::token_to_string;
+use verso_symbolic::training_data::TrainingExample;
 use verso_symbolic::validate::{validate_action_sequence, PredictedAction};
 
 use verso_symbolic::eval_constants;
@@ -143,10 +143,8 @@ impl<B: Backend> Batcher<B, PolicyItem, PolicyBatch<B>> for PolicyBatcher {
                 padded
             })
             .collect();
-        let enc_ids = Tensor::<B, 2, Int>::from_data(
-            TensorData::new(flat, [batch_size, max_len]),
-            device,
-        );
+        let enc_ids =
+            Tensor::<B, 2, Int>::from_data(TensorData::new(flat, [batch_size, max_len]), device);
         let enc_pad_mask = Tensor::<B, 2, Bool>::from_data(
             TensorData::new(mask_flat, [batch_size, max_len]),
             device,
@@ -156,14 +154,10 @@ impl<B: Backend> Batcher<B, PolicyItem, PolicyBatch<B>> for PolicyBatcher {
         let rule_data: Vec<i64> = items.iter().map(|i| i.rule_target).collect();
         let pos_data: Vec<i64> = items.iter().map(|i| i.position_target).collect();
 
-        let rule_targets = Tensor::<B, 1, Int>::from_data(
-            TensorData::new(rule_data, [batch_size]),
-            device,
-        );
-        let position_targets = Tensor::<B, 1, Int>::from_data(
-            TensorData::new(pos_data, [batch_size]),
-            device,
-        );
+        let rule_targets =
+            Tensor::<B, 1, Int>::from_data(TensorData::new(rule_data, [batch_size]), device);
+        let position_targets =
+            Tensor::<B, 1, Int>::from_data(TensorData::new(pos_data, [batch_size]), device);
 
         PolicyBatch {
             enc_ids,
@@ -213,7 +207,10 @@ mod tests {
         // We should get at least the first item (tokenization of the initial expression)
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].enc_ids.len(), 3); // ADD, V0, I_0
-        assert!(items[0].enc_ids.iter().all(|&id| id > 0), "no PAD tokens in real input");
+        assert!(
+            items[0].enc_ids.iter().all(|&id| id > 0),
+            "no PAD tokens in real input"
+        );
     }
 
     #[test]
@@ -312,7 +309,9 @@ mod tests {
         ];
 
         let dataset = PolicyDataset::from_examples(&examples, &enc_vocab, &rules);
-        let items: Vec<_> = (0..dataset.len()).map(|i| dataset.get(i).unwrap()).collect();
+        let items: Vec<_> = (0..dataset.len())
+            .map(|i| dataset.get(i).unwrap())
+            .collect();
 
         let batcher = PolicyBatcher;
         let device = &burn::backend::ndarray::NdArrayDevice::Cpu;
@@ -348,6 +347,9 @@ mod tests {
             dataset.len(),
             dataset.len() as f64 / examples.len() as f64
         );
-        assert!(dataset.len() >= examples.len(), "should have at least as many items as examples");
+        assert!(
+            dataset.len() >= examples.len(),
+            "should have at least as many items as examples"
+        );
     }
 }

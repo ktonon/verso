@@ -1,15 +1,15 @@
-use verso_symbolic::gen_expr::{gen_expr, GenExprConfig};
-use verso_symbolic::random_search::{IndexedRuleSet, RandomizedBeamSearch};
-use verso_symbolic::training_data::{
-    build_vocab_metadata, search_run_to_example, write_jsonl, write_vocab_json,
-};
-use verso_symbolic::RuleSet;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rayon::prelude::*;
 use std::fs::File;
 use std::io::BufWriter;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use verso_symbolic::gen_expr::{gen_expr, GenExprConfig};
+use verso_symbolic::random_search::{IndexedRuleSet, RandomizedBeamSearch};
+use verso_symbolic::training_data::{
+    build_vocab_metadata, search_run_to_example, write_jsonl, write_vocab_json,
+};
+use verso_symbolic::RuleSet;
 
 struct CliArgs {
     output: Option<String>,
@@ -70,10 +70,7 @@ fn parse_args() -> Result<CliArgs, String> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--output" => {
-                args.output = Some(
-                    iter.next()
-                        .ok_or("--output requires a value".to_string())?,
-                );
+                args.output = Some(iter.next().ok_or("--output requires a value".to_string())?);
             }
             "--count" => {
                 args.count = iter

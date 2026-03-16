@@ -57,10 +57,7 @@ pub fn validate_action_sequence(
             None => {
                 step_details.push(StepDetail {
                     success: false,
-                    failure_reason: Some(format!(
-                        "invalid direction ID {}",
-                        action.rule_direction
-                    )),
+                    failure_reason: Some(format!("invalid direction ID {}", action.rule_direction)),
                 });
                 break;
             }
@@ -182,10 +179,7 @@ pub fn validate_with_trace(
             None => {
                 step_details.push(StepDetail {
                     success: false,
-                    failure_reason: Some(format!(
-                        "invalid direction ID {}",
-                        action.rule_direction
-                    )),
+                    failure_reason: Some(format!("invalid direction ID {}", action.rule_direction)),
                 });
                 break;
             }
@@ -297,11 +291,7 @@ mod tests {
     }
 
     /// Find the direction ID for a named rule in a given direction.
-    fn find_direction_id(
-        rules: &IndexedRuleSet,
-        name: &str,
-        direction: Direction,
-    ) -> Option<u16> {
+    fn find_direction_id(rules: &IndexedRuleSet, name: &str, direction: Direction) -> Option<u16> {
         for i in 0..rules.len() {
             if rules.rule(i).name == name {
                 return match direction {

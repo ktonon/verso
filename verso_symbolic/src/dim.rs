@@ -110,9 +110,7 @@ impl Dimension {
         let s = s
             .strip_prefix('[')
             .and_then(|s| s.strip_suffix(']'))
-            .ok_or_else(|| {
-                "dimension must be enclosed in brackets, e.g. [M L T^-2]".to_string()
-            })?;
+            .ok_or_else(|| "dimension must be enclosed in brackets, e.g. [M L T^-2]".to_string())?;
         let s = s.trim();
 
         if s == "1" || s.is_empty() {

@@ -3,9 +3,7 @@ use verso_symbolic::training_data::{parse_token_string, synthetic_debruijn};
 use verso_symbolic::validate::ValidationResult;
 
 /// Reconstruct an Expr from input token strings.
-pub fn tokens_to_expr(
-    input_tokens: &[String],
-) -> Result<verso_symbolic::Expr, String> {
+pub fn tokens_to_expr(input_tokens: &[String]) -> Result<verso_symbolic::Expr, String> {
     let tokens: Vec<_> = input_tokens
         .iter()
         .map(|s| parse_token_string(s))
@@ -119,7 +117,11 @@ pub fn compute_metrics(results: &[ValidationResult], invalid_penalty: f64) -> Ev
 pub fn print_metrics(metrics: &EvalMetrics) {
     println!("\n=== Evaluation Results ===");
     println!("Total examples:       {}", metrics.total_examples);
-    println!("Fully valid:          {} ({:.1}%)", metrics.fully_valid_count, metrics.validity_rate * 100.0);
+    println!(
+        "Fully valid:          {} ({:.1}%)",
+        metrics.fully_valid_count,
+        metrics.validity_rate * 100.0
+    );
     println!("Mean valid fraction:  {:.4}", metrics.mean_valid_fraction);
     println!("Mean complexity delta:{:.4}", metrics.mean_complexity_delta);
     println!("Mean reward:          {:.4}", metrics.mean_reward);

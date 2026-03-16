@@ -157,12 +157,7 @@ impl Default for RandomizedBeamSearch {
 
 impl RandomizedBeamSearch {
     /// Run one randomized beam search with the given RNG.
-    pub fn search_once(
-        &self,
-        expr: &Expr,
-        rules: &IndexedRuleSet,
-        rng: &mut StdRng,
-    ) -> SearchRun {
+    pub fn search_once(&self, expr: &Expr, rules: &IndexedRuleSet, rng: &mut StdRng) -> SearchRun {
         let seed = 0; // Caller tracks the seed
         let initial = expr.clone();
         let mut seen: HashSet<String> = HashSet::new();
@@ -386,7 +381,10 @@ impl RandomizedBeamSearch {
 
         // Recursively try rewrites in children (with path tracking)
         match &expr.kind {
-            ExprKind::Rational(_) | ExprKind::Named(_) | ExprKind::FracPi(_) | ExprKind::Var { .. }
+            ExprKind::Rational(_)
+            | ExprKind::Named(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Var { .. }
             | ExprKind::Quantity(_, _) => {}
 
             ExprKind::Add(a, b) => {
@@ -618,10 +616,7 @@ mod tests {
         let search = RandomizedBeamSearch::default();
         // Use an expression complex enough that different rule orderings matter
         let expr = add(
-            add(
-                mul(scalar("x"), scalar("x")),
-                mul(scalar("y"), scalar("y")),
-            ),
+            add(mul(scalar("x"), scalar("x")), mul(scalar("y"), scalar("y"))),
             mul(mul(rational(2, 1), scalar("x")), scalar("y")),
         );
 

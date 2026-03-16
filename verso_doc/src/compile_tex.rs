@@ -1,7 +1,10 @@
-use crate::ast::{Block, Claim, ColumnAlign, Document, EnvKind, Environment, Figure, List, MathBlock, Proof, ProseFragment, Table};
+use crate::ast::{
+    Block, Claim, ColumnAlign, Document, EnvKind, Environment, Figure, List, MathBlock, Proof,
+    ProseFragment, Table,
+};
 use std::collections::{HashMap, HashSet};
-use verso_symbolic::ToTex;
 use std::fmt::Write;
+use verso_symbolic::ToTex;
 
 /// Convert a section title to a URL-friendly slug for use as a label.
 pub fn slugify(title: &str) -> String {
@@ -97,14 +100,16 @@ pub fn compile_to_tex(doc: &Document) -> String {
     // Title block in preamble
     if let Some(lines) = title_lines {
         writeln!(out).unwrap();
-        let title_tex = lines.iter()
+        let title_tex = lines
+            .iter()
             .map(|l| escape_prose(l))
             .collect::<Vec<_>>()
             .join(" \\\\\n");
         writeln!(out, "\\title{{{}}}", title_tex).unwrap();
     }
     if !authors.is_empty() {
-        let joined = authors.iter()
+        let joined = authors
+            .iter()
             .map(|a| escape_prose(a))
             .collect::<Vec<_>>()
             .join(" \\and ");
@@ -131,7 +136,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
         for kind in &env_kinds {
             let name = env_kind_name(*kind);
             let display = env_kind_display(*kind);
-            writeln!(out, "\\newtheorem{{{}}}{{{}}}",name, display).unwrap();
+            writeln!(out, "\\newtheorem{{{}}}{{{}}}", name, display).unwrap();
         }
     }
 
@@ -154,7 +159,12 @@ pub fn compile_to_tex(doc: &Document) -> String {
     for block in &doc.blocks {
         writeln!(out).unwrap();
         match block {
-            Block::Section { level, title, label, .. } => {
+            Block::Section {
+                level,
+                title,
+                label,
+                ..
+            } => {
                 write_section(&mut out, *level, title, label.as_deref());
             }
             Block::Prose(fragments) => {
@@ -226,13 +236,19 @@ fn write_section(out: &mut String, level: u8, title: &str, label: Option<&str>) 
     };
     writeln!(out, "\\{}{{{}}}", cmd, escape_prose(title)).unwrap();
     // Prefer explicit label, fall back to slug
-    let lbl = label.map(|l| l.to_string()).unwrap_or_else(|| slugify(title));
+    let lbl = label
+        .map(|l| l.to_string())
+        .unwrap_or_else(|| slugify(title));
     if !lbl.is_empty() {
         writeln!(out, "\\label{{{}}}", lbl).unwrap();
     }
 }
 
-fn write_prose(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
+fn write_prose(
+    out: &mut String,
+    fragments: &[ProseFragment],
+    section_titles: &HashMap<String, String>,
+) {
     write_prose_fragments(out, fragments, section_titles);
     writeln!(out).unwrap();
 }
@@ -249,10 +265,18 @@ fn format_date(s: &str) -> String {
             parts[2].parse::<u32>(),
         ) {
             let month_name = match month {
-                1 => "January", 2 => "February", 3 => "March",
-                4 => "April", 5 => "May", 6 => "June",
-                7 => "July", 8 => "August", 9 => "September",
-                10 => "October", 11 => "November", 12 => "December",
+                1 => "January",
+                2 => "February",
+                3 => "March",
+                4 => "April",
+                5 => "May",
+                6 => "June",
+                7 => "July",
+                8 => "August",
+                9 => "September",
+                10 => "October",
+                11 => "November",
+                12 => "December",
                 _ => return s.to_string(),
             };
             return format!("{} {}, {}", month_name, day, year);
@@ -292,7 +316,11 @@ fn escape_prose(text: &str) -> String {
     result
 }
 
-fn write_prose_fragments(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
+fn write_prose_fragments(
+    out: &mut String,
+    fragments: &[ProseFragment],
+    section_titles: &HashMap<String, String>,
+) {
     for fragment in fragments {
         match fragment {
             ProseFragment::Text(text) => out.push_str(&escape_prose(text)),
@@ -409,7 +437,11 @@ fn write_math_block(out: &mut String, mb: &MathBlock) {
     }
 }
 
-fn write_block_quote(out: &mut String, fragments: &[ProseFragment], section_titles: &HashMap<String, String>) {
+fn write_block_quote(
+    out: &mut String,
+    fragments: &[ProseFragment],
+    section_titles: &HashMap<String, String>,
+) {
     writeln!(out, "\\begin{{quote}}").unwrap();
     write_prose_fragments(out, fragments, section_titles);
     writeln!(out).unwrap();
@@ -419,7 +451,12 @@ fn write_block_quote(out: &mut String, fragments: &[ProseFragment], section_titl
 fn write_figure(out: &mut String, fig: &Figure, section_titles: &HashMap<String, String>) {
     writeln!(out, "\\begin{{figure}}[htbp]").unwrap();
     writeln!(out, "\\centering").unwrap();
-    writeln!(out, "\\includegraphics[width={}\\textwidth]{{{}}}", fig.width, fig.path).unwrap();
+    writeln!(
+        out,
+        "\\includegraphics[width={}\\textwidth]{{{}}}",
+        fig.width, fig.path
+    )
+    .unwrap();
     if let Some(cap) = &fig.caption {
         write!(out, "\\caption{{").unwrap();
         write_prose_fragments(out, cap, section_titles);
@@ -434,16 +471,22 @@ fn write_figure(out: &mut String, fig: &Figure, section_titles: &HashMap<String,
 fn write_table(out: &mut String, table: &Table, section_titles: &HashMap<String, String>) {
     writeln!(out, "\\begin{{table}}[htbp]").unwrap();
     writeln!(out, "\\centering").unwrap();
-    let col_spec: String = table.columns.iter().map(|a| match a {
-        ColumnAlign::Left => 'l',
-        ColumnAlign::Center => 'c',
-        ColumnAlign::Right => 'r',
-    }).collect();
+    let col_spec: String = table
+        .columns
+        .iter()
+        .map(|a| match a {
+            ColumnAlign::Left => 'l',
+            ColumnAlign::Center => 'c',
+            ColumnAlign::Right => 'r',
+        })
+        .collect();
     writeln!(out, "\\begin{{tabular}}{{{}}}", col_spec).unwrap();
     writeln!(out, "\\hline").unwrap();
     // Header row
     for (i, cell) in table.header.iter().enumerate() {
-        if i > 0 { write!(out, " & ").unwrap(); }
+        if i > 0 {
+            write!(out, " & ").unwrap();
+        }
         write!(out, "\\textbf{{").unwrap();
         write_prose_fragments(out, cell, section_titles);
         write!(out, "}}").unwrap();
@@ -453,7 +496,9 @@ fn write_table(out: &mut String, table: &Table, section_titles: &HashMap<String,
     // Data rows
     for row in &table.rows {
         for (i, cell) in row.iter().enumerate() {
-            if i > 0 { write!(out, " & ").unwrap(); }
+            if i > 0 {
+                write!(out, " & ").unwrap();
+            }
             write_prose_fragments(out, cell, section_titles);
         }
         writeln!(out, " \\\\").unwrap();
@@ -469,7 +514,11 @@ fn write_table(out: &mut String, table: &Table, section_titles: &HashMap<String,
     writeln!(out, "\\end{{table}}").unwrap();
 }
 
-fn write_environment(out: &mut String, env: &Environment, section_titles: &HashMap<String, String>) {
+fn write_environment(
+    out: &mut String,
+    env: &Environment,
+    section_titles: &HashMap<String, String>,
+) {
     let name = env_kind_name(env.kind);
     if let Some(ref title) = env.title {
         writeln!(out, "\\begin{{{}}}[{}]", name, title).unwrap();
@@ -495,13 +544,22 @@ fn fragments_have_refs(fragments: &[ProseFragment]) -> bool {
 /// Check if a block contains any Ref prose fragments.
 fn block_has_refs(block: &Block) -> bool {
     match block {
-        Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) | Block::Center(fragments) => fragments_have_refs(fragments),
+        Block::Prose(fragments)
+        | Block::BlockQuote(fragments)
+        | Block::Abstract(fragments)
+        | Block::Center(fragments) => fragments_have_refs(fragments),
         Block::List(list) => list_has_refs(list),
         Block::Environment(env) => fragments_have_refs(&env.body),
-        Block::Figure(fig) => fig.caption.as_ref().map_or(false, |c| fragments_have_refs(c)),
+        Block::Figure(fig) => fig
+            .caption
+            .as_ref()
+            .map_or(false, |c| fragments_have_refs(c)),
         Block::Table(table) => {
             table.header.iter().any(|c| fragments_have_refs(c))
-                || table.rows.iter().any(|r| r.iter().any(|c| fragments_have_refs(c)))
+                || table
+                    .rows
+                    .iter()
+                    .any(|r| r.iter().any(|c| fragments_have_refs(c)))
         }
         _ => false,
     }
@@ -581,7 +639,10 @@ fn collect_refs_from_fragments(fragments: &[ProseFragment], refs: &mut Vec<Strin
 
 fn collect_refs_from_block(block: &Block, refs: &mut Vec<String>) {
     match block {
-        Block::Prose(fragments) | Block::BlockQuote(fragments) | Block::Abstract(fragments) | Block::Center(fragments) => {
+        Block::Prose(fragments)
+        | Block::BlockQuote(fragments)
+        | Block::Abstract(fragments)
+        | Block::Center(fragments) => {
             collect_refs_from_fragments(fragments, refs);
         }
         Block::List(list) => collect_refs_from_list(list, refs),
@@ -629,10 +690,7 @@ pub fn find_unresolved_refs_against(label_doc: &Document, ref_doc: &Document) ->
     for block in &ref_doc.blocks {
         collect_refs_from_block(block, &mut refs);
     }
-    let mut unresolved: Vec<String> = refs
-        .into_iter()
-        .filter(|r| !labels.contains(r))
-        .collect();
+    let mut unresolved: Vec<String> = refs.into_iter().filter(|r| !labels.contains(r)).collect();
     unresolved.sort();
     unresolved.dedup();
     unresolved
@@ -859,12 +917,15 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\hyperref[newtons-laws]{Newton's Laws}"));
-        assert!(tex.contains("\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"));
+        assert!(tex.contains(
+            "\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"
+        ));
     }
 
     #[test]
     fn compile_ref_with_custom_display() {
-        let src = "# Earth and the Solar System\n\nref`earth-and-the-solar-system|Hydrogen creation`";
+        let src =
+            "# Earth and the Solar System\n\nref`earth-and-the-solar-system|Hydrogen creation`";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\hyperref[earth-and-the-solar-system]{Hydrogen creation}"));
@@ -881,7 +942,9 @@ mod tests {
     fn compile_no_hyperref_without_refs() {
         let doc = parse_document("# My Section\n\nJust prose.").unwrap();
         let tex = compile_to_tex(&doc);
-        assert!(!tex.contains("\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"));
+        assert!(!tex.contains(
+            "\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"
+        ));
     }
 
     #[test]
@@ -1098,7 +1161,9 @@ mod tests {
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\url{https://example.com}"));
-        assert!(tex.contains("\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"));
+        assert!(tex.contains(
+            "\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{hyperref}"
+        ));
     }
 
     #[test]
@@ -1158,7 +1223,10 @@ mod tests {
         assert_eq!(slugify("Newton's Laws"), "newtons-laws");
         assert_eq!(slugify("E = mc²"), "e-mc");
         assert_eq!(slugify("The 2nd Law"), "the-2nd-law");
-        assert_eq!(slugify("Earth and the Solar System"), "earth-and-the-solar-system");
+        assert_eq!(
+            slugify("Earth and the Solar System"),
+            "earth-and-the-solar-system"
+        );
         assert_eq!(slugify("  Leading spaces  "), "leading-spaces");
     }
 

@@ -104,10 +104,8 @@ fn encode_single_expr<B: Backend>(
         .collect();
     let seq_len = enc_ids_vec.len();
 
-    let enc_ids = Tensor::<B, 2, Int>::from_data(
-        TensorData::new(enc_ids_vec, [1, seq_len]),
-        device,
-    );
+    let enc_ids =
+        Tensor::<B, 2, Int>::from_data(TensorData::new(enc_ids_vec, [1, seq_len]), device);
     let enc_pad_mask = enc_ids.clone().equal_elem(0);
 
     (enc_ids, enc_pad_mask)
@@ -202,10 +200,8 @@ fn policy_rl_step<B: AutodiffBackend, O: Optimizer<PolicyModel<B>, B>>(
         })
         .collect();
 
-    let enc_ids = Tensor::<B, 2, Int>::from_data(
-        TensorData::new(flat, [batch_size, max_len]),
-        device,
-    );
+    let enc_ids =
+        Tensor::<B, 2, Int>::from_data(TensorData::new(flat, [batch_size, max_len]), device);
     let enc_pad_mask = enc_ids.clone().equal_elem(0);
 
     // 3. Forward pass with gradient tracking
@@ -224,17 +220,26 @@ fn policy_rl_step<B: AutodiffBackend, O: Optimizer<PolicyModel<B>, B>>(
         ),
         device,
     );
-    let rule_lp: Tensor<B, 1> = rule_log_sm.clone().gather(1, rule_indices).reshape([batch_size]);
+    let rule_lp: Tensor<B, 1> = rule_log_sm
+        .clone()
+        .gather(1, rule_indices)
+        .reshape([batch_size]);
 
     // Gather position log probs
     let pos_indices = Tensor::<B, 2, Int>::from_data(
         TensorData::new(
-            sampled_positions.iter().map(|&p| p as i64).collect::<Vec<_>>(),
+            sampled_positions
+                .iter()
+                .map(|&p| p as i64)
+                .collect::<Vec<_>>(),
             [batch_size, 1],
         ),
         device,
     );
-    let pos_lp: Tensor<B, 1> = pos_log_sm.clone().gather(1, pos_indices).reshape([batch_size]);
+    let pos_lp: Tensor<B, 1> = pos_log_sm
+        .clone()
+        .gather(1, pos_indices)
+        .reshape([batch_size]);
 
     let total_log_prob = rule_lp + pos_lp; // [B]
 
@@ -264,12 +269,16 @@ fn policy_rl_step<B: AutodiffBackend, O: Optimizer<PolicyModel<B>, B>>(
 
     // 7. Entropy bonus: H = -sum(p * log_p) for each head, averaged over batch
     let rule_probs = burn::tensor::activation::softmax(rule_logits, 1);
-    let rule_entropy: Tensor<B, 1> =
-        (rule_probs * rule_log_sm).sum_dim(1).neg().reshape([batch_size]);
+    let rule_entropy: Tensor<B, 1> = (rule_probs * rule_log_sm)
+        .sum_dim(1)
+        .neg()
+        .reshape([batch_size]);
 
     let pos_probs = burn::tensor::activation::softmax(pos_logits, 1);
-    let pos_entropy: Tensor<B, 1> =
-        (pos_probs * pos_log_sm).sum_dim(1).neg().reshape([batch_size]);
+    let pos_entropy: Tensor<B, 1> = (pos_probs * pos_log_sm)
+        .sum_dim(1)
+        .neg()
+        .reshape([batch_size]);
 
     let mean_entropy = (rule_entropy + pos_entropy).mean();
     let loss = rl_loss - mean_entropy * config.entropy_bonus;
@@ -284,7 +293,14 @@ fn policy_rl_step<B: AutodiffBackend, O: Optimizer<PolicyModel<B>, B>>(
     let new_baseline =
         config.baseline_decay * baseline + (1.0 - config.baseline_decay) * mean_reward;
 
-    (model, optimizer, loss_value, mean_reward, new_baseline, num_valid)
+    (
+        model,
+        optimizer,
+        loss_value,
+        mean_reward,
+        new_baseline,
+        num_valid,
+    )
 }
 
 /// Full REINFORCE training loop for the policy model.
@@ -317,22 +333,24 @@ pub fn policy_rl_train<B: AutodiffBackend>(config: PolicyRLConfig, device: B::De
                 &device,
                 &rl_best_path,
             );
-            let (epoch, bl, best_reward) =
-                if let Ok(data) = std::fs::read_to_string(&rl_meta_path) {
-                    let meta: serde_json::Value = serde_json::from_str(&data).unwrap();
-                    let epoch = meta["epoch"].as_u64().unwrap_or(0) as usize;
-                    let bl = meta.get("baseline").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                    let best_reward = meta
-                        .get("best_eval_reward")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(f64::NEG_INFINITY);
-                    (epoch, bl, best_reward)
-                } else {
-                    (0, 0.0, f64::NEG_INFINITY)
-                };
+            let (epoch, bl, best_reward) = if let Ok(data) = std::fs::read_to_string(&rl_meta_path)
+            {
+                let meta: serde_json::Value = serde_json::from_str(&data).unwrap();
+                let epoch = meta["epoch"].as_u64().unwrap_or(0) as usize;
+                let bl = meta.get("baseline").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let best_reward = meta
+                    .get("best_eval_reward")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(f64::NEG_INFINITY);
+                (epoch, bl, best_reward)
+            } else {
+                (0, 0.0, f64::NEG_INFINITY)
+            };
             println!(
                 "  Resumed at epoch {}, baseline={:.3}, best_reward={:+.3}",
-                epoch + 1, bl, best_reward
+                epoch + 1,
+                bl,
+                best_reward
             );
             (model, epoch + 1, bl, best_reward)
         } else {
@@ -402,7 +420,11 @@ pub fn policy_rl_train<B: AutodiffBackend>(config: PolicyRLConfig, device: B::De
                 let avg_reward = epoch_reward / num_batches as f64;
                 println!(
                     "  epoch {} batch {}: loss={:.4} reward={:+.3} baseline={:.3}",
-                    epoch + 1, num_batches, avg_loss, avg_reward, baseline
+                    epoch + 1,
+                    num_batches,
+                    avg_loss,
+                    avg_reward,
+                    baseline
                 );
             }
         }

@@ -188,7 +188,12 @@ const DERIVED_UNITS: &[DerivedEntry] = &[
     },
     DerivedEntry {
         symbol: "V",
-        dimension: &[(BaseDim::M, 1), (BaseDim::L, 2), (BaseDim::T, -3), (BaseDim::I, -1)],
+        dimension: &[
+            (BaseDim::M, 1),
+            (BaseDim::L, 2),
+            (BaseDim::T, -3),
+            (BaseDim::I, -1),
+        ],
         scale: 1.0,
     },
     DerivedEntry {

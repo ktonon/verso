@@ -101,7 +101,10 @@ impl Rational {
 
     /// Euclidean remainder: result in [0, modulus).
     pub fn rem_euclid(&self, modulus: Rational) -> Rational {
-        assert!(modulus.is_positive(), "rem_euclid: modulus must be positive");
+        assert!(
+            modulus.is_positive(),
+            "rem_euclid: modulus must be positive"
+        );
         let q = (*self / modulus).floor();
         *self - Rational::from_i64(q) * modulus
     }

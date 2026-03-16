@@ -53,7 +53,10 @@ impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConfigError::InputAndPapers => {
-                write!(f, "config must specify either 'input' or 'papers', not both")
+                write!(
+                    f,
+                    "config must specify either 'input' or 'papers', not both"
+                )
             }
             ConfigError::NoInput => {
                 write!(f, "config must specify either 'input' or 'papers'")
@@ -334,10 +337,12 @@ mod tests {
 
     #[test]
     fn parse_single_input() {
-        let cfg = VersoConfig::from_jsonc(r#"{
+        let cfg = VersoConfig::from_jsonc(
+            r#"{
             "outputDirectory": "build",
             "input": "src/paper.verso"
-        }"#)
+        }"#,
+        )
         .unwrap();
         assert_eq!(cfg.output_directory, Some("build".into()));
         assert_eq!(cfg.input, Some("src/paper.verso".into()));
@@ -346,13 +351,15 @@ mod tests {
 
     #[test]
     fn parse_multiple_papers() {
-        let cfg = VersoConfig::from_jsonc(r#"{
+        let cfg = VersoConfig::from_jsonc(
+            r#"{
             "outputDirectory": "out",
             "papers": [
                 { "input": "a.verso", "output": "alpha" },
                 { "input": "b.verso" }
             ]
-        }"#)
+        }"#,
+        )
         .unwrap();
         assert!(cfg.input.is_none());
         let papers = cfg.papers.unwrap();
@@ -522,11 +529,15 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(".verso.jsonc");
-        std::fs::write(&path, r#"{
+        std::fs::write(
+            &path,
+            r#"{
             // comment
             "outputDirectory": "dist",
             "input": "main.verso"
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
         let cfg = load_config(&path).unwrap();
         assert_eq!(cfg.output_directory, Some("dist".into()));
         assert_eq!(cfg.input, Some("main.verso".into()));

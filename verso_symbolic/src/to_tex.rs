@@ -1,4 +1,6 @@
-use crate::expr::{classify_mul, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind, NamedConst};
+use crate::expr::{
+    classify_mul, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind, NamedConst,
+};
 use crate::rational::Rational;
 
 fn frac_pi_to_tex(r: &Rational) -> String {
@@ -394,7 +396,10 @@ mod tests {
     #[test]
     fn to_tex_numeric_mul_with_var() {
         // 2 * 10^10 * c — numeric part uses \times, var uses juxtaposition
-        let e = mul(mul(constant(2.0), pow(constant(10.0), constant(10.0))), scalar("c"));
+        let e = mul(
+            mul(constant(2.0), pow(constant(10.0), constant(10.0))),
+            scalar("c"),
+        );
         assert_eq!(e.to_tex(), "2 \\times 10^{10} c");
     }
 

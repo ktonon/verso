@@ -122,11 +122,7 @@ pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
 
 /// Numerically spot-check that two expressions are equal at random points.
 /// Returns Ok(()) if all samples agree, Err with a counterexample if they disagree.
-pub fn spot_check(
-    lhs: &Expr,
-    rhs: &Expr,
-    num_samples: usize,
-) -> Result<(), SpotCheckFailure> {
+pub fn spot_check(lhs: &Expr, rhs: &Expr, num_samples: usize) -> Result<(), SpotCheckFailure> {
     let mut all_vars = free_vars(lhs);
     all_vars.extend(free_vars(rhs));
     let var_names: Vec<String> = all_vars.into_iter().collect();
@@ -196,7 +192,10 @@ mod tests {
     fn sign_positive() {
         assert_eq!(
             eval_f64(
-                &Expr::new(ExprKind::Fn(FnKind::Sign, Box::new(Expr::new(ExprKind::Rational(5.into()))))),
+                &Expr::new(ExprKind::Fn(
+                    FnKind::Sign,
+                    Box::new(Expr::new(ExprKind::Rational(5.into())))
+                )),
                 &HashMap::new()
             ),
             Some(1.0)
@@ -207,7 +206,10 @@ mod tests {
     fn sign_negative() {
         assert_eq!(
             eval_f64(
-                &Expr::new(ExprKind::Fn(FnKind::Sign, Box::new(Expr::new(ExprKind::Rational((-3).into()))))),
+                &Expr::new(ExprKind::Fn(
+                    FnKind::Sign,
+                    Box::new(Expr::new(ExprKind::Rational((-3).into())))
+                )),
                 &HashMap::new()
             ),
             Some(-1.0)
@@ -218,7 +220,10 @@ mod tests {
     fn sign_zero() {
         assert_eq!(
             eval_f64(
-                &Expr::new(ExprKind::Fn(FnKind::Sign, Box::new(Expr::new(ExprKind::Rational(0.into()))))),
+                &Expr::new(ExprKind::Fn(
+                    FnKind::Sign,
+                    Box::new(Expr::new(ExprKind::Rational(0.into())))
+                )),
                 &HashMap::new()
             ),
             Some(0.0)
@@ -259,7 +264,10 @@ mod tests {
             scale: 1000.0,
             display: "km".to_string(),
         };
-        let expr = Expr::new(ExprKind::Quantity(Box::new(Expr::new(ExprKind::Rational(3.into()))), unit));
+        let expr = Expr::new(ExprKind::Quantity(
+            Box::new(Expr::new(ExprKind::Rational(3.into()))),
+            unit,
+        ));
         assert_eq!(eval_f64(&expr, &HashMap::new()), Some(3000.0));
     }
 

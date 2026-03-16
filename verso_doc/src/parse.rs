@@ -1,9 +1,9 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, ConstDecl, FuncDecl, VarDecl, Document, EnvKind, Environment, Figure, List, ListItem,
-    MathBlock, Proof, ProofStep, ProseFragment, Span, Table,
+    Block, Claim, ColumnAlign, ConstDecl, Document, EnvKind, Environment, Figure, FuncDecl, List,
+    ListItem, MathBlock, Proof, ProofStep, ProseFragment, Span, Table, VarDecl,
 };
-use verso_symbolic::{parse_expr, Dimension};
 use std::fmt;
+use verso_symbolic::{parse_expr, Dimension};
 
 #[derive(Debug)]
 pub struct ParseDocError {
@@ -66,7 +66,9 @@ pub fn resolve_includes(
 }
 
 /// Collect all file dependencies for a `.verso` file (the file itself + all includes, recursively).
-pub fn collect_dependencies(path: &std::path::Path) -> Result<Vec<std::path::PathBuf>, ParseDocError> {
+pub fn collect_dependencies(
+    path: &std::path::Path,
+) -> Result<Vec<std::path::PathBuf>, ParseDocError> {
     let src = std::fs::read_to_string(path).map_err(|e| ParseDocError {
         line: 0,
         message: format!("cannot read '{}': {}", path.display(), e),
@@ -236,7 +238,9 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 if let Some(val) = kv.strip_prefix("caption:") {
                     let cap_line = i + 1;
                     caption = Some(parse_prose_fragments(val.trim()).map_err(|mut e| {
-                        if e.line == 0 { e.line = cap_line; }
+                        if e.line == 0 {
+                            e.line = cap_line;
+                        }
                         e
                     })?);
                 } else if let Some(val) = kv.strip_prefix("label:") {
@@ -262,7 +266,11 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         // Table block
         if trimmed.starts_with(":table") {
             let title_text = trimmed[":table".len()..].trim();
-            let title = if title_text.is_empty() { None } else { Some(title_text.to_string()) };
+            let title = if title_text.is_empty() {
+                None
+            } else {
+                Some(title_text.to_string())
+            };
             let table_line = i + 1;
             i += 1;
 
@@ -293,25 +301,33 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
 
             // Parse separator row for alignment
             let sep = &body_lines[1];
-            let sep_cells: Vec<&str> = sep.split('|')
+            let sep_cells: Vec<&str> = sep
+                .split('|')
                 .map(|s| s.trim())
                 .filter(|s| !s.is_empty())
                 .collect();
-            if sep_cells.len() != num_cols || !sep_cells.iter().all(|s| s.chars().all(|c| c == '-' || c == ':')) {
+            if sep_cells.len() != num_cols
+                || !sep_cells
+                    .iter()
+                    .all(|s| s.chars().all(|c| c == '-' || c == ':'))
+            {
                 return Err(ParseDocError {
                     line: table_line + 1,
                     message: ":table second row must be a separator (e.g. |---|---|)".into(),
                 });
             }
-            let columns: Vec<ColumnAlign> = sep_cells.iter().map(|s| {
-                let left = s.starts_with(':');
-                let right = s.ends_with(':');
-                match (left, right) {
-                    (true, true) => ColumnAlign::Center,
-                    (false, true) => ColumnAlign::Right,
-                    _ => ColumnAlign::Left,
-                }
-            }).collect();
+            let columns: Vec<ColumnAlign> = sep_cells
+                .iter()
+                .map(|s| {
+                    let left = s.starts_with(':');
+                    let right = s.ends_with(':');
+                    match (left, right) {
+                        (true, true) => ColumnAlign::Center,
+                        (false, true) => ColumnAlign::Right,
+                        _ => ColumnAlign::Left,
+                    }
+                })
+                .collect();
 
             // Parse data rows
             let mut rows: Vec<Vec<Vec<ProseFragment>>> = Vec::new();
@@ -389,7 +405,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
 
                 // Strip leading `=` from non-first steps
                 let step_text = if !steps.is_empty() {
-                    step_text.strip_prefix('=').map(|s| s.trim_start()).unwrap_or(step_text)
+                    step_text
+                        .strip_prefix('=')
+                        .map(|s| s.trim_start())
+                        .unwrap_or(step_text)
                 } else {
                     step_text
                 };
@@ -420,8 +439,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             // Parse: varname [dim spec]
             let bracket_pos = rest.find('[').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: ":var requires a variable name and dimension, e.g. :var x [L T^-1]"
-                    .into(),
+                message: ":var requires a variable name and dimension, e.g. :var x [L T^-1]".into(),
             })?;
             let var_name = rest[..bracket_pos].trim().to_string();
             if var_name.is_empty() {
@@ -431,11 +449,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 });
             }
             let dim_str = rest[bracket_pos..].trim();
-            let dimension =
-                Dimension::parse(dim_str).map_err(|e| ParseDocError {
-                    line: i + 1,
-                    message: format!(":var '{}': {}", var_name, e),
-                })?;
+            let dimension = Dimension::parse(dim_str).map_err(|e| ParseDocError {
+                line: i + 1,
+                message: format!(":var '{}': {}", var_name, e),
+            })?;
             blocks.push(Block::Var(VarDecl {
                 var_name,
                 dimension,
@@ -505,10 +522,13 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 });
             }
             let after_rparen = rest[rparen + 1..].trim();
-            let body_str = after_rparen.strip_prefix('=').ok_or_else(|| ParseDocError {
-                line: i + 1,
-                message: ":func requires = after parameters".into(),
-            })?.trim();
+            let body_str = after_rparen
+                .strip_prefix('=')
+                .ok_or_else(|| ParseDocError {
+                    line: i + 1,
+                    message: ":func requires = after parameters".into(),
+                })?
+                .trim();
             let body = parse_expr(body_str).map_err(|e| ParseDocError {
                 line: i + 1,
                 message: format!(":func '{}': {:?}", name, e),
@@ -573,7 +593,9 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 Vec::new()
             } else {
                 parse_prose_fragments(&quote_text).map_err(|mut e| {
-                    if e.line == 0 { e.line = quote_line; }
+                    if e.line == 0 {
+                        e.line = quote_line;
+                    }
                     e
                 })?
             };
@@ -858,7 +880,9 @@ fn parse_list(lines: &[&str], i: &mut usize) -> Result<List, ParseDocError> {
             let content = strip_marker(trimmed);
             let item_line = *i + 1;
             let fragments = parse_prose_fragments(content).map_err(|mut e| {
-                if e.line == 0 { e.line = item_line; }
+                if e.line == 0 {
+                    e.line = item_line;
+                }
                 e
             })?;
             items.push(ListItem {
@@ -970,7 +994,8 @@ fn parse_environment(
 
 /// Parse `lhs = rhs` from a claim body string.
 fn parse_table_row(line: &str) -> Result<Vec<Vec<ProseFragment>>, ParseDocError> {
-    let cells: Vec<&str> = line.split('|')
+    let cells: Vec<&str> = line
+        .split('|')
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
@@ -1029,9 +1054,21 @@ fn parse_proof_step(text: &str, line: usize) -> Result<ProofStep, ParseDocError>
 /// An inline match found in prose text.
 enum InlineMatch<'a> {
     Tag(TagMatch<'a>),
-    Bold { start: usize, end: usize, content: &'a str },
-    Italic { start: usize, end: usize, content: &'a str },
-    Footnote { start: usize, end: usize, content: &'a str },
+    Bold {
+        start: usize,
+        end: usize,
+        content: &'a str,
+    },
+    Italic {
+        start: usize,
+        end: usize,
+        content: &'a str,
+    },
+    Footnote {
+        start: usize,
+        end: usize,
+        content: &'a str,
+    },
 }
 
 impl InlineMatch<'_> {
@@ -1052,7 +1089,11 @@ fn find_emphasis(text: &str) -> Option<InlineMatch<'_>> {
     let italic = find_italic(text);
     match (bold, italic) {
         (Some(b), Some(i)) => {
-            if i.start() < b.start() { Some(i) } else { Some(b) }
+            if i.start() < b.start() {
+                Some(i)
+            } else {
+                Some(b)
+            }
         }
         (Some(b), None) => Some(b),
         (None, i) => i,
@@ -1168,10 +1209,7 @@ fn find_next_inline(text: &str) -> Option<InlineMatch<'_>> {
     let emph = find_emphasis(text);
     let foot = find_footnote(text);
 
-    let candidates: Vec<InlineMatch<'_>> = [tag, emph, foot]
-        .into_iter()
-        .flatten()
-        .collect();
+    let candidates: Vec<InlineMatch<'_>> = [tag, emph, foot].into_iter().flatten().collect();
 
     candidates.into_iter().min_by_key(|c| c.start())
 }
@@ -1196,10 +1234,7 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                             let expr =
                                 parse_expr(tag_match.content).map_err(|e| ParseDocError {
                                     line: 0,
-                                    message: format!(
-                                        "inline math`{}`: {:?}",
-                                        tag_match.content, e
-                                    ),
+                                    message: format!("inline math`{}`: {:?}", tag_match.content, e),
                                 })?;
                             fragments.push(ProseFragment::Math(expr));
                         }
@@ -1207,8 +1242,7 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                             fragments.push(ProseFragment::Tex(tag_match.content.to_string()));
                         }
                         "claim" => {
-                            fragments
-                                .push(ProseFragment::ClaimRef(tag_match.content.to_string()));
+                            fragments.push(ProseFragment::ClaimRef(tag_match.content.to_string()));
                         }
                         "cite" => {
                             let keys: Vec<String> = tag_match
@@ -1219,27 +1253,25 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                             fragments.push(ProseFragment::Cite(keys));
                         }
                         "ref" => {
-                            let (label, display) =
-                                if let Some(pipe) = tag_match.content.find('|') {
-                                    (
-                                        tag_match.content[..pipe].to_string(),
-                                        Some(tag_match.content[pipe + 1..].to_string()),
-                                    )
-                                } else {
-                                    (tag_match.content.to_string(), None)
-                                };
+                            let (label, display) = if let Some(pipe) = tag_match.content.find('|') {
+                                (
+                                    tag_match.content[..pipe].to_string(),
+                                    Some(tag_match.content[pipe + 1..].to_string()),
+                                )
+                            } else {
+                                (tag_match.content.to_string(), None)
+                            };
                             fragments.push(ProseFragment::Ref { label, display });
                         }
                         "url" => {
-                            let (url, display) =
-                                if let Some(pipe) = tag_match.content.find('|') {
-                                    (
-                                        tag_match.content[..pipe].to_string(),
-                                        Some(tag_match.content[pipe + 1..].to_string()),
-                                    )
-                                } else {
-                                    (tag_match.content.to_string(), None)
-                                };
+                            let (url, display) = if let Some(pipe) = tag_match.content.find('|') {
+                                (
+                                    tag_match.content[..pipe].to_string(),
+                                    Some(tag_match.content[pipe + 1..].to_string()),
+                                )
+                            } else {
+                                (tag_match.content.to_string(), None)
+                            };
                             fragments.push(ProseFragment::Url { url, display });
                         }
                         _ => {
@@ -1441,8 +1473,7 @@ mod tests {
 
     #[test]
     fn parse_prose_with_tex_and_claim_ref() {
-        let doc =
-            parse_document("See tex`\\vec{v}` and claim`pythagorean` for details.").unwrap();
+        let doc = parse_document("See tex`\\vec{v}` and claim`pythagorean` for details.").unwrap();
         match &doc.blocks[0] {
             Block::Prose(fragments) => {
                 assert_eq!(fragments.len(), 5);
@@ -1561,7 +1592,11 @@ mod tests {
                 assert_eq!(c.name, "c");
                 // 3*10^8 parses as implicit multiplication: "310^8"
                 let formatted = format!("{}", c.value);
-                assert!(formatted.contains("10"), "expected numeric expr, got: {}", formatted);
+                assert!(
+                    formatted.contains("10"),
+                    "expected numeric expr, got: {}",
+                    formatted
+                );
             }
             _ => panic!("expected Const"),
         }
@@ -1688,13 +1723,26 @@ More prose here.
     #[test]
     fn parse_italic_before_bold() {
         // Italic *seems* appears before bold **energy density** — both must render
-        let doc = parse_document("gravity *seems* negligible but **energy density** matters").unwrap();
+        let doc =
+            parse_document("gravity *seems* negligible but **energy density** matters").unwrap();
         match &doc.blocks[0] {
             Block::Prose(fragments) => {
-                let has_italic = fragments.iter().any(|f| matches!(f, ProseFragment::Italic(_)));
-                let has_bold = fragments.iter().any(|f| matches!(f, ProseFragment::Bold(_)));
-                assert!(has_italic, "expected italic *seems*, fragments: {:?}", fragments);
-                assert!(has_bold, "expected bold **energy density**, fragments: {:?}", fragments);
+                let has_italic = fragments
+                    .iter()
+                    .any(|f| matches!(f, ProseFragment::Italic(_)));
+                let has_bold = fragments
+                    .iter()
+                    .any(|f| matches!(f, ProseFragment::Bold(_)));
+                assert!(
+                    has_italic,
+                    "expected italic *seems*, fragments: {:?}",
+                    fragments
+                );
+                assert!(
+                    has_bold,
+                    "expected bold **energy density**, fragments: {:?}",
+                    fragments
+                );
             }
             _ => panic!("expected Prose"),
         }
@@ -1768,9 +1816,15 @@ More prose here.
             Block::List(list) => {
                 assert!(!list.ordered);
                 assert_eq!(list.items.len(), 3);
-                assert!(matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "First"));
-                assert!(matches!(&list.items[1].fragments[0], ProseFragment::Text(t) if t == "Second"));
-                assert!(matches!(&list.items[2].fragments[0], ProseFragment::Text(t) if t == "Third"));
+                assert!(
+                    matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "First")
+                );
+                assert!(
+                    matches!(&list.items[1].fragments[0], ProseFragment::Text(t) if t == "Second")
+                );
+                assert!(
+                    matches!(&list.items[2].fragments[0], ProseFragment::Text(t) if t == "Third")
+                );
             }
             other => panic!("expected List, got {:?}", other),
         }
@@ -1785,7 +1839,9 @@ More prose here.
             Block::List(list) => {
                 assert!(list.ordered);
                 assert_eq!(list.items.len(), 3);
-                assert!(matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Alpha"));
+                assert!(
+                    matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Alpha")
+                );
             }
             other => panic!("expected List, got {:?}", other),
         }
@@ -1798,11 +1854,20 @@ More prose here.
         match &doc.blocks[0] {
             Block::List(list) => {
                 assert_eq!(list.items.len(), 2);
-                assert!(matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Outer"));
-                let children = list.items[0].children.as_ref().expect("expected nested list");
+                assert!(
+                    matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Outer")
+                );
+                let children = list.items[0]
+                    .children
+                    .as_ref()
+                    .expect("expected nested list");
                 assert_eq!(children.items.len(), 2);
-                assert!(matches!(&children.items[0].fragments[0], ProseFragment::Text(t) if t == "Inner A"));
-                assert!(matches!(&list.items[1].fragments[0], ProseFragment::Text(t) if t == "Back"));
+                assert!(
+                    matches!(&children.items[0].fragments[0], ProseFragment::Text(t) if t == "Inner A")
+                );
+                assert!(
+                    matches!(&list.items[1].fragments[0], ProseFragment::Text(t) if t == "Back")
+                );
             }
             other => panic!("expected List, got {:?}", other),
         }
@@ -1816,8 +1881,15 @@ More prose here.
             Block::List(list) => {
                 assert_eq!(list.items.len(), 2);
                 assert_eq!(list.items[0].fragments.len(), 2);
-                assert!(matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Energy: "), "got {:?}", list.items[0].fragments[0]);
-                assert!(matches!(&list.items[0].fragments[1], ProseFragment::Math(_)));
+                assert!(
+                    matches!(&list.items[0].fragments[0], ProseFragment::Text(t) if t == "Energy: "),
+                    "got {:?}",
+                    list.items[0].fragments[0]
+                );
+                assert!(matches!(
+                    &list.items[0].fragments[1],
+                    ProseFragment::Math(_)
+                ));
             }
             other => panic!("expected List, got {:?}", other),
         }
@@ -1916,14 +1988,12 @@ More prose here.
     fn parse_cite_multiple_keys() {
         let doc = parse_document("See cite`einstein1905,dirac1928` here.").unwrap();
         match &doc.blocks[0] {
-            Block::Prose(fragments) => {
-                match &fragments[1] {
-                    ProseFragment::Cite(keys) => {
-                        assert_eq!(keys, &["einstein1905", "dirac1928"]);
-                    }
-                    other => panic!("expected Cite, got {:?}", other),
+            Block::Prose(fragments) => match &fragments[1] {
+                ProseFragment::Cite(keys) => {
+                    assert_eq!(keys, &["einstein1905", "dirac1928"]);
                 }
-            }
+                other => panic!("expected Cite, got {:?}", other),
+            },
             _ => panic!("expected Prose"),
         }
     }
@@ -1968,8 +2038,11 @@ More prose here.
         match &doc.blocks[0] {
             Block::Environment(env) => {
                 assert!(
-                    env.body.iter().any(|f| matches!(f, ProseFragment::ParBreak)),
-                    "expected ParBreak in theorem body: {:?}", env.body
+                    env.body
+                        .iter()
+                        .any(|f| matches!(f, ProseFragment::ParBreak)),
+                    "expected ParBreak in theorem body: {:?}",
+                    env.body
                 );
             }
             other => panic!("expected Environment, got {:?}", other),
@@ -1984,7 +2057,10 @@ More prose here.
             Block::Environment(env) => {
                 assert_eq!(env.kind, EnvKind::Definition);
                 assert!(env.title.is_none());
-                assert_eq!(prose_to_string(&env.body), "A group is a set with a binary operation.");
+                assert_eq!(
+                    prose_to_string(&env.body),
+                    "A group is a set with a binary operation."
+                );
             }
             other => panic!("expected Environment, got {:?}", other),
         }
@@ -2117,8 +2193,12 @@ More prose here.
         match &doc.blocks[0] {
             Block::BlockQuote(fragments) => {
                 assert!(fragments.len() >= 3);
-                assert!(fragments.iter().any(|f| matches!(f, ProseFragment::Bold(_))));
-                assert!(fragments.iter().any(|f| matches!(f, ProseFragment::Math(_))));
+                assert!(fragments
+                    .iter()
+                    .any(|f| matches!(f, ProseFragment::Bold(_))));
+                assert!(fragments
+                    .iter()
+                    .any(|f| matches!(f, ProseFragment::Math(_))));
             }
             other => panic!("expected BlockQuote, got {:?}", other),
         }
@@ -2140,7 +2220,9 @@ More prose here.
         match &doc.blocks[0] {
             Block::Prose(fragments) => {
                 assert_eq!(fragments.len(), 3);
-                assert!(matches!(&fragments[0], ProseFragment::Text(t) if t == "This is surprising"));
+                assert!(
+                    matches!(&fragments[0], ProseFragment::Text(t) if t == "This is surprising")
+                );
                 match &fragments[1] {
                     ProseFragment::Footnote(inner) => {
                         assert_eq!(prose_to_string(inner), "First noted by Euler.");
@@ -2158,14 +2240,12 @@ More prose here.
         let src = "Result^[See math`x^2` for details.] here.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
-            Block::Prose(fragments) => {
-                match &fragments[1] {
-                    ProseFragment::Footnote(inner) => {
-                        assert!(inner.iter().any(|f| matches!(f, ProseFragment::Math(_))));
-                    }
-                    other => panic!("expected Footnote, got {:?}", other),
+            Block::Prose(fragments) => match &fragments[1] {
+                ProseFragment::Footnote(inner) => {
+                    assert!(inner.iter().any(|f| matches!(f, ProseFragment::Math(_))));
                 }
-            }
+                other => panic!("expected Footnote, got {:?}", other),
+            },
             _ => panic!("expected Prose"),
         }
     }
@@ -2203,8 +2283,7 @@ More prose here.
 
     #[test]
     fn parse_ref_with_display_text() {
-        let doc =
-            parse_document("ref`earth-and-the-solar-system|Hydrogen creation`").unwrap();
+        let doc = parse_document("ref`earth-and-the-solar-system|Hydrogen creation`").unwrap();
         match &doc.blocks[0] {
             Block::Prose(fragments) => {
                 assert_eq!(fragments.len(), 1);
@@ -2299,8 +2378,11 @@ More prose here.
         match &doc.blocks[0] {
             Block::Abstract(fragments) => {
                 assert!(
-                    fragments.iter().any(|f| matches!(f, ProseFragment::ParBreak)),
-                    "expected ParBreak in abstract fragments: {:?}", fragments
+                    fragments
+                        .iter()
+                        .any(|f| matches!(f, ProseFragment::ParBreak)),
+                    "expected ParBreak in abstract fragments: {:?}",
+                    fragments
                 );
             }
             other => panic!("expected Abstract, got {:?}", other),
@@ -2322,7 +2404,9 @@ More prose here.
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Abstract(fragments) => {
-                assert!(fragments.iter().any(|f| matches!(f, ProseFragment::Math(_))));
+                assert!(fragments
+                    .iter()
+                    .any(|f| matches!(f, ProseFragment::Math(_))));
             }
             other => panic!("expected Abstract, got {:?}", other),
         }
@@ -2336,7 +2420,9 @@ More prose here.
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Center(fragments) => {
-                assert!(fragments.iter().any(|f| matches!(f, ProseFragment::Text(_))));
+                assert!(fragments
+                    .iter()
+                    .any(|f| matches!(f, ProseFragment::Text(_))));
             }
             other => panic!("expected Center, got {:?}", other),
         }
@@ -2350,8 +2436,11 @@ More prose here.
         match &doc.blocks[0] {
             Block::Center(fragments) => {
                 assert!(
-                    fragments.iter().any(|f| matches!(f, ProseFragment::ParBreak)),
-                    "expected ParBreak in center fragments: {:?}", fragments
+                    fragments
+                        .iter()
+                        .any(|f| matches!(f, ProseFragment::ParBreak)),
+                    "expected ParBreak in center fragments: {:?}",
+                    fragments
                 );
             }
             other => panic!("expected Center, got {:?}", other),
@@ -2382,7 +2471,10 @@ More prose here.
         match &doc.blocks[0] {
             Block::Figure(fig) => {
                 assert_eq!(fig.path, "plots/energy.pdf");
-                assert_eq!(prose_to_string(fig.caption.as_ref().unwrap()), "Energy levels.");
+                assert_eq!(
+                    prose_to_string(fig.caption.as_ref().unwrap()),
+                    "Energy levels."
+                );
                 assert_eq!(fig.label.as_deref(), Some("fig-energy"));
                 assert!((fig.width - 0.8).abs() < 1e-6);
             }
@@ -2437,15 +2529,13 @@ More prose here.
     fn parse_url_plain() {
         let doc = parse_document("See url`https://example.com` for info.").unwrap();
         match &doc.blocks[0] {
-            Block::Prose(fragments) => {
-                match &fragments[1] {
-                    ProseFragment::Url { url, display } => {
-                        assert_eq!(url, "https://example.com");
-                        assert!(display.is_none());
-                    }
-                    other => panic!("expected Url, got {:?}", other),
+            Block::Prose(fragments) => match &fragments[1] {
+                ProseFragment::Url { url, display } => {
+                    assert_eq!(url, "https://example.com");
+                    assert!(display.is_none());
                 }
-            }
+                other => panic!("expected Url, got {:?}", other),
+            },
             _ => panic!("expected Prose"),
         }
     }
@@ -2454,15 +2544,13 @@ More prose here.
     fn parse_url_with_display() {
         let doc = parse_document("Click url`https://example.com|here`.").unwrap();
         match &doc.blocks[0] {
-            Block::Prose(fragments) => {
-                match &fragments[1] {
-                    ProseFragment::Url { url, display } => {
-                        assert_eq!(url, "https://example.com");
-                        assert_eq!(display.as_deref(), Some("here"));
-                    }
-                    other => panic!("expected Url, got {:?}", other),
+            Block::Prose(fragments) => match &fragments[1] {
+                ProseFragment::Url { url, display } => {
+                    assert_eq!(url, "https://example.com");
+                    assert_eq!(display.as_deref(), Some("here"));
                 }
-            }
+                other => panic!("expected Url, got {:?}", other),
+            },
             _ => panic!("expected Prose"),
         }
     }
@@ -2482,7 +2570,11 @@ More prose here.
     fn parse_include_basic() {
         let dir = std::env::temp_dir().join("erd_test_include_basic");
         let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("main.verso"), "# Main\n\n:include sub.verso\n\nEnd.").unwrap();
+        std::fs::write(
+            dir.join("main.verso"),
+            "# Main\n\n:include sub.verso\n\nEnd.",
+        )
+        .unwrap();
         std::fs::write(dir.join("sub.verso"), "Sub content.").unwrap();
         let doc = parse_document_from_file(&dir.join("main.verso")).unwrap();
         // Should have: Section, Prose("Sub content."), Prose("End.")
@@ -2580,7 +2672,9 @@ More prose here.
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Table(table) => {
-                assert!(table.rows[0][0].iter().any(|f| matches!(f, ProseFragment::Math(_))));
+                assert!(table.rows[0][0]
+                    .iter()
+                    .any(|f| matches!(f, ProseFragment::Math(_))));
             }
             other => panic!("expected Table, got {:?}", other),
         }
@@ -2669,18 +2763,16 @@ More prose here.
         // math`3*10^8 [m/s]` should parse as a Quantity
         let doc = parse_document("The speed of light is math`3*10^8 [m/s]`.").unwrap();
         match &doc.blocks[0] {
-            Block::Prose(fragments) => {
-                match &fragments[1] {
-                    ProseFragment::Math(expr) => {
-                        assert!(
-                            matches!(&expr.kind, verso_symbolic::ExprKind::Quantity(_, _)),
-                            "expected Quantity, got {:?}",
-                            expr
-                        );
-                    }
-                    other => panic!("expected Math, got {:?}", other),
+            Block::Prose(fragments) => match &fragments[1] {
+                ProseFragment::Math(expr) => {
+                    assert!(
+                        matches!(&expr.kind, verso_symbolic::ExprKind::Quantity(_, _)),
+                        "expected Quantity, got {:?}",
+                        expr
+                    );
                 }
-            }
+                other => panic!("expected Math, got {:?}", other),
+            },
             _ => panic!("expected Prose"),
         }
     }
@@ -2701,9 +2793,14 @@ More prose here.
     #[test]
     fn parse_inline_math_error_reports_correct_line() {
         // Error in inline math on line 3 of a multi-line prose block
-        let src = "First line of prose.\nSecond line continues.\nThird has math`3000 [kg/zm^3]` here.";
+        let src =
+            "First line of prose.\nSecond line continues.\nThird has math`3000 [kg/zm^3]` here.";
         let err = parse_document(src).unwrap_err();
-        assert_eq!(err.line, 3, "error should point to line 3, got {}", err.line);
+        assert_eq!(
+            err.line, 3,
+            "error should point to line 3, got {}",
+            err.line
+        );
     }
 
     #[test]
@@ -2819,8 +2916,7 @@ More prose here.
 
     #[test]
     fn parse_url_with_fragment() {
-        let doc =
-            parse_document("See url`https://example.com/page#section` for details.").unwrap();
+        let doc = parse_document("See url`https://example.com/page#section` for details.").unwrap();
         match &doc.blocks[0] {
             Block::Prose(fragments) => match &fragments[1] {
                 ProseFragment::Url { url, display } => {
@@ -2851,8 +2947,8 @@ More prose here.
     fn parse_include_empty_path_error() {
         // resolve_includes handles :include, not parse_document.
         // Test via resolve_includes directly.
-        let err = resolve_includes(":include", std::path::Path::new("."), &mut Vec::new())
-            .unwrap_err();
+        let err =
+            resolve_includes(":include", std::path::Path::new("."), &mut Vec::new()).unwrap_err();
         assert!(err.message.contains("requires a file path"));
     }
 
@@ -2870,5 +2966,4 @@ More prose here.
         let err = parse_document(":func f() = x").unwrap_err();
         assert!(err.message.contains("requires at least one parameter"));
     }
-
 }
