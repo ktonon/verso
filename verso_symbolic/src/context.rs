@@ -136,15 +136,18 @@ impl Context {
     }
 
     /// Check dimensional consistency of a single expression.
-    /// Constants and functions are expanded before checking so that
-    /// declared constants don't appear as undeclared variables.
-    /// Returns None if no dimension declarations exist.
+    /// Constants and functions are expanded before checking.
+    /// Always attempts inference so that explicit units and constants with
+    /// units are checked even without :var declarations. Suppresses
+    /// UndeclaredVar errors when no :var declarations exist (the user
+    /// hasn't opted into full dimensional analysis).
     pub fn check_expr_dim(&self, expr: &Expr) -> Option<Result<Dimension, DimError>> {
-        if !self.has_dims() {
-            return None;
-        }
         let expr = self.apply_consts(expr);
-        Some(infer_dim(&expr, &self.dims))
+        match infer_dim(&expr, &self.dims) {
+            Ok(d) => Some(Ok(d)),
+            Err(DimError::UndeclaredVar(_)) if !self.has_dims() => None,
+            Err(e) => Some(Err(e)),
+        }
     }
 
     /// Infer the type (dimension) of an expression for display purposes.
@@ -720,5 +723,34 @@ mod tests {
         let ctx = Context::new();
         let expr = parse_expr("x + 3").unwrap();
         assert_eq!(ctx.infer_type(&expr), None);
+    }
+
+    #[test]
+    fn check_expr_dim_const_with_units_no_vars() {
+        // No :var declarations, but const has units — should still catch mismatch
+        let mut ctx = Context::new();
+        ctx.declare_const("c", parse_expr("3 [m/s]").unwrap());
+        let expr = parse_expr("c + 1").unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some(), "should check dims even without :var");
+        assert!(result.unwrap().is_err(), "adding [m/s] to dimensionless should fail");
+    }
+
+    #[test]
+    fn check_expr_dim_pure_units_no_vars() {
+        // No declarations at all — explicit units should still be checked
+        let ctx = Context::new();
+        let expr = parse_expr("3 [m] + 4 [s]").unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some(), "should check dims for explicit units");
+        assert!(result.unwrap().is_err(), "adding [m] to [s] should fail");
+    }
+
+    #[test]
+    fn check_expr_dim_undeclared_var_no_vars_is_none() {
+        // No declarations, bare variable — should not produce noise
+        let ctx = Context::new();
+        let expr = parse_expr("x + 3").unwrap();
+        assert!(ctx.check_expr_dim(&expr).is_none());
     }
 }

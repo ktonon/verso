@@ -127,22 +127,20 @@ pub fn run() -> Result<(), ReadlineError> {
                     match (parse_expr(lhs_str), parse_expr(rhs_str)) {
                         (Ok(lhs), Ok(rhs)) => {
                             // Dimensional check on equality
-                            if ctx.has_dims() {
-                                match ctx.check_dims(&lhs, &rhs) {
-                                    DimOutcome::Pass => {}
-                                    DimOutcome::Skipped { .. } => {}
-                                    DimOutcome::LhsRhsMismatch { lhs: dl, rhs: dr } => {
-                                        println!(
-                                            "\x1b[31mdim error: lhs is {}, rhs is {}\x1b[0m",
-                                            dl, dr
-                                        );
-                                    }
-                                    DimOutcome::ExprError { side, error } => {
-                                        println!(
-                                            "\x1b[31mdim error in {}: {}\x1b[0m",
-                                            side, error
-                                        );
-                                    }
+                            match ctx.check_dims(&lhs, &rhs) {
+                                DimOutcome::Pass => {}
+                                DimOutcome::Skipped { .. } => {}
+                                DimOutcome::LhsRhsMismatch { lhs: dl, rhs: dr } => {
+                                    println!(
+                                        "\x1b[31mdim error: lhs is {}, rhs is {}\x1b[0m",
+                                        dl, dr
+                                    );
+                                }
+                                DimOutcome::ExprError { side, error } => {
+                                    println!(
+                                        "\x1b[31mdim error in {}: {}\x1b[0m",
+                                        side, error
+                                    );
                                 }
                             }
                             let result = ctx.check_equal(&lhs, &rhs);
