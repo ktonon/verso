@@ -139,13 +139,17 @@ impl Context {
     /// Constants and functions are expanded before checking.
     /// Always attempts inference so that explicit units and constants with
     /// units are checked even without :var declarations. Suppresses
-    /// UndeclaredVar errors when no :var declarations exist (the user
-    /// hasn't opted into full dimensional analysis).
+    /// UndeclaredVar errors only when the expression has no type information
+    /// at all (no units, no inline dimensions, no :var declarations).
     pub fn check_expr_dim(&self, expr: &Expr) -> Option<Result<Dimension, DimError>> {
         let expr = self.apply_consts(expr);
         match infer_dim(&expr, &self.dims) {
             Ok(d) => Some(Ok(d)),
-            Err(DimError::UndeclaredVar(_)) if !self.has_dims() => None,
+            Err(DimError::UndeclaredVar(_))
+                if !self.has_dims() && !has_type_info(&expr) =>
+            {
+                None
+            }
             Err(e) => Some(Err(e)),
         }
     }
@@ -225,7 +229,7 @@ pub enum DimError {
 impl std::fmt::Display for DimError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DimError::UndeclaredVar(v) => write!(f, "variable '{}' has no :var declaration", v),
+            DimError::UndeclaredVar(v) => write!(f, "'{}' is typeless", v),
             DimError::Mismatch {
                 expected,
                 got,
@@ -282,8 +286,36 @@ pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                 .ok_or_else(|| DimError::UndeclaredVar(name.clone()))
         }
         Expr::Add(a, b) => {
-            let da = infer_dim(a, env)?;
-            let db = infer_dim(b, env)?;
+            let da = match infer_dim(a, env) {
+                Ok(d) => d,
+                Err(DimError::UndeclaredVar(v)) => {
+                    if let Ok(db) = infer_dim(b, env) {
+                        if !db.is_dimensionless() {
+                            return Err(DimError::Mismatch {
+                                expected: db,
+                                got: Dimension::dimensionless(),
+                                context: "addition".to_string(),
+                            });
+                        }
+                    }
+                    return Err(DimError::UndeclaredVar(v));
+                }
+                Err(e) => return Err(e),
+            };
+            let db = match infer_dim(b, env) {
+                Ok(d) => d,
+                Err(DimError::UndeclaredVar(v)) => {
+                    if !da.is_dimensionless() {
+                        return Err(DimError::Mismatch {
+                            expected: da,
+                            got: Dimension::dimensionless(),
+                            context: "addition".to_string(),
+                        });
+                    }
+                    return Err(DimError::UndeclaredVar(v));
+                }
+                Err(e) => return Err(e),
+            };
             if da != db {
                 return Err(DimError::Mismatch {
                     expected: da,
@@ -427,6 +459,20 @@ fn collect_undeclared_inner(expr: &Expr, env: &DimEnv, out: &mut Vec<String>) {
 /// Collect all unit display names from Quantity nodes in an expression.
 pub fn collect_units(expr: &Expr) -> Vec<String> {
     expr.collect_units()
+}
+
+/// Check if an expression contains any type information (units or inline dimensions).
+fn has_type_info(expr: &Expr) -> bool {
+    match expr {
+        Expr::Quantity(_, _) => true,
+        Expr::Var { dim: Some(_), .. } => true,
+        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+            has_type_info(a) || has_type_info(b)
+        }
+        Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => has_type_info(inner),
+        Expr::FnN(_, args) => args.iter().any(has_type_info),
+        _ => false,
+    }
 }
 
 fn expr_as_integer(expr: &Expr) -> Option<i32> {
@@ -644,10 +690,13 @@ mod tests {
     }
 
     #[test]
-    fn check_expr_dim_none_without_declarations() {
+    fn check_expr_dim_typed_plus_untyped_is_error() {
+        // x has no type, 4 [s] has type [T] → error
         let ctx = Context::new();
         let expr = parse_expr("x + 4 [s]").unwrap();
-        assert!(ctx.check_expr_dim(&expr).is_none());
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some(), "should not suppress when expression has units");
+        assert!(result.unwrap().is_err());
     }
 
     #[test]
@@ -754,6 +803,46 @@ mod tests {
         assert!(ctx.check_expr_dim(&expr).is_none());
     }
 
+    #[test]
+    fn check_expr_dim_undeclared_var_with_units_is_error() {
+        // No :var declarations, but expression mixes units with typeless var → error
+        let ctx = Context::new();
+        let expr = parse_expr("1 [m] + 2 [km] + x").unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some(), "should not suppress when expression has units");
+        assert!(result.unwrap().is_err());
+    }
+
+    #[test]
+    fn typeless_var_in_typed_addition_reports_mismatch() {
+        // Typeless var in typed addition should produce a dimension mismatch
+        let ctx = Context::new();
+        let expr = parse_expr("1 [m] + x").unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        let err = result.unwrap().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("dimension mismatch"),
+            "error should be a dimension mismatch, got: {}",
+            msg
+        );
+        assert!(
+            msg.contains("[1]"),
+            "typeless should show as [1], got: {}",
+            msg
+        );
+    }
+
+    #[test]
+    fn check_expr_dim_inline_dim_with_undeclared_var_is_error() {
+        // x has inline dim [L], y has no type → error
+        let ctx = Context::new();
+        let expr = parse_expr("x [L] + y").unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some(), "should not suppress when expression has inline dims");
+        assert!(result.unwrap().is_err());
+    }
+
     // --- check_equal branches ---
 
     #[test]
@@ -841,7 +930,7 @@ mod tests {
     fn dim_error_display_undeclared_var() {
         let err = DimError::UndeclaredVar("x".to_string());
         assert!(err.to_string().contains("x"));
-        assert!(err.to_string().contains("no :var declaration"));
+        assert!(err.to_string().contains("typeless"));
     }
 
     #[test]
@@ -871,6 +960,18 @@ mod tests {
     fn dim_error_display_non_integer_power() {
         let err = DimError::NonIntegerPower;
         assert!(err.to_string().contains("non-integer power"));
+    }
+
+    #[test]
+    fn dim_error_display_typeless_as_mismatch() {
+        // Typeless values show as [1] in mismatch errors
+        let err = DimError::Mismatch {
+            expected: Dimension::single(BaseDim::L, 1),
+            got: Dimension::dimensionless(),
+            context: "addition".to_string(),
+        };
+        let s = err.to_string();
+        assert_eq!(s, "dimension mismatch in addition: expected [L], got [1]");
     }
 
     // --- DimOutcome::passed ---
