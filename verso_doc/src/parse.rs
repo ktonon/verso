@@ -2722,4 +2722,153 @@ More prose here.
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1); // just the Claim (no :var needed)
     }
+
+    // --- Error paths ---
+
+    #[test]
+    fn parse_author_missing_name() {
+        let err = parse_document(":author").unwrap_err();
+        assert!(err.message.contains("requires a name"));
+    }
+
+    #[test]
+    fn parse_claim_empty_body() {
+        let err = parse_document(":claim foo\n\nSome prose").unwrap_err();
+        assert!(err.message.contains("body is empty"));
+    }
+
+    #[test]
+    fn parse_proof_requires_name() {
+        let err = parse_document(":proof\n  x\n  x").unwrap_err();
+        assert!(err.message.contains("requires a claim name"));
+    }
+
+    #[test]
+    fn parse_var_missing_name() {
+        let err = parse_document(":var [L]").unwrap_err();
+        assert!(err.message.contains("requires a variable name"));
+    }
+
+    #[test]
+    fn parse_const_empty_name() {
+        let err = parse_document(":const = 5").unwrap_err();
+        assert!(err.message.contains("requires a name"));
+    }
+
+    #[test]
+    fn parse_func_missing_closing_paren() {
+        let err = parse_document(":func f(x = x + 1").unwrap_err();
+        assert!(err.message.contains("closing parenthesis"));
+    }
+
+    #[test]
+    fn parse_func_missing_eq() {
+        let err = parse_document(":func f(x) x + 1").unwrap_err();
+        assert!(err.message.contains("="));
+    }
+
+    #[test]
+    fn parse_func_empty_name() {
+        let err = parse_document(":func (x) = x").unwrap_err();
+        assert!(err.message.contains("requires a name"));
+    }
+
+    #[test]
+    fn parse_table_bad_separator() {
+        let src = ":table Test\n  | A | B |\n  | x | y |";
+        let err = parse_document(src).unwrap_err();
+        assert!(err.message.contains("separator"));
+    }
+
+    #[test]
+    fn parse_table_too_few_rows() {
+        let src = ":table Test\n  | A | B |";
+        let err = parse_document(src).unwrap_err();
+        assert!(err.message.contains("header row and separator"));
+    }
+
+    #[test]
+    fn parse_unknown_tag_becomes_text() {
+        // Unknown backtick tag should be kept as text
+        let doc = parse_document("See foo`bar` here.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                let text: String = fragments
+                    .iter()
+                    .map(|f| match f {
+                        ProseFragment::Text(t) => t.as_str(),
+                        _ => "",
+                    })
+                    .collect();
+                assert!(text.contains("foo`bar`"));
+            }
+            other => panic!("expected Prose, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_doc_error_display() {
+        let err = ParseDocError {
+            line: 42,
+            message: "something went wrong".into(),
+        };
+        let s = format!("{}", err);
+        assert!(s.contains("42"));
+        assert!(s.contains("something went wrong"));
+    }
+
+    #[test]
+    fn parse_url_with_fragment() {
+        let doc =
+            parse_document("See url`https://example.com/page#section` for details.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => match &fragments[1] {
+                ProseFragment::Url { url, display } => {
+                    assert_eq!(url, "https://example.com/page#section");
+                    assert!(display.is_none());
+                }
+                other => panic!("expected Url, got {:?}", other),
+            },
+            other => panic!("expected Prose, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_table_center_and_right_alignment() {
+        let src = ":table\n  | A | B | C |\n  | :---: | ---: | --- |\n  | 1 | 2 | 3 |";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Table(table) => {
+                assert_eq!(table.columns[0], ColumnAlign::Center);
+                assert_eq!(table.columns[1], ColumnAlign::Right);
+                assert_eq!(table.columns[2], ColumnAlign::Left);
+            }
+            other => panic!("expected Table, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_include_empty_path_error() {
+        // resolve_includes handles :include, not parse_document.
+        // Test via resolve_includes directly.
+        let err = resolve_includes(":include", std::path::Path::new("."), &mut Vec::new())
+            .unwrap_err();
+        assert!(err.message.contains("requires a file path"));
+    }
+
+    #[test]
+    fn parse_date_with_value() {
+        let doc = parse_document(":date 2026-03-15").unwrap();
+        match &doc.blocks[0] {
+            Block::Date(Some(d)) => assert_eq!(d, "2026-03-15"),
+            other => panic!("expected Date(Some), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_func_empty_params_error() {
+        let err = parse_document(":func f() = x").unwrap_err();
+        assert!(err.message.contains("requires at least one parameter"));
+    }
+
 }

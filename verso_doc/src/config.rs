@@ -564,6 +564,74 @@ mod tests {
     }
 
     #[test]
+    fn config_error_display_input_and_papers() {
+        assert_eq!(
+            format!("{}", ConfigError::InputAndPapers),
+            "config must specify either 'input' or 'papers', not both"
+        );
+    }
+
+    #[test]
+    fn config_error_display_no_input() {
+        assert_eq!(
+            format!("{}", ConfigError::NoInput),
+            "config must specify either 'input' or 'papers'"
+        );
+    }
+
+    #[test]
+    fn config_error_display_output_has_extension() {
+        let s = format!("{}", ConfigError::OutputHasExtension("out.pdf".into()));
+        assert!(s.contains("out.pdf"));
+        assert!(s.contains("extension"));
+    }
+
+    #[test]
+    fn config_error_display_parse() {
+        let s = format!("{}", ConfigError::Parse("bad json".into()));
+        assert!(s.contains("bad json"));
+    }
+
+    #[test]
+    fn strip_comments_escaped_quote_in_string() {
+        let input = r#"{ "key": "value with \" escaped" }"#;
+        let stripped = strip_jsonc_comments(input);
+        let v: serde_json::Value = serde_json::from_str(&stripped).unwrap();
+        assert_eq!(v["key"], "value with \" escaped");
+    }
+
+    #[test]
+    fn strip_comments_no_comments() {
+        let input = r#"{ "key": "value" }"#;
+        let stripped = strip_jsonc_comments(input);
+        assert_eq!(stripped, input);
+    }
+
+    #[test]
+    fn from_jsonc_invalid_json() {
+        let result = VersoConfig::from_jsonc("not json at all");
+        assert!(matches!(result, Err(ConfigError::Parse(_))));
+    }
+
+    #[test]
+    fn resolved_config_inputs() {
+        let config = ResolvedConfig {
+            output_dir: ".".to_string(),
+            papers: vec![
+                ResolvedPaper {
+                    input: "a.verso".to_string(),
+                    output: "a".to_string(),
+                },
+                ResolvedPaper {
+                    input: "b.verso".to_string(),
+                    output: "b".to_string(),
+                },
+            ],
+        };
+        assert_eq!(config.inputs(), vec!["a.verso", "b.verso"]);
+    }
+
+    #[test]
     fn stamp_preserves_comments() {
         let input = "{\n  // A comment\n  \"verso\": \"0.0.1\",\n  \"input\": \"paper.verso\"\n}\n";
         let result = stamp_config_text(input);

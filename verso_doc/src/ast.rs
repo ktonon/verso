@@ -75,7 +75,7 @@ pub struct Table {
 }
 
 /// Column alignment for tables.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ColumnAlign {
     Left,
     Center,
