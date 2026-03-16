@@ -2,8 +2,47 @@ use crate::dim::Dimension;
 use crate::rational::Rational;
 use crate::unit::Unit;
 
+/// Source location span for error reporting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    pub fn new(start: usize, end: usize) -> Self {
+        Span { start, end }
+    }
+}
+
+/// Expression node with source location span.
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub struct Expr {
+    pub kind: ExprKind,
+    pub span: Span,
+}
+
+impl Expr {
+    pub fn new(kind: ExprKind) -> Self {
+        Expr {
+            kind,
+            span: Span::default(),
+        }
+    }
+
+    pub fn spanned(kind: ExprKind, span: Span) -> Self {
+        Expr { kind, span }
+    }
+}
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ExprKind {
     // Atoms
     Rational(Rational), // Exact rational number
     FracPi(Rational),   // Rational multiple of π (value = r * π)
@@ -25,31 +64,31 @@ pub enum Expr {
     Quantity(Box<Expr>, Unit),
 }
 
-impl PartialEq for Expr {
+impl PartialEq for ExprKind {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Expr::Named(a), Expr::Named(b)) => a == b,
+            (ExprKind::Named(a), ExprKind::Named(b)) => a == b,
             (
-                Expr::Var {
+                ExprKind::Var {
                     name: n1,
                     indices: i1,
                     ..
                 },
-                Expr::Var {
+                ExprKind::Var {
                     name: n2,
                     indices: i2,
                     ..
                 },
             ) => n1 == n2 && i1 == i2,
-            (Expr::Add(a1, b1), Expr::Add(a2, b2))
-            | (Expr::Mul(a1, b1), Expr::Mul(a2, b2))
-            | (Expr::Pow(a1, b1), Expr::Pow(a2, b2)) => a1 == a2 && b1 == b2,
-            (Expr::Neg(a), Expr::Neg(b)) | (Expr::Inv(a), Expr::Inv(b)) => a == b,
-            (Expr::Fn(k1, a), Expr::Fn(k2, b)) => k1 == k2 && a == b,
-            (Expr::FnN(k1, a), Expr::FnN(k2, b)) => k1 == k2 && a == b,
-            (Expr::Rational(a), Expr::Rational(b)) => a == b,
-            (Expr::FracPi(a), Expr::FracPi(b)) => a == b,
-            (Expr::Quantity(a1, u1), Expr::Quantity(a2, u2)) => a1 == a2 && u1 == u2,
+            (ExprKind::Add(a1, b1), ExprKind::Add(a2, b2))
+            | (ExprKind::Mul(a1, b1), ExprKind::Mul(a2, b2))
+            | (ExprKind::Pow(a1, b1), ExprKind::Pow(a2, b2)) => a1 == a2 && b1 == b2,
+            (ExprKind::Neg(a), ExprKind::Neg(b)) | (ExprKind::Inv(a), ExprKind::Inv(b)) => a == b,
+            (ExprKind::Fn(k1, a), ExprKind::Fn(k2, b)) => k1 == k2 && a == b,
+            (ExprKind::FnN(k1, a), ExprKind::FnN(k2, b)) => k1 == k2 && a == b,
+            (ExprKind::Rational(a), ExprKind::Rational(b)) => a == b,
+            (ExprKind::FracPi(a), ExprKind::FracPi(b)) => a == b,
+            (ExprKind::Quantity(a1, u1), ExprKind::Quantity(a2, u2)) => a1 == a2 && u1 == u2,
             _ => false,
         }
     }
@@ -139,12 +178,12 @@ impl NamedConst {
 
 impl Expr {
     pub fn complexity(&self) -> usize {
-        match self {
-            Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. } => 1,
-            Expr::Quantity(inner, _) => 1 + inner.complexity(),
-            Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + a.complexity(),
-            Expr::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
-            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+        match &self.kind {
+            ExprKind::Rational(_) | ExprKind::Named(_) | ExprKind::FracPi(_) | ExprKind::Var { .. } => 1,
+            ExprKind::Quantity(inner, _) => 1 + inner.complexity(),
+            ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => 1 + a.complexity(),
+            ExprKind::FnN(_, args) => 1 + args.iter().map(|a| a.complexity()).sum::<usize>(),
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
                 1 + a.complexity() + b.complexity()
             }
         }
@@ -160,79 +199,79 @@ impl Expr {
     }
 
     fn collect_units_inner(&self, out: &mut Vec<String>) {
-        match self {
-            Expr::Quantity(inner, unit) => {
+        match &self.kind {
+            ExprKind::Quantity(inner, unit) => {
                 out.push(unit.display.clone());
                 inner.collect_units_inner(out);
             }
-            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
                 a.collect_units_inner(out);
                 b.collect_units_inner(out);
             }
-            Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => {
+            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
                 inner.collect_units_inner(out);
             }
-            Expr::FnN(_, args) => {
+            ExprKind::FnN(_, args) => {
                 for arg in args {
                     arg.collect_units_inner(out);
                 }
             }
-            Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => {}
+            ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => {}
         }
     }
 
     /// Return the first Unit found in the expression tree, if any.
     pub fn first_unit(&self) -> Option<&Unit> {
-        match self {
-            Expr::Quantity(_, unit) => Some(unit),
-            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+        match &self.kind {
+            ExprKind::Quantity(_, unit) => Some(unit),
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
                 a.first_unit().or_else(|| b.first_unit())
             }
-            Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => inner.first_unit(),
-            Expr::FnN(_, args) => args.iter().find_map(|a| a.first_unit()),
-            Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => None,
+            ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => inner.first_unit(),
+            ExprKind::FnN(_, args) => args.iter().find_map(|a| a.first_unit()),
+            ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => None,
         }
     }
 
     pub fn precedence(&self) -> u8 {
-        match self {
-            Expr::Rational(_)
-            | Expr::Named(_)
-            | Expr::FracPi(_)
-            | Expr::Var { .. }
-            | Expr::Quantity(_, _)
-            | Expr::Fn(_, _)
-            | Expr::FnN(_, _) => 100,
-            Expr::Pow(_, _) => 80,
-            Expr::Neg(_) | Expr::Inv(_) => 70,
-            Expr::Mul(_, _) => 60,
-            Expr::Add(_, _) => 50,
+        match &self.kind {
+            ExprKind::Rational(_)
+            | ExprKind::Named(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Var { .. }
+            | ExprKind::Quantity(_, _)
+            | ExprKind::Fn(_, _)
+            | ExprKind::FnN(_, _) => 100,
+            ExprKind::Pow(_, _) => 80,
+            ExprKind::Neg(_) | ExprKind::Inv(_) => 70,
+            ExprKind::Mul(_, _) => 60,
+            ExprKind::Add(_, _) => 50,
         }
     }
 }
 
 pub fn scalar(name: &str) -> Expr {
-    Expr::Var {
+    Expr::new(ExprKind::Var {
         name: name.to_string(),
         indices: vec![],
         dim: None,
-    }
+    })
 }
 
 pub fn scalar_dim(name: &str, dim: Dimension) -> Expr {
-    Expr::Var {
+    Expr::new(ExprKind::Var {
         name: name.to_string(),
         indices: vec![],
         dim: Some(dim),
-    }
+    })
 }
 
 pub fn tensor(name: &str, indices: Vec<Index>) -> Expr {
-    Expr::Var {
+    Expr::new(ExprKind::Var {
         name: name.to_string(),
         indices,
         dim: None,
-    }
+    })
 }
 
 pub fn upper(name: &str) -> Index {
@@ -253,149 +292,149 @@ pub fn lower(name: &str) -> Index {
 /// Panics if the float cannot be represented as a rational with denominator ≤ 1000.
 pub fn constant(n: f64) -> Expr {
     if n.fract() == 0.0 && n.abs() < (i64::MAX / 2) as f64 {
-        return Expr::Rational(Rational::from_i64(n as i64));
+        return Expr::new(ExprKind::Rational(Rational::from_i64(n as i64)));
     }
     for d in 2..=1000i64 {
         let numerator = n * d as f64;
         let rounded = numerator.round();
         if (numerator - rounded).abs() < 1e-10 {
-            return Expr::Rational(Rational::new(rounded as i64, d));
+            return Expr::new(ExprKind::Rational(Rational::new(rounded as i64, d)));
         }
     }
     panic!("Cannot convert {} to Rational", n);
 }
 
 pub fn rational(n: i64, d: i64) -> Expr {
-    Expr::Rational(Rational::new(n, d))
+    Expr::new(ExprKind::Rational(Rational::new(n, d)))
 }
 
 pub fn frac_pi(n: i64, d: i64) -> Expr {
-    Expr::FracPi(Rational::new(n, d))
+    Expr::new(ExprKind::FracPi(Rational::new(n, d)))
 }
 
 pub fn named(nc: NamedConst) -> Expr {
-    Expr::Named(nc)
+    Expr::new(ExprKind::Named(nc))
 }
 
 pub fn pi() -> Expr {
-    Expr::FracPi(Rational::ONE)
+    Expr::new(ExprKind::FracPi(Rational::ONE))
 }
 
 pub fn e_const() -> Expr {
-    Expr::Named(NamedConst::E)
+    Expr::new(ExprKind::Named(NamedConst::E))
 }
 
 pub fn add(a: Expr, b: Expr) -> Expr {
-    Expr::Add(Box::new(a), Box::new(b))
+    Expr::new(ExprKind::Add(Box::new(a), Box::new(b)))
 }
 
 pub fn sub(a: Expr, b: Expr) -> Expr {
-    Expr::Add(Box::new(a), Box::new(neg(b)))
+    Expr::new(ExprKind::Add(Box::new(a), Box::new(neg(b))))
 }
 
 pub fn mul(a: Expr, b: Expr) -> Expr {
-    Expr::Mul(Box::new(a), Box::new(b))
+    Expr::new(ExprKind::Mul(Box::new(a), Box::new(b)))
 }
 
 pub fn div(a: Expr, b: Expr) -> Expr {
-    Expr::Mul(Box::new(a), Box::new(inv(b)))
+    Expr::new(ExprKind::Mul(Box::new(a), Box::new(inv(b))))
 }
 
 pub fn neg(a: Expr) -> Expr {
-    Expr::Neg(Box::new(a))
+    Expr::new(ExprKind::Neg(Box::new(a)))
 }
 
 pub fn inv(a: Expr) -> Expr {
-    Expr::Inv(Box::new(a))
+    Expr::new(ExprKind::Inv(Box::new(a)))
 }
 
 pub fn pow(a: Expr, b: Expr) -> Expr {
-    Expr::Pow(Box::new(a), Box::new(b))
+    Expr::new(ExprKind::Pow(Box::new(a), Box::new(b)))
 }
 
 pub fn sqrt(a: Expr) -> Expr {
-    pow(a, Expr::Rational(Rational::new(1, 2)))
+    pow(a, Expr::new(ExprKind::Rational(Rational::new(1, 2))))
 }
 
 pub fn sin(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Sin, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Sin, Box::new(a)))
 }
 
 pub fn cos(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Cos, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Cos, Box::new(a)))
 }
 
 pub fn tan(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Tan, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Tan, Box::new(a)))
 }
 
 pub fn asin(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Asin, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Asin, Box::new(a)))
 }
 
 pub fn acos(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Acos, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Acos, Box::new(a)))
 }
 
 pub fn atan(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Atan, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Atan, Box::new(a)))
 }
 
 pub fn sign(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Sign, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Sign, Box::new(a)))
 }
 
 pub fn sinh(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Sinh, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Sinh, Box::new(a)))
 }
 
 pub fn cosh(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Cosh, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Cosh, Box::new(a)))
 }
 
 pub fn tanh(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Tanh, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Tanh, Box::new(a)))
 }
 
 pub fn floor(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Floor, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Floor, Box::new(a)))
 }
 
 pub fn ceil(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Ceil, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Ceil, Box::new(a)))
 }
 
 pub fn round(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Round, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Round, Box::new(a)))
 }
 
 pub fn min(a: Expr, b: Expr) -> Expr {
-    Expr::FnN(FnKind::Min, vec![a, b])
+    Expr::new(ExprKind::FnN(FnKind::Min, vec![a, b]))
 }
 
 pub fn max(a: Expr, b: Expr) -> Expr {
-    Expr::FnN(FnKind::Max, vec![a, b])
+    Expr::new(ExprKind::FnN(FnKind::Max, vec![a, b]))
 }
 
 pub fn clamp(x: Expr, lo: Expr, hi: Expr) -> Expr {
-    Expr::FnN(FnKind::Clamp, vec![x, lo, hi])
+    Expr::new(ExprKind::FnN(FnKind::Clamp, vec![x, lo, hi]))
 }
 
 pub fn exp(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Exp, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Exp, Box::new(a)))
 }
 
 pub fn ln(a: Expr) -> Expr {
-    Expr::Fn(FnKind::Ln, Box::new(a))
+    Expr::new(ExprKind::Fn(FnKind::Ln, Box::new(a)))
 }
 
 pub fn quantity(expr: Expr, unit: Unit) -> Expr {
-    Expr::Quantity(Box::new(expr), unit)
+    Expr::new(ExprKind::Quantity(Box::new(expr), unit))
 }
 
 /// Returns true if the expression has tensor indices.
 pub fn has_indices(expr: &Expr) -> bool {
-    matches!(expr, Expr::Var { indices, .. } if !indices.is_empty())
+    matches!(&expr.kind, ExprKind::Var { indices, .. } if !indices.is_empty())
 }
 
 /// Count index contractions between two expressions using Einstein notation.
@@ -403,15 +442,15 @@ pub fn has_indices(expr: &Expr) -> bool {
 /// (one upper, one lower) in the two expressions.
 fn count_contractions(left: &Expr, right: &Expr) -> usize {
     if let (
-        Expr::Var {
+        ExprKind::Var {
             indices: left_indices,
             ..
         },
-        Expr::Var {
+        ExprKind::Var {
             indices: right_indices,
             ..
         },
-    ) = (left, right)
+    ) = (&left.kind, &right.kind)
     {
         let mut count = 0;
         for li in left_indices {

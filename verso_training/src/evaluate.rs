@@ -147,9 +147,9 @@ mod tests {
         let result = ValidationResult {
             valid_steps: 2,
             total_steps: 2,
-            final_expr: verso_symbolic::Expr::Rational(
+            final_expr: verso_symbolic::Expr::new(verso_symbolic::ExprKind::Rational(
                 verso_symbolic::rational::Rational::from_i64(1),
-            ),
+            )),
             final_complexity: 1,
             input_complexity: 5,
             step_details: Vec::new(),
@@ -164,9 +164,9 @@ mod tests {
         let result = ValidationResult {
             valid_steps: 1,
             total_steps: 3,
-            final_expr: verso_symbolic::Expr::Rational(
+            final_expr: verso_symbolic::Expr::new(verso_symbolic::ExprKind::Rational(
                 verso_symbolic::rational::Rational::from_i64(1),
-            ),
+            )),
             final_complexity: 3,
             input_complexity: 5,
             step_details: Vec::new(),
@@ -181,9 +181,9 @@ mod tests {
         let result = ValidationResult {
             valid_steps: 0,
             total_steps: 0,
-            final_expr: verso_symbolic::Expr::Rational(
+            final_expr: verso_symbolic::Expr::new(verso_symbolic::ExprKind::Rational(
                 verso_symbolic::rational::Rational::ZERO,
-            ),
+            )),
             final_complexity: 5,
             input_complexity: 5,
             step_details: Vec::new(),
@@ -197,9 +197,9 @@ mod tests {
             ValidationResult {
                 valid_steps: 2,
                 total_steps: 2,
-                final_expr: verso_symbolic::Expr::Rational(
+                final_expr: verso_symbolic::Expr::new(verso_symbolic::ExprKind::Rational(
                     verso_symbolic::rational::Rational::from_i64(1),
-                ),
+                )),
                 final_complexity: 1,
                 input_complexity: 5,
                 step_details: Vec::new(),
@@ -207,9 +207,9 @@ mod tests {
             ValidationResult {
                 valid_steps: 0,
                 total_steps: 1,
-                final_expr: verso_symbolic::Expr::Rational(
+                final_expr: verso_symbolic::Expr::new(verso_symbolic::ExprKind::Rational(
                     verso_symbolic::rational::Rational::from_i64(3),
-                ),
+                )),
                 final_complexity: 3,
                 input_complexity: 3,
                 step_details: Vec::new(),

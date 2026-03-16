@@ -1,4 +1,4 @@
-use crate::expr::{Expr, FnKind, IndexPosition, NamedConst};
+use crate::expr::{Expr, ExprKind, FnKind, IndexPosition, NamedConst};
 use crate::rational::Rational;
 
 
@@ -106,8 +106,8 @@ pub fn tokenize(expr: &Expr) -> (Vec<Token>, DeBruijn) {
 }
 
 fn tokenize_rec(expr: &Expr, tokens: &mut Vec<Token>, db: &mut DeBruijn) {
-    match expr {
-        Expr::Rational(r) => {
+    match &expr.kind {
+        ExprKind::Rational(r) => {
             if r.is_integer() {
                 tokens.push(Token::Int(r.num()));
             } else {
@@ -116,15 +116,15 @@ fn tokenize_rec(expr: &Expr, tokens: &mut Vec<Token>, db: &mut DeBruijn) {
                 tokens.push(Token::Int(r.den()));
             }
         }
-        Expr::FracPi(r) => {
+        ExprKind::FracPi(r) => {
             tokens.push(Token::FracPi);
             tokens.push(Token::Int(r.num()));
             tokens.push(Token::Int(r.den()));
         }
-        Expr::Named(nc) => {
+        ExprKind::Named(nc) => {
             tokens.push(Token::Named(*nc));
         }
-        Expr::Var { name, indices, .. } => {
+        ExprKind::Var { name, indices, .. } => {
             let id = db.var_id(name);
             tokens.push(Token::Var(id));
             for idx in indices {
@@ -136,41 +136,41 @@ fn tokenize_rec(expr: &Expr, tokens: &mut Vec<Token>, db: &mut DeBruijn) {
                 tokens.push(Token::Idx(idx_id));
             }
         }
-        Expr::Add(a, b) => {
+        ExprKind::Add(a, b) => {
             tokens.push(Token::Add);
             tokenize_rec(a, tokens, db);
             tokenize_rec(b, tokens, db);
         }
-        Expr::Mul(a, b) => {
+        ExprKind::Mul(a, b) => {
             tokens.push(Token::Mul);
             tokenize_rec(a, tokens, db);
             tokenize_rec(b, tokens, db);
         }
-        Expr::Pow(a, b) => {
+        ExprKind::Pow(a, b) => {
             tokens.push(Token::Pow);
             tokenize_rec(a, tokens, db);
             tokenize_rec(b, tokens, db);
         }
-        Expr::Neg(a) => {
+        ExprKind::Neg(a) => {
             tokens.push(Token::Neg);
             tokenize_rec(a, tokens, db);
         }
-        Expr::Inv(a) => {
+        ExprKind::Inv(a) => {
             tokens.push(Token::Inv);
             tokenize_rec(a, tokens, db);
         }
-        Expr::Fn(kind, a) => {
+        ExprKind::Fn(kind, a) => {
             tokens.push(Token::Fn(kind.clone()));
             tokenize_rec(a, tokens, db);
         }
-        Expr::FnN(kind, args) => {
+        ExprKind::FnN(kind, args) => {
             tokens.push(Token::FnN(kind.clone()));
             tokens.push(Token::Int(args.len() as i64));
             for arg in args {
                 tokenize_rec(arg, tokens, db);
             }
         }
-        Expr::Quantity(inner, _unit) => {
+        ExprKind::Quantity(inner, _unit) => {
             // For now, tokenize just the inner expression (unit info is lost)
             tokenize_rec(inner, tokens, db);
         }
@@ -203,18 +203,18 @@ fn detokenize_rec(tokens: &[Token], pos: &mut usize, db: &DeBruijn) -> Result<Ex
     let token = &tokens[*pos];
     *pos += 1;
     match token {
-        Token::Int(n) => Ok(Expr::Rational(Rational::from_i64(*n))),
+        Token::Int(n) => Ok(Expr::new(ExprKind::Rational(Rational::from_i64(*n)))),
         Token::Frac => {
             let num = expect_int(tokens, pos)?;
             let den = expect_int(tokens, pos)?;
-            Ok(Expr::Rational(Rational::new(num, den)))
+            Ok(Expr::new(ExprKind::Rational(Rational::new(num, den))))
         }
         Token::FracPi => {
             let num = expect_int(tokens, pos)?;
             let den = expect_int(tokens, pos)?;
-            Ok(Expr::FracPi(Rational::new(num, den)))
+            Ok(Expr::new(ExprKind::FracPi(Rational::new(num, den))))
         }
-        Token::Named(nc) => Ok(Expr::Named(*nc)),
+        Token::Named(nc) => Ok(Expr::new(ExprKind::Named(*nc))),
         Token::Var(id) => {
             let name = db
                 .var_name(*id)
@@ -251,34 +251,34 @@ fn detokenize_rec(tokens: &[Token], pos: &mut usize, db: &DeBruijn) -> Result<Ex
                     _ => break,
                 }
             }
-            Ok(Expr::Var { name, indices, dim: None })
+            Ok(Expr::new(ExprKind::Var { name, indices, dim: None }))
         }
         Token::Add => {
             let a = detokenize_rec(tokens, pos, db)?;
             let b = detokenize_rec(tokens, pos, db)?;
-            Ok(Expr::Add(Box::new(a), Box::new(b)))
+            Ok(Expr::new(ExprKind::Add(Box::new(a), Box::new(b))))
         }
         Token::Mul => {
             let a = detokenize_rec(tokens, pos, db)?;
             let b = detokenize_rec(tokens, pos, db)?;
-            Ok(Expr::Mul(Box::new(a), Box::new(b)))
+            Ok(Expr::new(ExprKind::Mul(Box::new(a), Box::new(b))))
         }
         Token::Pow => {
             let a = detokenize_rec(tokens, pos, db)?;
             let b = detokenize_rec(tokens, pos, db)?;
-            Ok(Expr::Pow(Box::new(a), Box::new(b)))
+            Ok(Expr::new(ExprKind::Pow(Box::new(a), Box::new(b))))
         }
         Token::Neg => {
             let a = detokenize_rec(tokens, pos, db)?;
-            Ok(Expr::Neg(Box::new(a)))
+            Ok(Expr::new(ExprKind::Neg(Box::new(a))))
         }
         Token::Inv => {
             let a = detokenize_rec(tokens, pos, db)?;
-            Ok(Expr::Inv(Box::new(a)))
+            Ok(Expr::new(ExprKind::Inv(Box::new(a))))
         }
         Token::Fn(kind) => {
             let a = detokenize_rec(tokens, pos, db)?;
-            Ok(Expr::Fn(kind.clone(), Box::new(a)))
+            Ok(Expr::new(ExprKind::Fn(kind.clone(), Box::new(a))))
         }
         Token::FnN(kind) => {
             let arity = expect_int(tokens, pos)?;
@@ -289,7 +289,7 @@ fn detokenize_rec(tokens: &[Token], pos: &mut usize, db: &DeBruijn) -> Result<Ex
             for _ in 0..arity {
                 args.push(detokenize_rec(tokens, pos, db)?);
             }
-            Ok(Expr::FnN(kind.clone(), args))
+            Ok(Expr::new(ExprKind::FnN(kind.clone(), args)))
         }
         // These should only appear as part of Var/Frac/FracPi sequences
         Token::IdxLo | Token::IdxHi | Token::Idx(_) => {
@@ -416,11 +416,11 @@ pub fn path_to_position(tokens: &[Token], target: &AstPath) -> Option<usize> {
 pub fn subexpr_at<'a>(expr: &'a Expr, path: &AstPath) -> Option<&'a Expr> {
     let mut current = expr;
     for &child_idx in path {
-        current = match (current, child_idx) {
-            (Expr::Add(a, _) | Expr::Mul(a, _) | Expr::Pow(a, _), 0) => a,
-            (Expr::Add(_, b) | Expr::Mul(_, b) | Expr::Pow(_, b), 1) => b,
-            (Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a), 0) => a,
-            (Expr::FnN(_, args), i) => args.get(i)?,
+        current = match (&current.kind, child_idx) {
+            (ExprKind::Add(a, _) | ExprKind::Mul(a, _) | ExprKind::Pow(a, _), 0) => a,
+            (ExprKind::Add(_, b) | ExprKind::Mul(_, b) | ExprKind::Pow(_, b), 1) => b,
+            (ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a), 0) => a,
+            (ExprKind::FnN(_, args), i) => args.get(i)?,
             _ => return None,
         };
     }
@@ -435,47 +435,47 @@ pub fn replace_subexpr(expr: &Expr, path: &[usize], replacement: Expr) -> Option
     }
     let child_idx = path[0];
     let rest = &path[1..];
-    match (expr, child_idx) {
-        (Expr::Add(a, b), 0) => {
+    match (&expr.kind, child_idx) {
+        (ExprKind::Add(a, b), 0) => {
             let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::Add(Box::new(new_a), b.clone()))
+            Some(Expr::new(ExprKind::Add(Box::new(new_a), b.clone())))
         }
-        (Expr::Add(a, b), 1) => {
+        (ExprKind::Add(a, b), 1) => {
             let new_b = replace_subexpr(b, rest, replacement)?;
-            Some(Expr::Add(a.clone(), Box::new(new_b)))
+            Some(Expr::new(ExprKind::Add(a.clone(), Box::new(new_b))))
         }
-        (Expr::Mul(a, b), 0) => {
+        (ExprKind::Mul(a, b), 0) => {
             let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::Mul(Box::new(new_a), b.clone()))
+            Some(Expr::new(ExprKind::Mul(Box::new(new_a), b.clone())))
         }
-        (Expr::Mul(a, b), 1) => {
+        (ExprKind::Mul(a, b), 1) => {
             let new_b = replace_subexpr(b, rest, replacement)?;
-            Some(Expr::Mul(a.clone(), Box::new(new_b)))
+            Some(Expr::new(ExprKind::Mul(a.clone(), Box::new(new_b))))
         }
-        (Expr::Pow(a, b), 0) => {
+        (ExprKind::Pow(a, b), 0) => {
             let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::Pow(Box::new(new_a), b.clone()))
+            Some(Expr::new(ExprKind::Pow(Box::new(new_a), b.clone())))
         }
-        (Expr::Pow(a, b), 1) => {
+        (ExprKind::Pow(a, b), 1) => {
             let new_b = replace_subexpr(b, rest, replacement)?;
-            Some(Expr::Pow(a.clone(), Box::new(new_b)))
+            Some(Expr::new(ExprKind::Pow(a.clone(), Box::new(new_b))))
         }
-        (Expr::Neg(a), 0) => {
+        (ExprKind::Neg(a), 0) => {
             let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::Neg(Box::new(new_a)))
+            Some(Expr::new(ExprKind::Neg(Box::new(new_a))))
         }
-        (Expr::Inv(a), 0) => {
+        (ExprKind::Inv(a), 0) => {
             let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::Inv(Box::new(new_a)))
+            Some(Expr::new(ExprKind::Inv(Box::new(new_a))))
         }
-        (Expr::Fn(kind, a), 0) => {
+        (ExprKind::Fn(kind, a), 0) => {
             let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::Fn(kind.clone(), Box::new(new_a)))
+            Some(Expr::new(ExprKind::Fn(kind.clone(), Box::new(new_a))))
         }
-        (Expr::FnN(kind, args), i) if i < args.len() => {
+        (ExprKind::FnN(kind, args), i) if i < args.len() => {
             let mut new_args = args.clone();
             new_args[i] = replace_subexpr(&args[i], rest, replacement)?;
-            Some(Expr::FnN(kind.clone(), new_args))
+            Some(Expr::new(ExprKind::FnN(kind.clone(), new_args)))
         }
         _ => None,
     }

@@ -1,4 +1,4 @@
-use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind, NamedConst};
+use crate::expr::{classify_mul, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind, NamedConst};
 use crate::rational::Rational;
 use std::fmt::Display;
 
@@ -39,18 +39,18 @@ impl<'a> Display for Colored<'a> {
 
 /// Format an expression with ANSI colors
 pub fn fmt_colored(expr: &Expr) -> String {
-    match expr {
-        Expr::Rational(r) => {
+    match &expr.kind {
+        ExprKind::Rational(r) => {
             format!("{}{}{}", color::CYAN, r, color::RESET)
         }
-        Expr::Named(nc) => {
+        ExprKind::Named(nc) => {
             format!("{}{}{}", color::MAGENTA, nc, color::RESET)
         }
-        Expr::FracPi(r) => {
+        ExprKind::FracPi(r) => {
             let s = fmt_frac_pi(r);
             format!("{}{}{}", color::MAGENTA, s, color::RESET)
         }
-        Expr::Var { name, indices, dim } => {
+        ExprKind::Var { name, indices, dim } => {
             let order = indices.len();
             let (start_color, end_color) = match order {
                 0 => (color::YELLOW, color::RESET),      // Scalar: default
@@ -97,14 +97,14 @@ pub fn fmt_colored(expr: &Expr) -> String {
             }
             result
         }
-        Expr::Add(a, b) => {
+        ExprKind::Add(a, b) => {
             let op = format!("{} + {}", color::DIM, color::RESET);
-            match b.as_ref() {
-                Expr::Neg(inner) => {
+            match &b.kind {
+                ExprKind::Neg(inner) => {
                     let op = format!("{} - {}", color::DIM, color::RESET);
                     format!("{}{}{}", fmt_colored(a), op, fmt_colored(inner))
                 }
-                Expr::Rational(r) if r.is_negative() => {
+                ExprKind::Rational(r) if r.is_negative() => {
                     let op = format!("{} - {}", color::DIM, color::RESET);
                     format!(
                         "{}{}{}{}{}",
@@ -120,7 +120,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 }
             }
         }
-        Expr::Mul(a, b) => {
+        ExprKind::Mul(a, b) => {
             if let Some((base, arg)) = match_log_base(a, b) {
                 return format!(
                     "{}log{}_{}{}{}({}){}",
@@ -134,8 +134,8 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 );
             }
 
-            match b.as_ref() {
-                Expr::Inv(inner) => {
+            match &b.kind {
+                ExprKind::Inv(inner) => {
                     let op = format!("{}/{}", color::DIM, color::RESET);
                     format!(
                         "{}{}{}",
@@ -148,7 +148,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                     let mul_kind = classify_mul(a, b);
                     // Coefficient notation: 2x instead of 2 * x
                     if mul_kind == MulKind::Scalar {
-                        if let Expr::Rational(r) = a.as_ref() {
+                        if let ExprKind::Rational(r) = &a.kind {
                             return format!(
                                 "{}{}{}{}",
                                 color::CYAN,
@@ -174,7 +174,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 }
             }
         }
-        Expr::Neg(a) => {
+        ExprKind::Neg(a) => {
             format!(
                 "{}-{}{}",
                 color::DIM,
@@ -182,7 +182,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 maybe_paren_colored(a, expr)
             )
         }
-        Expr::Inv(a) => {
+        ExprKind::Inv(a) => {
             format!(
                 "{}1/{}{}",
                 color::DIM,
@@ -190,7 +190,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 maybe_paren_colored(a, expr)
             )
         }
-        Expr::Pow(base, exp) => {
+        ExprKind::Pow(base, exp) => {
             if is_sqrt_exp(exp) {
                 return format!("{}sqrt({}){}", color::BLUE, fmt_colored(base), color::RESET);
             }
@@ -202,7 +202,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 maybe_paren_colored(exp, expr)
             )
         }
-        Expr::Fn(kind, arg) => {
+        ExprKind::Fn(kind, arg) => {
             format!(
                 "{}{}{}({})",
                 color::BLUE,
@@ -211,7 +211,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 fmt_colored(arg)
             )
         }
-        Expr::FnN(kind, args) => {
+        ExprKind::FnN(kind, args) => {
             let rendered: Vec<String> = args.iter().map(fmt_colored).collect();
             format!(
                 "{}{}{}({})",
@@ -221,7 +221,7 @@ pub fn fmt_colored(expr: &Expr) -> String {
                 rendered.join(", ")
             )
         }
-        Expr::Quantity(inner, unit) => {
+        ExprKind::Quantity(inner, unit) => {
             format!(
                 "{} {}[{}]{}",
                 fmt_colored(inner),
@@ -248,8 +248,8 @@ fn maybe_paren_colored(child: &Expr, parent: &Expr) -> String {
 }
 
 fn fmt_log_base_colored(base: &Expr) -> String {
-    match base {
-        Expr::Rational(_) | Expr::Var { .. } => {
+    match &base.kind {
+        ExprKind::Rational(_) | ExprKind::Var { .. } => {
             fmt_colored(base)
         }
         _ => format!(
@@ -308,11 +308,11 @@ impl Display for FnKind {
 
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Expr::Rational(r) => write!(f, "{}", r),
-            Expr::Named(nc) => write!(f, "{}", nc),
-            Expr::FracPi(r) => write!(f, "{}", fmt_frac_pi(r)),
-            Expr::Var { name, indices, dim } => {
+        match &self.kind {
+            ExprKind::Rational(r) => write!(f, "{}", r),
+            ExprKind::Named(nc) => write!(f, "{}", nc),
+            ExprKind::FracPi(r) => write!(f, "{}", fmt_frac_pi(r)),
+            ExprKind::Var { name, indices, dim } => {
                 let mut result = if indices.is_empty() {
                     name.clone()
                 } else {
@@ -341,31 +341,31 @@ impl std::fmt::Display for Expr {
                 }
                 write!(f, "{}", result)
             }
-            Expr::Add(a, b) => match b.as_ref() {
-                Expr::Neg(inner) => {
+            ExprKind::Add(a, b) => match &b.kind {
+                ExprKind::Neg(inner) => {
                     write!(f, "{} - {}", a, inner)
                 }
-                Expr::Rational(r) if r.is_negative() => {
+                ExprKind::Rational(r) if r.is_negative() => {
                     write!(f, "{} - {}", a, -(*r))
                 }
                 _ => {
                     write!(f, "{} + {}", a, b)
                 }
             },
-            Expr::Mul(a, b) => {
+            ExprKind::Mul(a, b) => {
                 if let Some((base, arg)) = match_log_base(a, b) {
                     return write!(f, "log_{}({})", fmt_log_base(base), arg);
                 }
 
-                match b.as_ref() {
-                    Expr::Inv(inner) => {
+                match &b.kind {
+                    ExprKind::Inv(inner) => {
                         write!(f, "{}/{}", maybe_paren(a, self), maybe_paren(inner, self))
                     }
                     _ => {
                         let mul_kind = classify_mul(a, b);
                         // Coefficient notation: 2x instead of 2 * x
                         if mul_kind == MulKind::Scalar {
-                            if let Expr::Rational(r) = a.as_ref() {
+                            if let ExprKind::Rational(r) = &a.kind {
                                 return write!(f, "{}{}", r, maybe_paren(b, self));
                             }
                         }
@@ -381,20 +381,20 @@ impl std::fmt::Display for Expr {
                     }
                 }
             }
-            Expr::Neg(a) => write!(f, "-{}", maybe_paren(a, self)),
-            Expr::Inv(a) => write!(f, "1/{}", maybe_paren(a, self)),
-            Expr::Pow(base, exp) => {
+            ExprKind::Neg(a) => write!(f, "-{}", maybe_paren(a, self)),
+            ExprKind::Inv(a) => write!(f, "1/{}", maybe_paren(a, self)),
+            ExprKind::Pow(base, exp) => {
                 if is_sqrt_exp(exp) {
                     return write!(f, "sqrt({})", base);
                 }
                 write!(f, "{}^{}", maybe_paren(base, self), maybe_paren(exp, self))
             }
-            Expr::Fn(kind, arg) => write!(f, "{}({})", kind, arg),
-            Expr::FnN(kind, args) => {
+            ExprKind::Fn(kind, arg) => write!(f, "{}({})", kind, arg),
+            ExprKind::FnN(kind, args) => {
                 let rendered: Vec<String> = args.iter().map(|a| format!("{}", a)).collect();
                 write!(f, "{}({})", kind, rendered.join(", "))
             }
-            Expr::Quantity(inner, unit) => write!(f, "{} [{}]", inner, unit),
+            ExprKind::Quantity(inner, unit) => write!(f, "{} [{}]", inner, unit),
         }
     }
 }
@@ -408,21 +408,21 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
 }
 
 fn is_sqrt_exp(exp: &Expr) -> bool {
-    match exp {
-        Expr::Rational(r) => *r == Rational::new(1, 2),
-        Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Rational(r) if *r == Rational::TWO),
+    match &exp.kind {
+        ExprKind::Rational(r) => *r == Rational::new(1, 2),
+        ExprKind::Inv(inner) => matches!(&inner.kind, ExprKind::Rational(r) if *r == Rational::TWO),
         _ => false,
     }
 }
 
 fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a Expr)> {
-    match (left, right) {
-        (Expr::Fn(FnKind::Ln, arg), Expr::Inv(inner)) => match inner.as_ref() {
-            Expr::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+    match (&left.kind, &right.kind) {
+        (ExprKind::Fn(FnKind::Ln, arg), ExprKind::Inv(inner)) => match &inner.kind {
+            ExprKind::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
             _ => None,
         },
-        (Expr::Inv(inner), Expr::Fn(FnKind::Ln, arg)) => match inner.as_ref() {
-            Expr::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+        (ExprKind::Inv(inner), ExprKind::Fn(FnKind::Ln, arg)) => match &inner.kind {
+            ExprKind::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
             _ => None,
         },
         _ => None,
@@ -430,8 +430,8 @@ fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a 
 }
 
 fn fmt_log_base(base: &Expr) -> String {
-    match base {
-        Expr::Rational(_) | Expr::Var { .. } => {
+    match &base.kind {
+        ExprKind::Rational(_) | ExprKind::Var { .. } => {
             format!("{}", base)
         }
         _ => format!("({})", base),
@@ -693,13 +693,13 @@ mod tests {
 
     #[test]
     fn colored_named_const() {
-        let s = fmt_colored(&Expr::Named(NamedConst::E));
+        let s = fmt_colored(&Expr::new(ExprKind::Named(NamedConst::E)));
         assert!(s.contains("e"));
     }
 
     #[test]
     fn colored_frac_pi() {
-        let s = fmt_colored(&Expr::FracPi(Rational::new(1, 2)));
+        let s = fmt_colored(&Expr::new(ExprKind::FracPi(Rational::new(1, 2))));
         assert!(s.contains("π/2"));
     }
 

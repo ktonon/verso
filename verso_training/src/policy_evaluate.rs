@@ -4,7 +4,7 @@ use verso_symbolic::random_search::{Direction, IndexedRuleSet, RuleDirectionId};
 use verso_symbolic::token::tokenize;
 use verso_symbolic::training_data::token_to_string;
 use verso_symbolic::validate::{validate_action_sequence, PredictedAction, ValidationResult};
-use verso_symbolic::{eval_constants, Expr, TraceStep};
+use verso_symbolic::{eval_constants, Expr, ExprKind, TraceStep};
 
 use crate::config::PolicyConfig;
 use crate::evaluate::{compute_metrics, tokens_to_expr, EvalMetrics};
@@ -146,7 +146,7 @@ pub fn policy_evaluate<B: Backend>(
                 all_results.push(ValidationResult {
                     valid_steps: 0,
                     total_steps: 0,
-                    final_expr: Expr::Rational(verso_symbolic::rational::Rational::ZERO),
+                    final_expr: Expr::new(ExprKind::Rational(verso_symbolic::rational::Rational::ZERO)),
                     final_complexity: 0,
                     input_complexity: 0,
                     step_details: Vec::new(),

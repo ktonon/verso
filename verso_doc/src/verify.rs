@@ -1,6 +1,6 @@
 use crate::ast::{Block, Claim, Document, Proof, Span};
 use crate::dim::{collect_units, DimOutcome};
-use verso_symbolic::{Context, Expr, is_zero};
+use verso_symbolic::{Context, Expr, ExprKind, is_zero};
 
 #[derive(Debug)]
 pub struct VerificationReport {
@@ -156,10 +156,10 @@ fn verify_proof(proof: &Proof, ctx: &Context) -> VerificationResult {
         }
 
         // General check: simplify(from - to) == 0
-        let diff = Expr::Add(
+        let diff = Expr::new(ExprKind::Add(
             Box::new(from.expr.clone()),
-            Box::new(Expr::Neg(Box::new(to.expr.clone()))),
-        );
+            Box::new(Expr::new(ExprKind::Neg(Box::new(to.expr.clone())))),
+        ));
         let result = ctx.simplify(&diff);
 
         if !is_zero(&result) {

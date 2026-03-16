@@ -1,7 +1,7 @@
 use crate::context::{Context, DimOutcome, EqualityResult};
 use crate::dim::Dimension;
 use crate::eval::free_vars;
-use crate::expr::Expr;
+use crate::expr::{Expr, ExprKind};
 use crate::fmt::fmt_colored;
 use crate::parser::parse_expr;
 use crate::search;
@@ -166,10 +166,10 @@ pub fn run() -> Result<(), ReadlineError> {
                                     &rhs,
                                 );
                             }
-                            let diff = Expr::Add(
+                            let diff = Expr::new(ExprKind::Add(
                                 Box::new(lhs),
-                                Box::new(Expr::Neg(Box::new(rhs))),
-                            );
+                                Box::new(Expr::new(ExprKind::Neg(Box::new(rhs)))),
+                            ));
                             let simplified = ctx.simplify(&diff);
                             record_result(&mut result_history, &mut rl, history_mode, &simplified);
                         }

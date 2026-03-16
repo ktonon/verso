@@ -1,4 +1,4 @@
-use crate::expr::{Expr, FnKind, NamedConst};
+use crate::expr::{Expr, ExprKind, FnKind, NamedConst};
 use crate::rational::Rational;
 use rand::distr::weighted::WeightedIndex;
 use rand::prelude::Distribution;
@@ -88,38 +88,38 @@ fn gen_expr_rec(rng: &mut StdRng, config: &GenExprConfig, depth: usize) -> Expr 
             // Add
             let a = gen_expr_rec(rng, config, depth + 1);
             let b = gen_expr_rec(rng, config, depth + 1);
-            Expr::Add(Box::new(a), Box::new(b))
+            Expr::new(ExprKind::Add(Box::new(a), Box::new(b)))
         }
         1 => {
             // Mul
             let a = gen_expr_rec(rng, config, depth + 1);
             let b = gen_expr_rec(rng, config, depth + 1);
-            Expr::Mul(Box::new(a), Box::new(b))
+            Expr::new(ExprKind::Mul(Box::new(a), Box::new(b)))
         }
         2 => {
             // Neg
             let a = gen_expr_rec(rng, config, depth + 1);
-            Expr::Neg(Box::new(a))
+            Expr::new(ExprKind::Neg(Box::new(a)))
         }
         3 => {
             // Inv
             let a = gen_expr_rec(rng, config, depth + 1);
-            Expr::Inv(Box::new(a))
+            Expr::new(ExprKind::Inv(Box::new(a)))
         }
         4 => {
             // Pow with small exponent
             let base = gen_expr_rec(rng, config, depth + 1);
             let exp_val = *SMALL_EXPONENTS.choose(rng).unwrap();
-            Expr::Pow(
+            Expr::new(ExprKind::Pow(
                 Box::new(base),
-                Box::new(Expr::Rational(Rational::from_i64(exp_val))),
-            )
+                Box::new(Expr::new(ExprKind::Rational(Rational::from_i64(exp_val)))),
+            ))
         }
         5 => {
             // Function (trig/exp/ln)
             let kind = FN_POOL.choose(rng).unwrap().clone();
             let arg = gen_expr_rec(rng, config, depth + 1);
-            Expr::Fn(kind, Box::new(arg))
+            Expr::new(ExprKind::Fn(kind, Box::new(arg)))
         }
         _ => unreachable!(),
     }
@@ -142,26 +142,26 @@ fn gen_leaf(rng: &mut StdRng, config: &GenExprConfig) -> Expr {
             // Variable
             let n = config.num_vars.min(VAR_NAMES.len());
             let name = VAR_NAMES[rng.random_range(0..n)];
-            Expr::Var {
+            Expr::new(ExprKind::Var {
                 name: name.to_string(),
                 indices: vec![],
                 dim: None,
-            }
+            })
         }
         1 => {
             // Small integer
             let val = *SMALL_INTEGERS.choose(rng).unwrap();
-            Expr::Rational(Rational::from_i64(val))
+            Expr::new(ExprKind::Rational(Rational::from_i64(val)))
         }
         2 => {
             // Simple fraction
             let (n, d) = *SIMPLE_FRACTIONS.choose(rng).unwrap();
-            Expr::Rational(Rational::new(n, d))
+            Expr::new(ExprKind::Rational(Rational::new(n, d)))
         }
         3 => {
             // FracPi
             let (n, d) = *FRAC_PI_VALUES.choose(rng).unwrap();
-            Expr::FracPi(Rational::new(n, d))
+            Expr::new(ExprKind::FracPi(Rational::new(n, d)))
         }
         4 => {
             // Named constant
@@ -172,7 +172,7 @@ fn gen_leaf(rng: &mut StdRng, config: &GenExprConfig) -> Expr {
                 NamedConst::Frac1Sqrt2,
                 NamedConst::FracSqrt3By2,
             ];
-            Expr::Named(*constants.choose(rng).unwrap())
+            Expr::new(ExprKind::Named(*constants.choose(rng).unwrap()))
         }
         _ => unreachable!(),
     }
@@ -180,12 +180,12 @@ fn gen_leaf(rng: &mut StdRng, config: &GenExprConfig) -> Expr {
 
 /// Compute the depth of an expression tree.
 pub fn expr_depth(expr: &Expr) -> usize {
-    match expr {
-        Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. }
-        | Expr::Quantity(_, _) => 0,
-        Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => 1 + expr_depth(a),
-        Expr::FnN(_, args) => 1 + args.iter().map(expr_depth).max().unwrap_or(0),
-        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+    match &expr.kind {
+        ExprKind::Rational(_) | ExprKind::Named(_) | ExprKind::FracPi(_) | ExprKind::Var { .. }
+        | ExprKind::Quantity(_, _) => 0,
+        ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => 1 + expr_depth(a),
+        ExprKind::FnN(_, args) => 1 + args.iter().map(expr_depth).max().unwrap_or(0),
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
             1 + expr_depth(a).max(expr_depth(b))
         }
     }
@@ -194,19 +194,19 @@ pub fn expr_depth(expr: &Expr) -> usize {
 #[cfg(test)]
 mod tests {
     fn collect_var_names(expr: &Expr, names: &mut Vec<String>) {
-        match expr {
-            Expr::Var { name, .. } => {
+        match &expr.kind {
+            ExprKind::Var { name, .. } => {
                 if !names.contains(name) {
                     names.push(name.clone());
                 }
             }
-            Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => collect_var_names(a, names),
-            Expr::FnN(_, args) => {
+            ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => collect_var_names(a, names),
+            ExprKind::FnN(_, args) => {
                 for arg in args {
                     collect_var_names(arg, names);
                 }
             }
-            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
                 collect_var_names(a, names);
                 collect_var_names(b, names);
             }
@@ -215,11 +215,11 @@ mod tests {
     }
 
     fn has_frac_pi(expr: &Expr) -> bool {
-        match expr {
-            Expr::FracPi(_) => true,
-            Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => has_frac_pi(a),
-            Expr::FnN(_, args) => args.iter().any(has_frac_pi),
-            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+        match &expr.kind {
+            ExprKind::FracPi(_) => true,
+            ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => has_frac_pi(a),
+            ExprKind::FnN(_, args) => args.iter().any(has_frac_pi),
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
                 has_frac_pi(a) || has_frac_pi(b)
             }
             _ => false,
@@ -230,10 +230,10 @@ mod tests {
         if check(expr) {
             return true;
         }
-        match expr {
-            Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => has_node_type(a, check),
-            Expr::FnN(_, args) => args.iter().any(|a| has_node_type(a, check)),
-            Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+        match &expr.kind {
+            ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => has_node_type(a, check),
+            ExprKind::FnN(_, args) => args.iter().any(|a| has_node_type(a, check)),
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
                 has_node_type(a, check) || has_node_type(b, check)
             }
             _ => false,
@@ -313,17 +313,17 @@ mod tests {
             let mut rng = StdRng::seed_from_u64(seed);
             let expr = gen_expr(&mut rng, &config);
 
-            has_add |= has_node_type(&expr, &|e| matches!(e, Expr::Add(_, _)));
-            has_mul |= has_node_type(&expr, &|e| matches!(e, Expr::Mul(_, _)));
-            has_neg |= has_node_type(&expr, &|e| matches!(e, Expr::Neg(_)));
-            has_inv |= has_node_type(&expr, &|e| matches!(e, Expr::Inv(_)));
-            has_pow |= has_node_type(&expr, &|e| matches!(e, Expr::Pow(_, _)));
-            has_fn |= has_node_type(&expr, &|e| matches!(e, Expr::Fn(_, _)));
-            has_var |= has_node_type(&expr, &|e| matches!(e, Expr::Var { .. }));
+            has_add |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Add(_, _)));
+            has_mul |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Mul(_, _)));
+            has_neg |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Neg(_)));
+            has_inv |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Inv(_)));
+            has_pow |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Pow(_, _)));
+            has_fn |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Fn(_, _)));
+            has_var |= has_node_type(&expr, &|e| matches!(e.kind, ExprKind::Var { .. }));
             has_int |=
-                has_node_type(&expr, &|e| matches!(e, Expr::Rational(r) if r.is_integer()));
+                has_node_type(&expr, &|e| matches!(&e.kind, ExprKind::Rational(r) if r.is_integer()));
             has_frac |=
-                has_node_type(&expr, &|e| matches!(e, Expr::Rational(r) if !r.is_integer()));
+                has_node_type(&expr, &|e| matches!(&e.kind, ExprKind::Rational(r) if !r.is_integer()));
         }
 
         assert!(has_add, "no Add nodes in 1000 expressions");

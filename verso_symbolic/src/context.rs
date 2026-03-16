@@ -1,6 +1,6 @@
 use crate::dim::Dimension;
 use crate::eval::{free_vars, spot_check};
-use crate::expr::Expr;
+use crate::expr::{Expr, ExprKind};
 use crate::rule::{self, Pattern, Rule, RuleSet};
 use crate::search;
 use std::collections::{HashMap, HashSet};
@@ -98,10 +98,10 @@ impl Context {
     pub fn check_equal(&self, lhs: &Expr, rhs: &Expr) -> EqualityResult {
         let lhs = self.apply_consts(lhs);
         let rhs = self.apply_consts(rhs);
-        let diff = Expr::Add(
+        let diff = Expr::new(ExprKind::Add(
             Box::new(lhs.clone()),
-            Box::new(Expr::Neg(Box::new(rhs.clone()))),
-        );
+            Box::new(Expr::new(ExprKind::Neg(Box::new(rhs.clone())))),
+        ));
         let residual = search::simplify(&diff, &self.rules);
 
         if is_zero(&residual) {
@@ -122,10 +122,10 @@ impl Context {
         if a == b {
             return true;
         }
-        let diff = Expr::Add(
+        let diff = Expr::new(ExprKind::Add(
             Box::new(a.clone()),
-            Box::new(Expr::Neg(Box::new(b.clone()))),
-        );
+            Box::new(Expr::new(ExprKind::Neg(Box::new(b.clone())))),
+        ));
         is_zero(&search::simplify(&diff, &self.rules))
     }
 
@@ -201,9 +201,9 @@ impl EqualityResult {
 
 /// Check if an expression is zero.
 pub fn is_zero(expr: &Expr) -> bool {
-    match expr {
-        Expr::Rational(r) => r.is_zero(),
-        Expr::FracPi(r) => r.is_zero(),
+    match &expr.kind {
+        ExprKind::Rational(r) => r.is_zero(),
+        ExprKind::FracPi(r) => r.is_zero(),
         _ => false,
     }
 }
@@ -274,10 +274,10 @@ impl DimOutcome {
 
 /// Infer the dimension of an expression given a dimension environment.
 pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
-    match expr {
-        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => Ok(Dimension::dimensionless()),
-        Expr::Quantity(_inner, unit) => Ok(unit.dimension.clone()),
-        Expr::Var { name, dim, .. } => {
+    match &expr.kind {
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => Ok(Dimension::dimensionless()),
+        ExprKind::Quantity(_inner, unit) => Ok(unit.dimension.clone()),
+        ExprKind::Var { name, dim, .. } => {
             if let Some(d) = dim {
                 return Ok(d.clone());
             }
@@ -285,7 +285,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                 .cloned()
                 .ok_or_else(|| DimError::UndeclaredVar(name.clone()))
         }
-        Expr::Add(a, b) => {
+        ExprKind::Add(a, b) => {
             let da = match check_dim(a, env) {
                 Ok(d) => d,
                 Err(DimError::UndeclaredVar(v)) => {
@@ -325,17 +325,17 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
             }
             Ok(da)
         }
-        Expr::Mul(a, b) => {
+        ExprKind::Mul(a, b) => {
             let da = check_dim(a, env)?;
             let db = check_dim(b, env)?;
             Ok(da.mul(&db))
         }
-        Expr::Neg(inner) => check_dim(inner, env),
-        Expr::Inv(inner) => {
+        ExprKind::Neg(inner) => check_dim(inner, env),
+        ExprKind::Inv(inner) => {
             let d = check_dim(inner, env)?;
             Ok(d.inv())
         }
-        Expr::Pow(base, exp) => {
+        ExprKind::Pow(base, exp) => {
             let db = check_dim(base, env)?;
             if db.is_dimensionless() {
                 let de = check_dim(exp, env)?;
@@ -351,7 +351,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
             let n = expr_as_integer(exp).ok_or(DimError::NonIntegerPower)?;
             Ok(db.pow(n))
         }
-        Expr::Fn(kind, arg) => {
+        ExprKind::Fn(kind, arg) => {
             let da = check_dim(arg, env)?;
             if !da.is_dimensionless() {
                 return Err(DimError::NonDimensionlessFnArg {
@@ -361,7 +361,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
             }
             Ok(Dimension::dimensionless())
         }
-        Expr::FnN(kind, args) => {
+        ExprKind::FnN(kind, args) => {
             for arg in args {
                 let da = check_dim(arg, env)?;
                 if !da.is_dimensionless() {
@@ -431,26 +431,26 @@ fn collect_undeclared(expr: &Expr, env: &DimEnv) -> Vec<String> {
 }
 
 fn collect_undeclared_inner(expr: &Expr, env: &DimEnv, out: &mut Vec<String>) {
-    match expr {
-        Expr::Var { name, dim, .. } => {
+    match &expr.kind {
+        ExprKind::Var { name, dim, .. } => {
             if dim.is_none() && !env.contains_key(name) {
                 out.push(name.clone());
             }
         }
-        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
             collect_undeclared_inner(a, env, out);
             collect_undeclared_inner(b, env, out);
         }
-        Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => {
+        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
             collect_undeclared_inner(inner, env, out);
         }
-        Expr::FnN(_, args) => {
+        ExprKind::FnN(_, args) => {
             for arg in args {
                 collect_undeclared_inner(arg, env, out);
             }
         }
-        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => {}
-        Expr::Quantity(inner, _) => {
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => {}
+        ExprKind::Quantity(inner, _) => {
             collect_undeclared_inner(inner, env, out);
         }
     }
@@ -463,67 +463,67 @@ pub fn collect_units(expr: &Expr) -> Vec<String> {
 
 /// Check if an expression contains any type information (units or inline dimensions).
 fn has_type_info(expr: &Expr) -> bool {
-    match expr {
-        Expr::Quantity(_, _) => true,
-        Expr::Var { dim: Some(_), .. } => true,
-        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+    match &expr.kind {
+        ExprKind::Quantity(_, _) => true,
+        ExprKind::Var { dim: Some(_), .. } => true,
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
             has_type_info(a) || has_type_info(b)
         }
-        Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => has_type_info(inner),
-        Expr::FnN(_, args) => args.iter().any(has_type_info),
+        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => has_type_info(inner),
+        ExprKind::FnN(_, args) => args.iter().any(has_type_info),
         _ => false,
     }
 }
 
 fn expr_as_integer(expr: &Expr) -> Option<i32> {
-    match expr {
-        Expr::Rational(r) => {
+    match &expr.kind {
+        ExprKind::Rational(r) => {
             if r.den() == 1 {
                 Some(r.num() as i32)
             } else {
                 None
             }
         }
-        Expr::Neg(inner) => expr_as_integer(inner).map(|n| -n),
+        ExprKind::Neg(inner) => expr_as_integer(inner).map(|n| -n),
         _ => None,
     }
 }
 
 /// Convert an Expr into a Pattern, turning free variables into wildcards.
 fn expr_to_pattern(expr: &Expr, wildcards: &HashSet<String>) -> Pattern {
-    match expr {
-        Expr::Var { name, .. } => {
+    match &expr.kind {
+        ExprKind::Var { name, .. } => {
             if wildcards.contains(name) {
                 Pattern::Wildcard(name.clone())
             } else {
                 rule::p_var(name, vec![])
             }
         }
-        Expr::Rational(r) => Pattern::Rational(*r),
-        Expr::FracPi(r) => Pattern::FracPi(*r),
-        Expr::Named(n) => Pattern::Named(*n),
-        Expr::Add(a, b) => Pattern::Add(
+        ExprKind::Rational(r) => Pattern::Rational(*r),
+        ExprKind::FracPi(r) => Pattern::FracPi(*r),
+        ExprKind::Named(n) => Pattern::Named(*n),
+        ExprKind::Add(a, b) => Pattern::Add(
             Box::new(expr_to_pattern(a, wildcards)),
             Box::new(expr_to_pattern(b, wildcards)),
         ),
-        Expr::Mul(a, b) => Pattern::Mul(
+        ExprKind::Mul(a, b) => Pattern::Mul(
             Box::new(expr_to_pattern(a, wildcards)),
             Box::new(expr_to_pattern(b, wildcards)),
         ),
-        Expr::Pow(a, b) => Pattern::Pow(
+        ExprKind::Pow(a, b) => Pattern::Pow(
             Box::new(expr_to_pattern(a, wildcards)),
             Box::new(expr_to_pattern(b, wildcards)),
         ),
-        Expr::Neg(inner) => Pattern::Neg(Box::new(expr_to_pattern(inner, wildcards))),
-        Expr::Inv(inner) => Pattern::Inv(Box::new(expr_to_pattern(inner, wildcards))),
-        Expr::Fn(kind, inner) => {
+        ExprKind::Neg(inner) => Pattern::Neg(Box::new(expr_to_pattern(inner, wildcards))),
+        ExprKind::Inv(inner) => Pattern::Inv(Box::new(expr_to_pattern(inner, wildcards))),
+        ExprKind::Fn(kind, inner) => {
             Pattern::Fn(kind.clone(), Box::new(expr_to_pattern(inner, wildcards)))
         }
-        Expr::FnN(kind, args) => Pattern::FnN(
+        ExprKind::FnN(kind, args) => Pattern::FnN(
             kind.clone(),
             args.iter().map(|a| expr_to_pattern(a, wildcards)).collect(),
         ),
-        Expr::Quantity(inner, _unit) => {
+        ExprKind::Quantity(inner, _unit) => {
             // Quantities lose their unit in patterns — match on the inner expression
             expr_to_pattern(inner, wildcards)
         }
@@ -536,37 +536,37 @@ pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
     if consts.is_empty() {
         return expr.clone();
     }
-    match expr {
-        Expr::Var { name, .. } => {
+    match &expr.kind {
+        ExprKind::Var { name, .. } => {
             if let Some(value) = consts.get(name) {
                 value.clone()
             } else {
                 expr.clone()
             }
         }
-        Expr::Add(a, b) => Expr::Add(
+        ExprKind::Add(a, b) => Expr::new(ExprKind::Add(
             Box::new(substitute_consts(a, consts)),
             Box::new(substitute_consts(b, consts)),
-        ),
-        Expr::Mul(a, b) => Expr::Mul(
+        )),
+        ExprKind::Mul(a, b) => Expr::new(ExprKind::Mul(
             Box::new(substitute_consts(a, consts)),
             Box::new(substitute_consts(b, consts)),
-        ),
-        Expr::Pow(a, b) => Expr::Pow(
+        )),
+        ExprKind::Pow(a, b) => Expr::new(ExprKind::Pow(
             Box::new(substitute_consts(a, consts)),
             Box::new(substitute_consts(b, consts)),
-        ),
-        Expr::Neg(inner) => Expr::Neg(Box::new(substitute_consts(inner, consts))),
-        Expr::Inv(inner) => Expr::Inv(Box::new(substitute_consts(inner, consts))),
-        Expr::Fn(kind, inner) => Expr::Fn(kind.clone(), Box::new(substitute_consts(inner, consts))),
-        Expr::FnN(kind, args) => Expr::FnN(
+        )),
+        ExprKind::Neg(inner) => Expr::new(ExprKind::Neg(Box::new(substitute_consts(inner, consts)))),
+        ExprKind::Inv(inner) => Expr::new(ExprKind::Inv(Box::new(substitute_consts(inner, consts)))),
+        ExprKind::Fn(kind, inner) => Expr::new(ExprKind::Fn(kind.clone(), Box::new(substitute_consts(inner, consts)))),
+        ExprKind::FnN(kind, args) => Expr::new(ExprKind::FnN(
             kind.clone(),
             args.iter().map(|a| substitute_consts(a, consts)).collect(),
-        ),
-        Expr::Quantity(inner, unit) => {
-            Expr::Quantity(Box::new(substitute_consts(inner, consts)), unit.clone())
+        )),
+        ExprKind::Quantity(inner, unit) => {
+            Expr::new(ExprKind::Quantity(Box::new(substitute_consts(inner, consts)), unit.clone()))
         }
-        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => expr.clone(),
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => expr.clone(),
     }
 }
 
@@ -577,8 +577,8 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
     if funcs.is_empty() {
         return expr.clone();
     }
-    match expr {
-        Expr::Fn(crate::expr::FnKind::Custom(name), arg) => {
+    match &expr.kind {
+        ExprKind::Fn(crate::expr::FnKind::Custom(name), arg) => {
             if let Some(def) = funcs.get(name) {
                 let expanded_arg = expand_funcs(arg, funcs);
                 let mut bindings = HashMap::new();
@@ -588,13 +588,13 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                 let result = substitute_consts(&def.body, &bindings);
                 expand_funcs(&result, funcs)
             } else {
-                Expr::Fn(
+                Expr::new(ExprKind::Fn(
                     crate::expr::FnKind::Custom(name.clone()),
                     Box::new(expand_funcs(arg, funcs)),
-                )
+                ))
             }
         }
-        Expr::FnN(crate::expr::FnKind::Custom(name), args) => {
+        ExprKind::FnN(crate::expr::FnKind::Custom(name), args) => {
             if let Some(def) = funcs.get(name) {
                 let expanded_args: Vec<Expr> = args.iter().map(|a| expand_funcs(a, funcs)).collect();
                 let mut bindings = HashMap::new();
@@ -604,35 +604,35 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                 let result = substitute_consts(&def.body, &bindings);
                 expand_funcs(&result, funcs)
             } else {
-                Expr::FnN(
+                Expr::new(ExprKind::FnN(
                     crate::expr::FnKind::Custom(name.clone()),
                     args.iter().map(|a| expand_funcs(a, funcs)).collect(),
-                )
+                ))
             }
         }
-        Expr::Add(a, b) => Expr::Add(
+        ExprKind::Add(a, b) => Expr::new(ExprKind::Add(
             Box::new(expand_funcs(a, funcs)),
             Box::new(expand_funcs(b, funcs)),
-        ),
-        Expr::Mul(a, b) => Expr::Mul(
+        )),
+        ExprKind::Mul(a, b) => Expr::new(ExprKind::Mul(
             Box::new(expand_funcs(a, funcs)),
             Box::new(expand_funcs(b, funcs)),
-        ),
-        Expr::Pow(a, b) => Expr::Pow(
+        )),
+        ExprKind::Pow(a, b) => Expr::new(ExprKind::Pow(
             Box::new(expand_funcs(a, funcs)),
             Box::new(expand_funcs(b, funcs)),
-        ),
-        Expr::Neg(inner) => Expr::Neg(Box::new(expand_funcs(inner, funcs))),
-        Expr::Inv(inner) => Expr::Inv(Box::new(expand_funcs(inner, funcs))),
-        Expr::Fn(kind, inner) => Expr::Fn(kind.clone(), Box::new(expand_funcs(inner, funcs))),
-        Expr::FnN(kind, args) => Expr::FnN(
+        )),
+        ExprKind::Neg(inner) => Expr::new(ExprKind::Neg(Box::new(expand_funcs(inner, funcs)))),
+        ExprKind::Inv(inner) => Expr::new(ExprKind::Inv(Box::new(expand_funcs(inner, funcs)))),
+        ExprKind::Fn(kind, inner) => Expr::new(ExprKind::Fn(kind.clone(), Box::new(expand_funcs(inner, funcs)))),
+        ExprKind::FnN(kind, args) => Expr::new(ExprKind::FnN(
             kind.clone(),
             args.iter().map(|a| expand_funcs(a, funcs)).collect(),
-        ),
-        Expr::Quantity(inner, unit) => {
-            Expr::Quantity(Box::new(expand_funcs(inner, funcs)), unit.clone())
+        )),
+        ExprKind::Quantity(inner, unit) => {
+            Expr::new(ExprKind::Quantity(Box::new(expand_funcs(inner, funcs)), unit.clone()))
         }
-        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => expr.clone(),
     }
 }
 
@@ -650,15 +650,15 @@ fn try_rule_produces_inner(from: &Expr, rule: &crate::rule::Rule, to: &Expr, ctx
         }
     }
 
-    match from {
-        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+    match &from.kind {
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
             try_rule_produces_inner(a, rule, to, ctx)
                 || try_rule_produces_inner(b, rule, to, ctx)
         }
-        Expr::Neg(inner) | Expr::Inv(inner) | Expr::Fn(_, inner) => {
+        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
             try_rule_produces_inner(inner, rule, to, ctx)
         }
-        Expr::FnN(_, args) => args.iter().any(|a| try_rule_produces_inner(a, rule, to, ctx)),
+        ExprKind::FnN(_, args) => args.iter().any(|a| try_rule_produces_inner(a, rule, to, ctx)),
         _ => false,
     }
 }
@@ -889,7 +889,7 @@ mod tests {
         // f(x) = x + 1
         ctx.declare_func("f", vec!["x".to_string()], parse_expr("x + 1").unwrap());
         // Build f(3) manually since the parser treats it as implicit multiplication
-        let expr = Expr::Fn(FnKind::Custom("f".to_string()), Box::new(parse_expr("3").unwrap()));
+        let expr = Expr::new(ExprKind::Fn(FnKind::Custom("f".to_string()), Box::new(parse_expr("3").unwrap())));
         let expanded = ctx.apply_consts(&expr);
         assert_eq!(expanded, parse_expr("3 + 1").unwrap());
     }
@@ -904,10 +904,10 @@ mod tests {
             vec!["a".to_string(), "b".to_string()],
             parse_expr("a + b").unwrap(),
         );
-        let expr = Expr::FnN(
+        let expr = Expr::new(ExprKind::FnN(
             crate::expr::FnKind::Custom("g".to_string()),
             vec![parse_expr("2").unwrap(), parse_expr("3").unwrap()],
-        );
+        ));
         let expanded = ctx.apply_consts(&expr);
         assert_eq!(eval_f64(&expanded, &HashMap::new()), Some(5.0));
     }
@@ -916,10 +916,10 @@ mod tests {
     fn expand_unknown_custom_fn_unchanged() {
         use crate::expr::FnKind;
         let ctx = Context::new();
-        let expr = Expr::Fn(
+        let expr = Expr::new(ExprKind::Fn(
             FnKind::Custom("f".to_string()),
             Box::new(parse_expr("x").unwrap()),
-        );
+        ));
         let expanded = ctx.apply_consts(&expr);
         assert_eq!(expanded, expr);
     }
@@ -1076,10 +1076,10 @@ mod tests {
     fn check_dim_fnn_dimensional_arg_error() {
         let mut env = DimEnv::new();
         env.insert("x".into(), Dimension::single(BaseDim::L, 1));
-        let expr = Expr::FnN(
+        let expr = Expr::new(ExprKind::FnN(
             crate::expr::FnKind::Min,
             vec![parse_expr("x").unwrap(), parse_expr("1").unwrap()],
-        );
+        ));
         let result = check_dim(&expr, &env);
         assert!(matches!(
             result,

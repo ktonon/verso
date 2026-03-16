@@ -2,7 +2,7 @@ use crate::dim::Dimension;
 use crate::expr::{
     acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
     min, mul, named, neg, pow, quantity, round, scalar, sign, sin, sinh, sqrt, tan, tanh, Expr,
-    FnKind, Index, IndexPosition, NamedConst,
+    ExprKind, FnKind, Index, IndexPosition, NamedConst,
 };
 use crate::rational::Rational;
 use crate::unit::Unit;
@@ -318,7 +318,7 @@ impl Parser {
             Some(Token::Number(s)) => {
                 if !s.contains('.') {
                     if let Ok(n) = s.parse::<i64>() {
-                        return Ok(Expr::Rational(Rational::from_i64(n)));
+                        return Ok(Expr::new(ExprKind::Rational(Rational::from_i64(n))));
                     }
                 }
                 let n: f64 = s
@@ -407,9 +407,9 @@ impl Parser {
             _ => {
                 // User-defined function call
                 if args.len() == 1 {
-                    Ok(Expr::Fn(FnKind::Custom(name), Box::new(args.into_iter().next().unwrap())))
+                    Ok(Expr::new(ExprKind::Fn(FnKind::Custom(name), Box::new(args.into_iter().next().unwrap()))))
                 } else {
-                    Ok(Expr::FnN(FnKind::Custom(name), args))
+                    Ok(Expr::new(ExprKind::FnN(FnKind::Custom(name), args)))
                 }
             }
         }
@@ -503,8 +503,8 @@ impl Parser {
             let mut all = Vec::new();
             all.extend(lowers);
             all.extend(uppers);
-            if let crate::expr::Expr::Var { name, .. } = expr {
-                expr = crate::expr::Expr::Var { name, indices: all, dim };
+            if let ExprKind::Var { name, .. } = expr.kind {
+                expr = Expr::new(ExprKind::Var { name, indices: all, dim });
             }
         }
 
@@ -730,15 +730,15 @@ impl Parser {
 
 /// Check if an expression contains any variable references.
 fn expr_has_vars(expr: &Expr) -> bool {
-    match expr {
-        Expr::Var { .. } => true,
-        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+    match &expr.kind {
+        ExprKind::Var { .. } => true,
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
             expr_has_vars(a) || expr_has_vars(b)
         }
-        Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => expr_has_vars(a),
-        Expr::FnN(_, args) => args.iter().any(expr_has_vars),
-        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => false,
-        Expr::Quantity(inner, _) => expr_has_vars(inner),
+        ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => expr_has_vars(a),
+        ExprKind::FnN(_, args) => args.iter().any(expr_has_vars),
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => false,
+        ExprKind::Quantity(inner, _) => expr_has_vars(inner),
     }
 }
 
@@ -870,7 +870,7 @@ mod tests {
         let expr = parse_expr("foo(x + 1)").unwrap();
         assert_eq!(
             expr,
-            Expr::Fn(FnKind::Custom("foo".to_string()), Box::new(add(scalar("x"), constant(1.0))))
+            Expr::new(ExprKind::Fn(FnKind::Custom("foo".to_string()), Box::new(add(scalar("x"), constant(1.0)))))
         );
     }
 
@@ -1005,7 +1005,7 @@ mod tests {
         let expr = parse_expr("2π").unwrap();
         assert_eq!(
             expr,
-            mul(Expr::Rational(Rational::from_i64(2)), frac_pi(1, 1))
+            mul(Expr::new(ExprKind::Rational(Rational::from_i64(2))), frac_pi(1, 1))
         );
 
         let expr = parse_expr("e").unwrap();
@@ -1041,12 +1041,12 @@ mod tests {
         // sin(pi/2) = 1
         let expr = parse_expr("sin(pi / 2)").unwrap();
         let simplified = simplify(&expr, &RuleSet::full());
-        assert_eq!(simplified, Expr::Rational(Rational::ONE));
+        assert_eq!(simplified, Expr::new(ExprKind::Rational(Rational::ONE)));
 
         // cos(pi) = -1
         let expr = parse_expr("cos(pi)").unwrap();
         let simplified = simplify(&expr, &RuleSet::full());
-        assert_eq!(simplified, Expr::Rational(Rational::NEG_ONE));
+        assert_eq!(simplified, Expr::new(ExprKind::Rational(Rational::NEG_ONE)));
     }
 
     #[test]
@@ -1100,8 +1100,8 @@ mod tests {
         use crate::dim::Dimension;
 
         let expr = parse_expr("v [L T^-1]").unwrap();
-        match &expr {
-            Expr::Var { name, dim, .. } => {
+        match &expr.kind {
+            ExprKind::Var { name, dim, .. } => {
                 assert_eq!(name, "v");
                 assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[L T^-1]").unwrap());
             }
@@ -1115,8 +1115,8 @@ mod tests {
 
         // [L/T] is shorthand for [L T^-1]
         let expr = parse_expr("v [L/T]").unwrap();
-        match &expr {
-            Expr::Var { dim, .. } => {
+        match &expr.kind {
+            ExprKind::Var { dim, .. } => {
                 assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[L T^-1]").unwrap());
             }
             _ => panic!("expected Var"),
@@ -1124,8 +1124,8 @@ mod tests {
 
         // [M L/T^2] is shorthand for [M L T^-2]
         let expr = parse_expr("F [M L/T^2]").unwrap();
-        match &expr {
-            Expr::Var { dim, .. } => {
+        match &expr.kind {
+            ExprKind::Var { dim, .. } => {
                 assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[M L T^-2]").unwrap());
             }
             _ => panic!("expected Var"),
@@ -1135,8 +1135,8 @@ mod tests {
     #[test]
     fn parse_dimensionless_annotation() {
         let expr = parse_expr("theta [1]").unwrap();
-        match &expr {
-            Expr::Var { dim, .. } => {
+        match &expr.kind {
+            ExprKind::Var { dim, .. } => {
                 assert!(dim.as_ref().unwrap().is_dimensionless());
             }
             _ => panic!("expected Var"),
@@ -1149,8 +1149,8 @@ mod tests {
 
         // [1/T] is shorthand for [T^-1]
         let expr = parse_expr("f [1/T]").unwrap();
-        match &expr {
-            Expr::Var { dim, .. } => {
+        match &expr.kind {
+            ExprKind::Var { dim, .. } => {
                 assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[T^-1]").unwrap());
             }
             _ => panic!("expected Var"),
@@ -1162,9 +1162,9 @@ mod tests {
         use crate::dim::{BaseDim, Dimension};
 
         let expr = parse_expr("3 [m]").unwrap();
-        match &expr {
-            Expr::Quantity(inner, unit) => {
-                assert_eq!(**inner, Expr::Rational(Rational::from_i64(3)));
+        match &expr.kind {
+            ExprKind::Quantity(inner, unit) => {
+                assert_eq!(**inner, Expr::new(ExprKind::Rational(Rational::from_i64(3))));
                 assert_eq!(unit.dimension, Dimension::single(BaseDim::L, 1));
                 assert!((unit.scale - 1.0).abs() < 1e-15);
                 assert_eq!(unit.display, "m");
@@ -1178,8 +1178,8 @@ mod tests {
         use crate::dim::Dimension;
 
         let expr = parse_expr("3*10^8 [m/s]").unwrap();
-        match &expr {
-            Expr::Quantity(_, unit) => {
+        match &expr.kind {
+            ExprKind::Quantity(_, unit) => {
                 assert_eq!(unit.dimension, Dimension::parse("[L T^-1]").unwrap());
                 assert!((unit.scale - 1.0).abs() < 1e-15);
             }
@@ -1192,8 +1192,8 @@ mod tests {
         use crate::dim::{BaseDim, Dimension};
 
         let expr = parse_expr("5 [km]").unwrap();
-        match &expr {
-            Expr::Quantity(_, unit) => {
+        match &expr.kind {
+            ExprKind::Quantity(_, unit) => {
                 assert_eq!(unit.dimension, Dimension::single(BaseDim::L, 1));
                 assert!((unit.scale - 1000.0).abs() < 1e-10);
                 assert_eq!(unit.display, "km");
@@ -1207,8 +1207,8 @@ mod tests {
         use crate::dim::Dimension;
 
         let expr = parse_expr("10 [kg*m/s^2]").unwrap();
-        match &expr {
-            Expr::Quantity(_, unit) => {
+        match &expr.kind {
+            ExprKind::Quantity(_, unit) => {
                 assert_eq!(unit.dimension, Dimension::parse("[M L T^-2]").unwrap());
                 assert!((unit.scale - 1.0).abs() < 1e-15);
             }
@@ -1221,8 +1221,8 @@ mod tests {
         use crate::dim::Dimension;
 
         let expr = parse_expr("100 [N]").unwrap();
-        match &expr {
-            Expr::Quantity(_, unit) => {
+        match &expr.kind {
+            ExprKind::Quantity(_, unit) => {
                 assert_eq!(unit.dimension, Dimension::parse("[M L T^-2]").unwrap());
                 assert!((unit.scale - 1.0).abs() < 1e-15);
                 assert_eq!(unit.display, "N");
@@ -1236,8 +1236,8 @@ mod tests {
         use crate::dim::Dimension;
 
         let expr = parse_expr("5 [1/s]").unwrap();
-        match &expr {
-            Expr::Quantity(_, unit) => {
+        match &expr.kind {
+            ExprKind::Quantity(_, unit) => {
                 assert_eq!(unit.dimension, Dimension::parse("[T^-1]").unwrap());
             }
             _ => panic!("expected Quantity"),
@@ -1247,7 +1247,7 @@ mod tests {
     #[test]
     fn parse_quantity_addition() {
         let expr = parse_expr("3 [m] + 5 [m]").unwrap();
-        assert!(matches!(&expr, Expr::Add(_, _)));
+        assert!(matches!(&expr.kind, ExprKind::Add(_, _)));
     }
 
     #[test]

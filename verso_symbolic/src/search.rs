@@ -1,4 +1,4 @@
-use crate::expr::{classify_mul, Expr, FnKind, MulKind};
+use crate::expr::{classify_mul, Expr, ExprKind, FnKind, MulKind};
 use crate::rational::Rational;
 use crate::rule::RuleSet;
 use rayon::prelude::*;
@@ -93,17 +93,17 @@ impl BeamSearch {
         }
 
         // Recursively try rewrites in children (with reduced depth)
-        match expr {
-            Expr::Rational(_)
-            | Expr::Named(_)
-            | Expr::FracPi(_)
-            | Expr::Var { .. }
-            | Expr::Quantity(_, _) => {}
+        match &expr.kind {
+            ExprKind::Rational(_)
+            | ExprKind::Named(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Var { .. }
+            | ExprKind::Quantity(_, _) => {}
 
-            Expr::Add(a, b) => {
+            ExprKind::Add(a, b) => {
                 for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Add(Box::new(rewrite.expr), b.clone()),
+                        expr: Expr::new(ExprKind::Add(Box::new(rewrite.expr), b.clone())),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
@@ -111,7 +111,7 @@ impl BeamSearch {
                 }
                 for rewrite in self.all_rewrites_depth(b, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Add(a.clone(), Box::new(rewrite.expr)),
+                        expr: Expr::new(ExprKind::Add(a.clone(), Box::new(rewrite.expr))),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
@@ -119,10 +119,10 @@ impl BeamSearch {
                 }
             }
 
-            Expr::Mul(a, b) => {
+            ExprKind::Mul(a, b) => {
                 for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Mul(Box::new(rewrite.expr), b.clone()),
+                        expr: Expr::new(ExprKind::Mul(Box::new(rewrite.expr), b.clone())),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
@@ -130,7 +130,7 @@ impl BeamSearch {
                 }
                 for rewrite in self.all_rewrites_depth(b, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Mul(a.clone(), Box::new(rewrite.expr)),
+                        expr: Expr::new(ExprKind::Mul(a.clone(), Box::new(rewrite.expr))),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
@@ -138,10 +138,10 @@ impl BeamSearch {
                 }
             }
 
-            Expr::Pow(base, exp) => {
+            ExprKind::Pow(base, exp) => {
                 for rewrite in self.all_rewrites_depth(base, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Pow(Box::new(rewrite.expr), exp.clone()),
+                        expr: Expr::new(ExprKind::Pow(Box::new(rewrite.expr), exp.clone())),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
@@ -149,7 +149,7 @@ impl BeamSearch {
                 }
                 for rewrite in self.all_rewrites_depth(exp, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Pow(base.clone(), Box::new(rewrite.expr)),
+                        expr: Expr::new(ExprKind::Pow(base.clone(), Box::new(rewrite.expr))),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
@@ -157,10 +157,10 @@ impl BeamSearch {
                 }
             }
 
-            Expr::Neg(a) => {
+            ExprKind::Neg(a) => {
                 for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Neg(Box::new(rewrite.expr)),
+                        expr: Expr::new(ExprKind::Neg(Box::new(rewrite.expr))),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
@@ -168,10 +168,10 @@ impl BeamSearch {
                 }
             }
 
-            Expr::Inv(a) => {
+            ExprKind::Inv(a) => {
                 for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Inv(Box::new(rewrite.expr)),
+                        expr: Expr::new(ExprKind::Inv(Box::new(rewrite.expr))),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
@@ -179,23 +179,23 @@ impl BeamSearch {
                 }
             }
 
-            Expr::Fn(kind, a) => {
+            ExprKind::Fn(kind, a) => {
                 for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
                     results.push(Rewrite {
-                        expr: Expr::Fn(kind.clone(), Box::new(rewrite.expr)),
+                        expr: Expr::new(ExprKind::Fn(kind.clone(), Box::new(rewrite.expr))),
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
                     });
                 }
             }
-            Expr::FnN(kind, args) => {
+            ExprKind::FnN(kind, args) => {
                 for (idx, arg) in args.iter().enumerate() {
                     for rewrite in self.all_rewrites_depth(arg, rules, depth - 1) {
                         let mut new_args = args.clone();
                         new_args[idx] = rewrite.expr;
                         results.push(Rewrite {
-                            expr: Expr::FnN(kind.clone(), new_args),
+                            expr: Expr::new(ExprKind::FnN(kind.clone(), new_args)),
                             from_rule: rewrite.from_rule,
                             rule_name: rewrite.rule_name,
                             rule_display: rewrite.rule_display,
@@ -470,16 +470,16 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<TraceStep
 /// No normalization (no factor sorting, no mul shortcuts). This is mathematical evaluation,
 /// not a search strategy choice.
 pub fn eval_constants(expr: &Expr) -> Expr {
-    match expr {
-        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) | Expr::Var { .. } => expr.clone(),
-        Expr::Quantity(inner, unit) => {
+    match &expr.kind {
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => expr.clone(),
+        ExprKind::Quantity(inner, unit) => {
             let inner = eval_constants(inner);
-            if let Expr::Rational(r) = &inner {
+            if let ExprKind::Rational(r) = &inner.kind {
                 let val = r.value() * unit.scale;
                 // Try integer
                 let rounded = val.round();
                 if (val - rounded).abs() < 1e-9 && rounded.abs() < i64::MAX as f64 {
-                    return Expr::Rational(Rational::from_i64(rounded as i64));
+                    return Expr::new(ExprKind::Rational(Rational::from_i64(rounded as i64)));
                 }
                 // Try common denominators for SI scales (handles gram = 0.001, etc.)
                 for den in [10i64, 100, 1000, 1_000_000, 1_000_000_000] {
@@ -487,72 +487,72 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                     let num_rounded = num_f64.round();
                     if (num_f64 - num_rounded).abs() < 1e-6 && num_rounded.abs() < i64::MAX as f64
                     {
-                        return Expr::Rational(Rational::new(num_rounded as i64, den));
+                        return Expr::new(ExprKind::Rational(Rational::new(num_rounded as i64, den)));
                     }
                 }
             }
-            Expr::Quantity(Box::new(inner), unit.clone())
+            Expr::new(ExprKind::Quantity(Box::new(inner), unit.clone()))
         }
-        Expr::Neg(a) => {
+        ExprKind::Neg(a) => {
             let inner = eval_constants(a);
-            match &inner {
-                Expr::Rational(r) => Expr::Rational(-*r),
-                Expr::FracPi(r) => Expr::FracPi(-*r),
-                _ => Expr::Neg(Box::new(inner)),
+            match &inner.kind {
+                ExprKind::Rational(r) => Expr::new(ExprKind::Rational(-*r)),
+                ExprKind::FracPi(r) => Expr::new(ExprKind::FracPi(-*r)),
+                _ => Expr::new(ExprKind::Neg(Box::new(inner))),
             }
         }
-        Expr::Inv(a) => {
+        ExprKind::Inv(a) => {
             let inner = eval_constants(a);
-            match &inner {
-                Expr::Rational(r) if !r.is_zero() => {
-                    Expr::Rational(Rational::ONE / *r)
+            match &inner.kind {
+                ExprKind::Rational(r) if !r.is_zero() => {
+                    Expr::new(ExprKind::Rational(Rational::ONE / *r))
                 }
-                _ => Expr::Inv(Box::new(inner)),
+                _ => Expr::new(ExprKind::Inv(Box::new(inner))),
             }
         }
-        Expr::Add(a, b) => {
+        ExprKind::Add(a, b) => {
             let left = eval_constants(a);
             let right = eval_constants(b);
             // Rational + Rational → Rational
-            if let (Expr::Rational(a), Expr::Rational(b)) = (&left, &right) {
-                return Expr::Rational(*a + *b);
+            if let (ExprKind::Rational(a), ExprKind::Rational(b)) = (&left.kind, &right.kind) {
+                return Expr::new(ExprKind::Rational(*a + *b));
             }
             // FracPi + FracPi → FracPi
-            if let (Expr::FracPi(a), Expr::FracPi(b)) = (&left, &right) {
+            if let (ExprKind::FracPi(a), ExprKind::FracPi(b)) = (&left.kind, &right.kind) {
                 let sum = *a + *b;
                 return if sum.is_zero() {
-                    Expr::Rational(Rational::ZERO)
+                    Expr::new(ExprKind::Rational(Rational::ZERO))
                 } else {
-                    Expr::FracPi(sum)
+                    Expr::new(ExprKind::FracPi(sum))
                 };
             }
-            Expr::Add(Box::new(left), Box::new(right))
+            Expr::new(ExprKind::Add(Box::new(left), Box::new(right)))
         }
-        Expr::Mul(a, b) => {
+        ExprKind::Mul(a, b) => {
             let left = eval_constants(a);
             let right = eval_constants(b);
             // Rational * Rational → Rational
-            if let (Expr::Rational(a), Expr::Rational(b)) = (&left, &right) {
-                return Expr::Rational(*a * *b);
+            if let (ExprKind::Rational(a), ExprKind::Rational(b)) = (&left.kind, &right.kind) {
+                return Expr::new(ExprKind::Rational(*a * *b));
             }
             // Rational * FracPi → FracPi
-            if let (Expr::Rational(a), Expr::FracPi(b))
-            | (Expr::FracPi(b), Expr::Rational(a)) = (&left, &right)
+            if let (ExprKind::Rational(a), ExprKind::FracPi(b))
+            | (ExprKind::FracPi(b), ExprKind::Rational(a)) = (&left.kind, &right.kind)
             {
                 let prod = *a * *b;
                 return if prod.is_zero() {
-                    Expr::Rational(Rational::ZERO)
+                    Expr::new(ExprKind::Rational(Rational::ZERO))
                 } else {
-                    Expr::FracPi(prod)
+                    Expr::new(ExprKind::FracPi(prod))
                 };
             }
-            Expr::Mul(Box::new(left), Box::new(right))
+            Expr::new(ExprKind::Mul(Box::new(left), Box::new(right)))
         }
-        Expr::Pow(base, exp) => {
+        ExprKind::Pow(base, exp) => {
             let b = eval_constants(base);
             let e = eval_constants(exp);
             // Rational ^ Rational (integer exponent) → Rational
-            if let (Expr::Rational(base_r), Expr::Rational(exp_r)) = (&b, &e) {
+            if let (ExprKind::Rational(base_r), ExprKind::Rational(exp_r)) = (&b.kind, &e.kind) {
                 if exp_r.is_integer() && exp_r.num().abs() <= 20 {
                     let n = exp_r.num();
                     if n >= 0 {
@@ -560,7 +560,7 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                         for _ in 0..n {
                             result = result * *base_r;
                         }
-                        return Expr::Rational(result);
+                        return Expr::new(ExprKind::Rational(result));
                     }
                     // Negative exponent: compute positive power then invert
                     if !base_r.is_zero() {
@@ -568,23 +568,23 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                         for _ in 0..(-n) {
                             result = result * *base_r;
                         }
-                        return Expr::Rational(Rational::ONE / result);
+                        return Expr::new(ExprKind::Rational(Rational::ONE / result));
                     }
                 }
             }
-            Expr::Pow(Box::new(b), Box::new(e))
+            Expr::new(ExprKind::Pow(Box::new(b), Box::new(e)))
         }
-        Expr::Fn(kind, a) => {
+        ExprKind::Fn(kind, a) => {
             let arg = eval_constants(a);
-            let arg = match (&arg, kind) {
+            let arg = match (&arg.kind, kind) {
                 // Normalize FracPi mod 2 for trig functions
-                (Expr::FracPi(r), FnKind::Sin | FnKind::Cos | FnKind::Tan) => {
+                (ExprKind::FracPi(r), FnKind::Sin | FnKind::Cos | FnKind::Tan) => {
                     let normalized = r.rem_euclid(Rational::TWO);
                     if &normalized != r {
                         if normalized.is_zero() {
-                            Expr::FracPi(Rational::ZERO)
+                            Expr::new(ExprKind::FracPi(Rational::ZERO))
                         } else {
-                            Expr::FracPi(normalized)
+                            Expr::new(ExprKind::FracPi(normalized))
                         }
                     } else {
                         arg
@@ -592,9 +592,9 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                 }
                 _ => arg,
             };
-            Expr::Fn(kind.clone(), Box::new(arg))
+            Expr::new(ExprKind::Fn(kind.clone(), Box::new(arg)))
         }
-        Expr::FnN(kind, args) => Expr::FnN(kind.clone(), args.iter().map(eval_constants).collect()),
+        ExprKind::FnN(kind, args) => Expr::new(ExprKind::FnN(kind.clone(), args.iter().map(eval_constants).collect())),
     }
 }
 
@@ -606,20 +606,20 @@ fn collect_all_indices(expr: &Expr) -> Vec<(String, crate::expr::IndexPosition)>
 }
 
 fn collect_all_indices_rec(expr: &Expr, result: &mut Vec<(String, crate::expr::IndexPosition)>) {
-    match expr {
-        Expr::Var { indices, .. } => {
+    match &expr.kind {
+        ExprKind::Var { indices, .. } => {
             for idx in indices {
                 result.push((idx.name.clone(), idx.position.clone()));
             }
         }
-        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
             collect_all_indices_rec(a, result);
             collect_all_indices_rec(b, result);
         }
-        Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => {
+        ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => {
             collect_all_indices_rec(a, result);
         }
-        Expr::FnN(_, args) => {
+        ExprKind::FnN(_, args) => {
             for arg in args {
                 collect_all_indices_rec(arg, result);
             }
@@ -680,11 +680,11 @@ fn canonical_key(expr: &Expr) -> String {
 fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> String {
     use crate::expr::{classify_mul, IndexPosition, MulKind};
 
-    match expr {
-        Expr::Rational(r) => format!("Rat({}/{})", r.num(), r.den()),
-        Expr::Named(nc) => format!("Named({:?})", nc),
-        Expr::FracPi(r) => format!("FracPi({}/{})", r.num(), r.den()),
-        Expr::Var { name, indices, .. } => {
+    match &expr.kind {
+        ExprKind::Rational(r) => format!("Rat({}/{})", r.num(), r.den()),
+        ExprKind::Named(nc) => format!("Named({:?})", nc),
+        ExprKind::FracPi(r) => format!("FracPi({}/{})", r.num(), r.den()),
+        ExprKind::Var { name, indices, .. } => {
             if indices.is_empty() {
                 format!("Var({})", name)
             } else {
@@ -701,7 +701,7 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
                 format!("Var({}[{}])", name, normalized_indices.join(","))
             }
         }
-        Expr::Mul(a, b) => {
+        ExprKind::Mul(a, b) => {
             let ka = canonical_key_with_map(a, dummy_map);
             let kb = canonical_key_with_map(b, dummy_map);
             // Normalize x * x to match x^2
@@ -716,18 +716,18 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
                 format!("Mul({}, {})", kb, ka)
             }
         }
-        Expr::Add(a, b) => {
+        ExprKind::Add(a, b) => {
             format!(
                 "Add({}, {})",
                 canonical_key_with_map(a, dummy_map),
                 canonical_key_with_map(b, dummy_map)
             )
         }
-        Expr::Neg(a) => format!("Neg({})", canonical_key_with_map(a, dummy_map)),
-        Expr::Inv(a) => format!("Inv({})", canonical_key_with_map(a, dummy_map)),
-        Expr::Pow(base, exp) => {
+        ExprKind::Neg(a) => format!("Neg({})", canonical_key_with_map(a, dummy_map)),
+        ExprKind::Inv(a) => format!("Inv({})", canonical_key_with_map(a, dummy_map)),
+        ExprKind::Pow(base, exp) => {
             // Normalize Pow(x, 2) for consistency with Mul(x, x)
-            if matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO) {
+            if matches!(&exp.kind, ExprKind::Rational(r) if *r == Rational::TWO) {
                 format!("Pow({}, 2)", canonical_key_with_map(base, dummy_map))
             } else {
                 format!(
@@ -737,17 +737,17 @@ fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> S
                 )
             }
         }
-        Expr::Fn(kind, a) => {
+        ExprKind::Fn(kind, a) => {
             format!("Fn({:?}, {})", kind, canonical_key_with_map(a, dummy_map))
         }
-        Expr::FnN(kind, args) => {
+        ExprKind::FnN(kind, args) => {
             let arg_keys: Vec<_> = args
                 .iter()
                 .map(|a| canonical_key_with_map(a, dummy_map))
                 .collect();
             format!("FnN({:?}, [{}])", kind, arg_keys.join(", "))
         }
-        Expr::Quantity(inner, unit) => {
+        ExprKind::Quantity(inner, unit) => {
             format!("Qty({}, {})", canonical_key_with_map(inner, dummy_map), unit)
         }
     }
@@ -783,7 +783,7 @@ impl Coeff {
     }
 
     fn to_expr(self) -> Expr {
-        Expr::Rational(self.0)
+        Expr::new(ExprKind::Rational(self.0))
     }
 }
 
@@ -797,7 +797,7 @@ pub(crate) fn collect_linear_terms(expr: &Expr) -> Expr {
 
     for term in terms {
         if let Some((base, coeff)) = extract_term(&term) {
-            if matches!(base, Expr::Rational(_)) {
+            if matches!(base.kind, ExprKind::Rational(_)) {
                 const_sum = const_sum.add(coeff);
                 continue;
             }
@@ -824,14 +824,14 @@ pub(crate) fn collect_linear_terms(expr: &Expr) -> Expr {
         let term = if coeff.is_one() {
             var
         } else if coeff.is_neg_one() {
-            Expr::Neg(Box::new(var))
+            Expr::new(ExprKind::Neg(Box::new(var)))
         } else if !coeff.is_positive() {
-            Expr::Neg(Box::new(Expr::Mul(
+            Expr::new(ExprKind::Neg(Box::new(Expr::new(ExprKind::Mul(
                 Box::new(coeff.neg().to_expr()),
                 Box::new(var),
-            )))
+            )))))
         } else {
-            Expr::Mul(Box::new(coeff.to_expr()), Box::new(var))
+            Expr::new(ExprKind::Mul(Box::new(coeff.to_expr()), Box::new(var)))
         };
         if coeff.is_positive() {
             positive_terms.push((key, term));
@@ -850,13 +850,13 @@ pub(crate) fn collect_linear_terms(expr: &Expr) -> Expr {
     ordered.extend(rest);
 
     match ordered.len() {
-        0 => Expr::Rational(Rational::ZERO),
+        0 => Expr::new(ExprKind::Rational(Rational::ZERO)),
         1 => ordered.into_iter().next().unwrap(),
         _ => {
             let mut iter = ordered.into_iter();
             let mut acc = iter.next().unwrap();
             for t in iter {
-                acc = Expr::Add(Box::new(acc), Box::new(t));
+                acc = Expr::new(ExprKind::Add(Box::new(acc), Box::new(t)));
             }
             acc
         }
@@ -864,8 +864,8 @@ pub(crate) fn collect_linear_terms(expr: &Expr) -> Expr {
 }
 
 fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
-    match expr {
-        Expr::Add(a, b) => {
+    match &expr.kind {
+        ExprKind::Add(a, b) => {
             flatten_add(a, out);
             flatten_add(b, out);
         }
@@ -875,27 +875,30 @@ fn flatten_add(expr: &Expr, out: &mut Vec<Expr>) {
 
 fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
     let one = Coeff(Rational::ONE);
-    match expr {
-        Expr::Rational(r) => Some((Expr::Rational(Rational::ONE), Coeff(*r))),
-        Expr::Neg(inner) => {
+    match &expr.kind {
+        ExprKind::Rational(r) => Some((Expr::new(ExprKind::Rational(Rational::ONE)), Coeff(*r))),
+        ExprKind::Neg(inner) => {
             if let Some((base, coeff)) = extract_term(inner) {
                 Some((base, coeff.neg()))
             } else {
                 None
             }
         }
-        Expr::Mul(a, b) => match (a.as_ref(), b.as_ref()) {
-            (Expr::Rational(r), other) | (other, Expr::Rational(r)) => {
-                Some((other.clone(), Coeff(*r)))
+        ExprKind::Mul(a, b) => match (&a.kind, &b.kind) {
+            (ExprKind::Rational(r), _) => {
+                Some((b.as_ref().clone(), Coeff(*r)))
+            }
+            (_, ExprKind::Rational(r)) => {
+                Some((a.as_ref().clone(), Coeff(*r)))
             }
             // Handle nested Mul with leading rational
-            (Expr::Mul(inner_a, inner_b), _) => {
-                if let Expr::Rational(r) = inner_a.as_ref() {
-                    let rest = Expr::Mul(inner_b.clone(), b.clone());
+            (ExprKind::Mul(inner_a, inner_b), _) => {
+                if let ExprKind::Rational(r) = &inner_a.kind {
+                    let rest = Expr::new(ExprKind::Mul(inner_b.clone(), b.clone()));
                     Some((rest, Coeff(*r)))
                 } else if let Some((inner_base, inner_coeff)) = extract_term(a) {
                     if !inner_coeff.is_one() {
-                        let rest = Expr::Mul(Box::new(inner_base), b.clone());
+                        let rest = Expr::new(ExprKind::Mul(Box::new(inner_base), b.clone()));
                         Some((rest, inner_coeff))
                     } else {
                         Some((expr.clone(), one))
@@ -905,16 +908,16 @@ fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
                 }
             }
             // Handle Neg inside Mul: Mul(Neg(x), y) => -1 * Mul(x, y)
-            (Expr::Neg(inner_a), _) => {
-                let new_mul = Expr::Mul(inner_a.clone(), b.clone());
+            (ExprKind::Neg(inner_a), _) => {
+                let new_mul = Expr::new(ExprKind::Mul(inner_a.clone(), b.clone()));
                 if let Some((base, coeff)) = extract_term(&new_mul) {
                     Some((base, coeff.neg()))
                 } else {
                     Some((new_mul, Coeff(Rational::NEG_ONE)))
                 }
             }
-            (_, Expr::Neg(inner_b)) => {
-                let new_mul = Expr::Mul(a.clone(), inner_b.clone());
+            (_, ExprKind::Neg(inner_b)) => {
+                let new_mul = Expr::new(ExprKind::Mul(a.clone(), inner_b.clone()));
                 if let Some((base, coeff)) = extract_term(&new_mul) {
                     Some((base, coeff.neg()))
                 } else {
@@ -926,14 +929,14 @@ fn extract_term(expr: &Expr) -> Option<(Expr, Coeff)> {
                 let mut right = b.clone();
                 if classify_mul(a, b) == MulKind::Scalar {
                     if matches!(
-                        left.as_ref(),
-                        Expr::Inv(inner)
-                            if matches!(inner.as_ref(), Expr::Var { indices, .. } if indices.is_empty())
+                        &left.kind,
+                        ExprKind::Inv(inner)
+                            if matches!(&inner.kind, ExprKind::Var { indices, .. } if indices.is_empty())
                     ) {
                         std::mem::swap(&mut left, &mut right);
                     }
                 }
-                Some((Expr::Mul(left, right), one))
+                Some((Expr::new(ExprKind::Mul(left, right)), one))
             }
         },
         _ => Some((expr.clone(), one)),
@@ -2163,7 +2166,7 @@ mod tests {
     fn simplify_trig_at_pi_over_2_from_division() {
         // cos(π * (1/2)) should simplify via pi-fraction rules + trig evaluation
         let rules = RuleSet::full();
-        let expr = cos(mul(frac_pi(1, 1), inv(Expr::Rational(Rational::from_i64(2)))));
+        let expr = cos(mul(frac_pi(1, 1), inv(Expr::new(ExprKind::Rational(Rational::from_i64(2))))));
         assert_eq!(simplify(&expr, &rules), constant(0.0));
     }
 
@@ -2622,7 +2625,7 @@ mod tests {
         // Check that result is NOT an Add (terms combined) and contains coefficient 2
         let debug = format!("{:?}", result);
         assert!(
-            !matches!(result, Expr::Add(_, _)),
+            !matches!(result.kind, ExprKind::Add(_, _)),
             "Terms should combine but got Add: {}",
             debug
         );
@@ -2659,7 +2662,7 @@ mod tests {
         // Should combine to 2 * (a^(i,j) * b_(i,j))
         let debug = format!("{:?}", result);
         assert!(
-            !matches!(result, Expr::Add(_, _)),
+            !matches!(result.kind, ExprKind::Add(_, _)),
             "Terms should combine but got Add: {}",
             debug
         );
@@ -2680,7 +2683,7 @@ mod tests {
 
         // Should remain as a^i + a^j (or equivalent ordering)
         assert!(
-            matches!(result, Expr::Add(_, _)),
+            matches!(result.kind, ExprKind::Add(_, _)),
             "Different free indices should NOT combine, got: {:?}",
             result
         );
@@ -2980,7 +2983,7 @@ mod tests {
     fn simplify_trig_sin_4pi() {
         // sin(4π) = 0 (4 is even, sin(even * π) = 0)
         let rules = RuleSet::trigonometric();
-        let expr = sin(mul(Expr::Rational(Rational::from_i64(4)), frac_pi(1, 1)));
+        let expr = sin(mul(Expr::new(ExprKind::Rational(Rational::from_i64(4))), frac_pi(1, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
     }
@@ -2989,7 +2992,7 @@ mod tests {
     fn simplify_trig_cos_6pi() {
         // cos(6π) = 1 (6 is even, cos(even * π) = 1)
         let rules = RuleSet::trigonometric();
-        let expr = cos(mul(Expr::Rational(Rational::from_i64(6)), frac_pi(1, 1)));
+        let expr = cos(mul(Expr::new(ExprKind::Rational(Rational::from_i64(6))), frac_pi(1, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -3043,7 +3046,7 @@ mod tests {
     fn simplify_trig_cos_negative_4pi() {
         // cos(-4π) = 1
         let rules = RuleSet::trigonometric();
-        let expr = cos(neg(mul(Expr::Rational(Rational::from_i64(4)), frac_pi(1, 1))));
+        let expr = cos(neg(mul(Expr::new(ExprKind::Rational(Rational::from_i64(4))), frac_pi(1, 1))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -3052,7 +3055,7 @@ mod tests {
     fn simplify_trig_sin_100pi() {
         // sin(100π) = 0 (integer * π)
         let rules = RuleSet::trigonometric();
-        let expr = sin(mul(Expr::Rational(Rational::from_i64(100)), frac_pi(1, 1)));
+        let expr = sin(mul(Expr::new(ExprKind::Rational(Rational::from_i64(100))), frac_pi(1, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(0.0));
     }
@@ -3061,7 +3064,7 @@ mod tests {
     fn simplify_trig_cos_100pi() {
         // cos(100π) = 1 (even * π)
         let rules = RuleSet::trigonometric();
-        let expr = cos(mul(Expr::Rational(Rational::from_i64(100)), frac_pi(1, 1)));
+        let expr = cos(mul(Expr::new(ExprKind::Rational(Rational::from_i64(100))), frac_pi(1, 1)));
         let result = simplify(&expr, &rules);
         assert_eq!(result, constant(1.0));
     }
@@ -3070,7 +3073,7 @@ mod tests {
     fn simplify_trig_cos_9pi_4() {
         // cos(9π/4) = cos(π/4 + 2π) = cos(π/4) = √2/2
         let rules = RuleSet::full();
-        let expr = cos(div(mul(Expr::Rational(Rational::from_i64(9)), frac_pi(1, 1)), Expr::Rational(Rational::from_i64(4))));
+        let expr = cos(div(mul(Expr::new(ExprKind::Rational(Rational::from_i64(9))), frac_pi(1, 1)), Expr::new(ExprKind::Rational(Rational::from_i64(4)))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, named(NamedConst::Frac1Sqrt2));
     }
@@ -3079,7 +3082,7 @@ mod tests {
     fn simplify_trig_sin_9pi_4() {
         // sin(9π/4) = sin(π/4 + 2π) = sin(π/4) = √2/2
         let rules = RuleSet::full();
-        let expr = sin(div(mul(Expr::Rational(Rational::from_i64(9)), frac_pi(1, 1)), Expr::Rational(Rational::from_i64(4))));
+        let expr = sin(div(mul(Expr::new(ExprKind::Rational(Rational::from_i64(9))), frac_pi(1, 1)), Expr::new(ExprKind::Rational(Rational::from_i64(4)))));
         let result = simplify(&expr, &rules);
         assert_eq!(result, named(NamedConst::Frac1Sqrt2));
     }
@@ -3150,9 +3153,9 @@ mod tests {
 
         // Should be (x + 1)^2
         assert!(
-            matches!(&result, Expr::Pow(base, exp)
-                if matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO)
-                && matches!(base.as_ref(), Expr::Add(_, _))
+            matches!(&result.kind, ExprKind::Pow(base, exp)
+                if matches!(&exp.kind, ExprKind::Rational(r) if *r == Rational::TWO)
+                && matches!(&base.kind, ExprKind::Add(_, _))
             ),
             "Expected (x + 1)², got: {:?}",
             result
@@ -3174,8 +3177,8 @@ mod tests {
 
         // Should be (x - 1)^2
         assert!(
-            matches!(&result, Expr::Pow(_, exp)
-                if matches!(exp.as_ref(), Expr::Rational(r) if *r == Rational::TWO)
+            matches!(&result.kind, ExprKind::Pow(_, exp)
+                if matches!(&exp.kind, ExprKind::Rational(r) if *r == Rational::TWO)
             ),
             "Expected (x - 1)², got: {:?}",
             result
@@ -3213,7 +3216,7 @@ mod tests {
             scale: 1000.0,
             display: "km".to_string(),
         };
-        let expr = Expr::Quantity(Box::new(rational(1, 1)), km);
+        let expr = Expr::new(ExprKind::Quantity(Box::new(rational(1, 1)), km));
         let result = eval_constants(&expr);
         assert_eq!(result, rational(1000, 1));
     }
@@ -3228,7 +3231,7 @@ mod tests {
             scale: 0.001,
             display: "g".to_string(),
         };
-        let expr = Expr::Quantity(Box::new(rational(5, 1)), g);
+        let expr = Expr::new(ExprKind::Quantity(Box::new(rational(5, 1)), g));
         let result = eval_constants(&expr);
         assert_eq!(result, rational(1, 200));
     }
@@ -3250,8 +3253,8 @@ mod tests {
         };
         let rules = RuleSet::standard();
         let expr = add(
-            Expr::Quantity(Box::new(rational(1000, 1)), m),
-            neg(Expr::Quantity(Box::new(rational(1, 1)), km)),
+            Expr::new(ExprKind::Quantity(Box::new(rational(1000, 1)), m)),
+            neg(Expr::new(ExprKind::Quantity(Box::new(rational(1, 1)), km))),
         );
         let result = simplify(&expr, &rules);
         assert_eq!(result, rational(0, 1));

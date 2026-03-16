@@ -1,4 +1,4 @@
-use crate::expr::Expr;
+use crate::expr::{Expr, ExprKind};
 use crate::rule::{Rule, RuleSet};
 use crate::search::{collect_linear_terms, eval_constants};
 use rand::prelude::IndexedRandom;
@@ -385,17 +385,17 @@ impl RandomizedBeamSearch {
         }
 
         // Recursively try rewrites in children (with path tracking)
-        match expr {
-            Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) | Expr::Var { .. }
-            | Expr::Quantity(_, _) => {}
+        match &expr.kind {
+            ExprKind::Rational(_) | ExprKind::Named(_) | ExprKind::FracPi(_) | ExprKind::Var { .. }
+            | ExprKind::Quantity(_, _) => {}
 
-            Expr::Add(a, b) => {
+            ExprKind::Add(a, b) => {
                 let mut left_path = path.to_vec();
                 left_path.push(ChildIndex::Left);
                 for mut rewrite in
                     self.all_rewrites_depth(a, rules, depth - 1, &left_path, rule_order)
                 {
-                    rewrite.expr = Expr::Add(Box::new(rewrite.expr), b.clone());
+                    rewrite.expr = Expr::new(ExprKind::Add(Box::new(rewrite.expr), b.clone()));
                     results.push(rewrite);
                 }
                 let mut right_path = path.to_vec();
@@ -403,18 +403,18 @@ impl RandomizedBeamSearch {
                 for mut rewrite in
                     self.all_rewrites_depth(b, rules, depth - 1, &right_path, rule_order)
                 {
-                    rewrite.expr = Expr::Add(a.clone(), Box::new(rewrite.expr));
+                    rewrite.expr = Expr::new(ExprKind::Add(a.clone(), Box::new(rewrite.expr)));
                     results.push(rewrite);
                 }
             }
 
-            Expr::Mul(a, b) => {
+            ExprKind::Mul(a, b) => {
                 let mut left_path = path.to_vec();
                 left_path.push(ChildIndex::Left);
                 for mut rewrite in
                     self.all_rewrites_depth(a, rules, depth - 1, &left_path, rule_order)
                 {
-                    rewrite.expr = Expr::Mul(Box::new(rewrite.expr), b.clone());
+                    rewrite.expr = Expr::new(ExprKind::Mul(Box::new(rewrite.expr), b.clone()));
                     results.push(rewrite);
                 }
                 let mut right_path = path.to_vec();
@@ -422,18 +422,18 @@ impl RandomizedBeamSearch {
                 for mut rewrite in
                     self.all_rewrites_depth(b, rules, depth - 1, &right_path, rule_order)
                 {
-                    rewrite.expr = Expr::Mul(a.clone(), Box::new(rewrite.expr));
+                    rewrite.expr = Expr::new(ExprKind::Mul(a.clone(), Box::new(rewrite.expr)));
                     results.push(rewrite);
                 }
             }
 
-            Expr::Pow(base, exp) => {
+            ExprKind::Pow(base, exp) => {
                 let mut left_path = path.to_vec();
                 left_path.push(ChildIndex::Left);
                 for mut rewrite in
                     self.all_rewrites_depth(base, rules, depth - 1, &left_path, rule_order)
                 {
-                    rewrite.expr = Expr::Pow(Box::new(rewrite.expr), exp.clone());
+                    rewrite.expr = Expr::new(ExprKind::Pow(Box::new(rewrite.expr), exp.clone()));
                     results.push(rewrite);
                 }
                 let mut right_path = path.to_vec();
@@ -441,45 +441,45 @@ impl RandomizedBeamSearch {
                 for mut rewrite in
                     self.all_rewrites_depth(exp, rules, depth - 1, &right_path, rule_order)
                 {
-                    rewrite.expr = Expr::Pow(base.clone(), Box::new(rewrite.expr));
+                    rewrite.expr = Expr::new(ExprKind::Pow(base.clone(), Box::new(rewrite.expr)));
                     results.push(rewrite);
                 }
             }
 
-            Expr::Neg(a) => {
+            ExprKind::Neg(a) => {
                 let mut inner_path = path.to_vec();
                 inner_path.push(ChildIndex::Inner);
                 for mut rewrite in
                     self.all_rewrites_depth(a, rules, depth - 1, &inner_path, rule_order)
                 {
-                    rewrite.expr = Expr::Neg(Box::new(rewrite.expr));
+                    rewrite.expr = Expr::new(ExprKind::Neg(Box::new(rewrite.expr)));
                     results.push(rewrite);
                 }
             }
 
-            Expr::Inv(a) => {
+            ExprKind::Inv(a) => {
                 let mut inner_path = path.to_vec();
                 inner_path.push(ChildIndex::Inner);
                 for mut rewrite in
                     self.all_rewrites_depth(a, rules, depth - 1, &inner_path, rule_order)
                 {
-                    rewrite.expr = Expr::Inv(Box::new(rewrite.expr));
+                    rewrite.expr = Expr::new(ExprKind::Inv(Box::new(rewrite.expr)));
                     results.push(rewrite);
                 }
             }
 
-            Expr::Fn(kind, a) => {
+            ExprKind::Fn(kind, a) => {
                 let mut inner_path = path.to_vec();
                 inner_path.push(ChildIndex::Inner);
                 for mut rewrite in
                     self.all_rewrites_depth(a, rules, depth - 1, &inner_path, rule_order)
                 {
-                    rewrite.expr = Expr::Fn(kind.clone(), Box::new(rewrite.expr));
+                    rewrite.expr = Expr::new(ExprKind::Fn(kind.clone(), Box::new(rewrite.expr)));
                     results.push(rewrite);
                 }
             }
 
-            Expr::FnN(kind, args) => {
+            ExprKind::FnN(kind, args) => {
                 for (idx, arg) in args.iter().enumerate() {
                     let mut arg_path = path.to_vec();
                     arg_path.push(ChildIndex::Arg(idx));
@@ -488,7 +488,7 @@ impl RandomizedBeamSearch {
                     {
                         let mut new_args = args.clone();
                         new_args[idx] = rewrite.expr.clone();
-                        rewrite.expr = Expr::FnN(kind.clone(), new_args);
+                        rewrite.expr = Expr::new(ExprKind::FnN(kind.clone(), new_args));
                         results.push(rewrite);
                     }
                 }

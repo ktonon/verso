@@ -1,5 +1,5 @@
 #[allow(unused_imports)] // NamedConst is used in pattern matching via nc.value()
-use crate::expr::{Expr, FnKind, Index, IndexPosition, NamedConst};
+use crate::expr::{Expr, ExprKind, FnKind, Index, IndexPosition, NamedConst};
 use crate::fmt::fmt_frac_pi;
 use crate::rational::Rational;
 use std::collections::HashMap;
@@ -379,25 +379,25 @@ impl Pattern {
     }
 
     fn match_expr_inner(&self, expr: &Expr, bindings: &mut Bindings) -> bool {
-        match (self, expr) {
+        match (self, &expr.kind) {
             // Wildcard matches any expression
             (Pattern::Wildcard(name), _) => bind_expr(name, expr.clone(), bindings),
 
             // ConstWild matches rationals and named constants
-            (Pattern::ConstWild(name), Expr::Rational(_))
-            | (Pattern::ConstWild(name), Expr::Named(_)) => {
+            (Pattern::ConstWild(name), ExprKind::Rational(_))
+            | (Pattern::ConstWild(name), ExprKind::Named(_)) => {
                 bind_expr(name, expr.clone(), bindings)
             }
             (Pattern::ConstWild(_), _) => false,
 
             // IntWild matches Rational integer
-            (Pattern::IntWild(name), Expr::Rational(r)) if r.is_integer() => {
+            (Pattern::IntWild(name), ExprKind::Rational(r)) if r.is_integer() => {
                 bind_expr(name, expr.clone(), bindings)
             }
             (Pattern::IntWild(_), _) => false,
 
             // IntEvenWild matches Rational with even value
-            (Pattern::IntEvenWild(name), Expr::Rational(r))
+            (Pattern::IntEvenWild(name), ExprKind::Rational(r))
                 if r.is_integer() && r.is_even() =>
             {
                 bind_expr(name, expr.clone(), bindings)
@@ -405,7 +405,7 @@ impl Pattern {
             (Pattern::IntEvenWild(_), _) => false,
 
             // IntOddWild matches Rational with odd value
-            (Pattern::IntOddWild(name), Expr::Rational(r))
+            (Pattern::IntOddWild(name), ExprKind::Rational(r))
                 if r.is_integer() && r.is_odd() =>
             {
                 bind_expr(name, expr.clone(), bindings)
@@ -413,50 +413,50 @@ impl Pattern {
             (Pattern::IntOddWild(_), _) => false,
 
             // Const matches by value against Rational, Named
-            (Pattern::Const(n), Expr::Rational(r)) => (n - r.value()).abs() < 1e-12,
-            (Pattern::Const(n), Expr::Named(nc)) => (n - nc.value()).abs() < f64::EPSILON,
+            (Pattern::Const(n), ExprKind::Rational(r)) => (n - r.value()).abs() < 1e-12,
+            (Pattern::Const(n), ExprKind::Named(nc)) => (n - nc.value()).abs() < f64::EPSILON,
             (Pattern::Const(_), _) => false,
 
             // Rational matches exact Rational
-            (Pattern::Rational(pr), Expr::Rational(er)) => pr == er,
+            (Pattern::Rational(pr), ExprKind::Rational(er)) => pr == er,
             (Pattern::Rational(_), _) => false,
 
             // Named matches named constants exactly
-            (Pattern::Named(pnc), Expr::Named(enc)) => pnc == enc,
+            (Pattern::Named(pnc), ExprKind::Named(enc)) => pnc == enc,
             (Pattern::Named(_), _) => false,
 
             // FracPi matches exact FracPi
-            (Pattern::FracPi(pr), Expr::FracPi(er)) => pr == er,
+            (Pattern::FracPi(pr), ExprKind::FracPi(er)) => pr == er,
             (Pattern::FracPi(_), _) => false,
 
             // Structural matching for binary operators
-            (Pattern::Add(pa, pb), Expr::Add(a, b)) => {
+            (Pattern::Add(pa, pb), ExprKind::Add(a, b)) => {
                 pa.match_expr_inner(a, bindings) && pb.match_expr_inner(b, bindings)
             }
             (Pattern::Add(_, _), _) => false,
 
-            (Pattern::Mul(pa, pb), Expr::Mul(a, b)) => {
+            (Pattern::Mul(pa, pb), ExprKind::Mul(a, b)) => {
                 pa.match_expr_inner(a, bindings) && pb.match_expr_inner(b, bindings)
             }
             (Pattern::Mul(_, _), _) => false,
 
-            (Pattern::Pow(pb, pe), Expr::Pow(base, exp)) => {
+            (Pattern::Pow(pb, pe), ExprKind::Pow(base, exp)) => {
                 pb.match_expr_inner(base, bindings) && pe.match_expr_inner(exp, bindings)
             }
             (Pattern::Pow(_, _), _) => false,
 
             // Structural matching for unary operators
-            (Pattern::Neg(p), Expr::Neg(a)) => p.match_expr_inner(a, bindings),
+            (Pattern::Neg(p), ExprKind::Neg(a)) => p.match_expr_inner(a, bindings),
             (Pattern::Neg(_), _) => false,
 
-            (Pattern::Inv(p), Expr::Inv(a)) => p.match_expr_inner(a, bindings),
+            (Pattern::Inv(p), ExprKind::Inv(a)) => p.match_expr_inner(a, bindings),
             (Pattern::Inv(_), _) => false,
 
             // Function matching requires same function kind
-            (Pattern::Fn(pk, p), Expr::Fn(ek, a)) if pk == ek => p.match_expr_inner(a, bindings),
+            (Pattern::Fn(pk, p), ExprKind::Fn(ek, a)) if pk == ek => p.match_expr_inner(a, bindings),
             (Pattern::Fn(_, _), _) => false,
 
-            (Pattern::FnN(pk, ps), Expr::FnN(ek, args)) if pk == ek => {
+            (Pattern::FnN(pk, ps), ExprKind::FnN(ek, args)) if pk == ek => {
                 if ps.len() != args.len() {
                     return false;
                 }
@@ -472,7 +472,7 @@ impl Pattern {
                     name: pat_name,
                     indices: pat_indices,
                 },
-                Expr::Var {
+                ExprKind::Var {
                     name: expr_name,
                     indices: expr_indices,
                     ..
@@ -534,7 +534,7 @@ impl Pattern {
             Pattern::Const(n) => {
                 // Produce Rational for integer values, otherwise keep as constant
                 if n.fract() == 0.0 && n.abs() < (i64::MAX / 2) as f64 {
-                    Expr::Rational(Rational::from_i64(*n as i64))
+                    Expr::new(ExprKind::Rational(Rational::from_i64(*n as i64)))
                 } else {
                     // Try small denominators for non-integer constants
                     let mut result = None;
@@ -542,7 +542,7 @@ impl Pattern {
                         let numerator = n * d as f64;
                         let rounded = numerator.round();
                         if (numerator - rounded).abs() < 1e-10 {
-                            result = Some(Expr::Rational(Rational::new(rounded as i64, d)));
+                            result = Some(Expr::new(ExprKind::Rational(Rational::new(rounded as i64, d))));
                             break;
                         }
                     }
@@ -550,36 +550,36 @@ impl Pattern {
                 }
             }
 
-            Pattern::Rational(r) => Expr::Rational(*r),
+            Pattern::Rational(r) => Expr::new(ExprKind::Rational(*r)),
 
-            Pattern::Named(nc) => Expr::Named(*nc),
+            Pattern::Named(nc) => Expr::new(ExprKind::Named(*nc)),
 
-            Pattern::FracPi(r) => Expr::FracPi(*r),
+            Pattern::FracPi(r) => Expr::new(ExprKind::FracPi(*r)),
 
-            Pattern::Add(pa, pb) => Expr::Add(
+            Pattern::Add(pa, pb) => Expr::new(ExprKind::Add(
                 Box::new(pa.substitute(bindings)),
                 Box::new(pb.substitute(bindings)),
-            ),
+            )),
 
-            Pattern::Mul(pa, pb) => Expr::Mul(
+            Pattern::Mul(pa, pb) => Expr::new(ExprKind::Mul(
                 Box::new(pa.substitute(bindings)),
                 Box::new(pb.substitute(bindings)),
-            ),
+            )),
 
-            Pattern::Pow(pb, pe) => Expr::Pow(
+            Pattern::Pow(pb, pe) => Expr::new(ExprKind::Pow(
                 Box::new(pb.substitute(bindings)),
                 Box::new(pe.substitute(bindings)),
-            ),
+            )),
 
-            Pattern::Neg(p) => Expr::Neg(Box::new(p.substitute(bindings))),
+            Pattern::Neg(p) => Expr::new(ExprKind::Neg(Box::new(p.substitute(bindings)))),
 
-            Pattern::Inv(p) => Expr::Inv(Box::new(p.substitute(bindings))),
+            Pattern::Inv(p) => Expr::new(ExprKind::Inv(Box::new(p.substitute(bindings)))),
 
-            Pattern::Fn(kind, p) => Expr::Fn(kind.clone(), Box::new(p.substitute(bindings))),
-            Pattern::FnN(kind, args) => Expr::FnN(
+            Pattern::Fn(kind, p) => Expr::new(ExprKind::Fn(kind.clone(), Box::new(p.substitute(bindings)))),
+            Pattern::FnN(kind, args) => Expr::new(ExprKind::FnN(
                 kind.clone(),
                 args.iter().map(|a| a.substitute(bindings)).collect(),
-            ),
+            )),
 
             Pattern::Var {
                 name: pat_name,
@@ -591,7 +591,7 @@ impl Pattern {
                     VarPattern::Wild(wildcard) => {
                         // Get the name from the bound expression (must be a Var)
                         match bindings.exprs.get(wildcard) {
-                            Some(Expr::Var { name, .. }) => name.clone(),
+                            Some(Expr { kind: ExprKind::Var { name, .. }, .. }) => name.clone(),
                             Some(_) => {
                                 panic!("Var wildcard {} bound to non-Var expression", wildcard)
                             }
@@ -624,11 +624,11 @@ impl Pattern {
                     })
                     .collect();
 
-                Expr::Var {
+                Expr::new(ExprKind::Var {
                     name: var_name,
                     indices: var_indices,
                     dim: None,
-                }
+                })
             }
         }
     }

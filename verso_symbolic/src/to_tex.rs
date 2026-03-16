@@ -1,4 +1,4 @@
-use crate::expr::{classify_mul, Expr, FnKind, Index, IndexPosition, MulKind, NamedConst};
+use crate::expr::{classify_mul, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind, NamedConst};
 use crate::rational::Rational;
 
 fn frac_pi_to_tex(r: &Rational) -> String {
@@ -66,8 +66,8 @@ impl ToTex for FnKind {
 
 impl ToTex for Expr {
     fn to_tex(&self) -> String {
-        match self {
-            Expr::Rational(r) => {
+        match &self.kind {
+            ExprKind::Rational(r) => {
                 if r.is_integer() {
                     format!("{}", r.num())
                 } else if r.is_negative() {
@@ -76,9 +76,9 @@ impl ToTex for Expr {
                     format!("\\frac{{{}}}{{{}}}", r.num(), r.den())
                 }
             }
-            Expr::Named(nc) => nc.to_tex(),
-            Expr::FracPi(r) => frac_pi_to_tex(r),
-            Expr::Var { name, indices, .. } => {
+            ExprKind::Named(nc) => nc.to_tex(),
+            ExprKind::FracPi(r) => frac_pi_to_tex(r),
+            ExprKind::Var { name, indices, .. } => {
                 if indices.is_empty() {
                     name.clone()
                 } else {
@@ -103,10 +103,10 @@ impl ToTex for Expr {
                     result
                 }
             }
-            Expr::Add(a, b) => {
+            ExprKind::Add(a, b) => {
                 // Detect subtraction: Add(a, Neg(b)) -> a - b
-                match b.as_ref() {
-                    Expr::Neg(inner) => {
+                match &b.kind {
+                    ExprKind::Neg(inner) => {
                         format!("{} - {}", a.to_tex(), inner.to_tex())
                     }
                     _ => {
@@ -114,14 +114,14 @@ impl ToTex for Expr {
                     }
                 }
             }
-            Expr::Mul(a, b) => {
+            ExprKind::Mul(a, b) => {
                 if let Some((base, arg)) = match_log_base(a, b) {
                     return format!("\\log_{{{}}}{{{}}}", base.to_tex(), arg.to_tex());
                 }
 
                 // Detect division: Mul(a, Inv(b)) -> \frac{a}{b}
-                match b.as_ref() {
-                    Expr::Inv(inner) => {
+                match &b.kind {
+                    ExprKind::Inv(inner) => {
                         format!("\\frac{{{}}}{{{}}}", a.to_tex(), inner.to_tex())
                     }
                     _ => {
@@ -142,24 +142,24 @@ impl ToTex for Expr {
                     }
                 }
             }
-            Expr::Neg(a) => {
+            ExprKind::Neg(a) => {
                 format!("-{}", maybe_paren(a, self))
             }
-            Expr::Inv(a) => {
+            ExprKind::Inv(a) => {
                 format!("\\frac{{1}}{{{}}}", a.to_tex())
             }
-            Expr::Pow(base, exp) => {
+            ExprKind::Pow(base, exp) => {
                 if is_sqrt_exp(exp) {
                     return format!("\\sqrt{{{}}}", base.to_tex());
                 }
                 format!("{}^{{{}}}", maybe_paren(base, self), exp.to_tex())
             }
-            Expr::Fn(kind, arg) => match kind {
+            ExprKind::Fn(kind, arg) => match kind {
                 FnKind::Floor => format!("\\lfloor {} \\rfloor", arg.to_tex()),
                 FnKind::Ceil => format!("\\lceil {} \\rceil", arg.to_tex()),
                 _ => format!("{}{{{}}}", kind.to_tex(), arg.to_tex()),
             },
-            Expr::FnN(kind, args) => {
+            ExprKind::FnN(kind, args) => {
                 let rendered: Vec<String> = args.iter().map(|a| a.to_tex()).collect();
                 let joined = rendered.join(", ");
                 match kind {
@@ -169,7 +169,7 @@ impl ToTex for Expr {
                     _ => format!("{}\\left( {} \\right)", kind.to_tex(), joined),
                 }
             }
-            Expr::Quantity(inner, unit) => {
+            ExprKind::Quantity(inner, unit) => {
                 format!("{} \\; \\mathrm{{{}}}", inner.to_tex(), unit.display)
             }
         }
@@ -187,31 +187,31 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
 /// True when an expression is purely numeric (no variables), so that
 /// adjacent numeric factors should be separated with `\times` in LaTeX.
 fn is_numeric_like(expr: &Expr) -> bool {
-    match expr {
-        Expr::Rational(_) | Expr::Named(_) | Expr::FracPi(_) => true,
-        Expr::Pow(base, _) => is_numeric_like(base),
-        Expr::Neg(inner) => is_numeric_like(inner),
-        Expr::Mul(a, b) => is_numeric_like(a) && is_numeric_like(b),
+    match &expr.kind {
+        ExprKind::Rational(_) | ExprKind::Named(_) | ExprKind::FracPi(_) => true,
+        ExprKind::Pow(base, _) => is_numeric_like(base),
+        ExprKind::Neg(inner) => is_numeric_like(inner),
+        ExprKind::Mul(a, b) => is_numeric_like(a) && is_numeric_like(b),
         _ => false,
     }
 }
 
 fn is_sqrt_exp(exp: &Expr) -> bool {
-    match exp {
-        Expr::Rational(r) => *r == Rational::new(1, 2),
-        Expr::Inv(inner) => matches!(inner.as_ref(), Expr::Rational(r) if *r == Rational::TWO),
+    match &exp.kind {
+        ExprKind::Rational(r) => *r == Rational::new(1, 2),
+        ExprKind::Inv(inner) => matches!(&inner.kind, ExprKind::Rational(r) if *r == Rational::TWO),
         _ => false,
     }
 }
 
 fn match_log_base<'a>(left: &'a Expr, right: &'a Expr) -> Option<(&'a Expr, &'a Expr)> {
-    match (left, right) {
-        (Expr::Fn(FnKind::Ln, arg), Expr::Inv(inner)) => match inner.as_ref() {
-            Expr::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+    match (&left.kind, &right.kind) {
+        (ExprKind::Fn(FnKind::Ln, arg), ExprKind::Inv(inner)) => match &inner.kind {
+            ExprKind::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
             _ => None,
         },
-        (Expr::Inv(inner), Expr::Fn(FnKind::Ln, arg)) => match inner.as_ref() {
-            Expr::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
+        (ExprKind::Inv(inner), ExprKind::Fn(FnKind::Ln, arg)) => match &inner.kind {
+            ExprKind::Fn(FnKind::Ln, base) => Some((base.as_ref(), arg.as_ref())),
             _ => None,
         },
         _ => None,
@@ -446,10 +446,10 @@ mod tests {
 
     #[test]
     fn to_tex_custom_fn() {
-        let e = Expr::Fn(
+        let e = Expr::new(ExprKind::Fn(
             FnKind::Custom("foo".to_string()),
             Box::new(scalar("x")),
-        );
+        ));
         assert_eq!(e.to_tex(), "\\operatorname{foo}{x}");
     }
 
@@ -470,10 +470,10 @@ mod tests {
     #[test]
     fn to_tex_sqrt_via_inv() {
         // x^(1/2) expressed as Pow(x, Inv(2))
-        let e = Expr::Pow(
+        let e = Expr::new(ExprKind::Pow(
             Box::new(scalar("x")),
-            Box::new(Expr::Inv(Box::new(constant(2.0)))),
-        );
+            Box::new(Expr::new(ExprKind::Inv(Box::new(constant(2.0))))),
+        ));
         assert_eq!(e.to_tex(), "\\sqrt{x}");
     }
 

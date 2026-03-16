@@ -2624,8 +2624,8 @@ More prose here.
             Block::Prose(fragments) => {
                 assert_eq!(fragments.len(), 3);
                 match &fragments[1] {
-                    ProseFragment::Math(expr) => match expr {
-                        verso_symbolic::Expr::Var { name, dim, .. } => {
+                    ProseFragment::Math(expr) => match &expr.kind {
+                        verso_symbolic::ExprKind::Var { name, dim, .. } => {
                             assert_eq!(name, "v");
                             assert!(dim.is_some());
                             assert_eq!(
@@ -2652,7 +2652,7 @@ More prose here.
                 match &fragments[1] {
                     ProseFragment::Math(expr) => {
                         assert!(
-                            matches!(expr, verso_symbolic::Expr::Quantity(_, _)),
+                            matches!(&expr.kind, verso_symbolic::ExprKind::Quantity(_, _)),
                             "expected Quantity, got {:?}",
                             expr
                         );
@@ -2673,7 +2673,7 @@ More prose here.
                 match &fragments[1] {
                     ProseFragment::Math(expr) => {
                         assert!(
-                            matches!(expr, verso_symbolic::Expr::Quantity(_, _)),
+                            matches!(&expr.kind, verso_symbolic::ExprKind::Quantity(_, _)),
                             "expected Quantity, got {:?}",
                             expr
                         );

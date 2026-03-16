@@ -1,4 +1,4 @@
-use crate::expr::{Expr, FnKind};
+use crate::expr::{Expr, ExprKind, FnKind};
 use std::collections::{HashMap, HashSet};
 
 /// Collect all free variable names from an expression.
@@ -9,24 +9,24 @@ pub fn free_vars(expr: &Expr) -> HashSet<String> {
 }
 
 fn collect_vars(expr: &Expr, vars: &mut HashSet<String>) {
-    match expr {
-        Expr::Var { name, .. } => {
+    match &expr.kind {
+        ExprKind::Var { name, .. } => {
             vars.insert(name.clone());
         }
-        Expr::Add(a, b) | Expr::Mul(a, b) | Expr::Pow(a, b) => {
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
             collect_vars(a, vars);
             collect_vars(b, vars);
         }
-        Expr::Neg(a) | Expr::Inv(a) | Expr::Fn(_, a) => {
+        ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => {
             collect_vars(a, vars);
         }
-        Expr::FnN(_, args) => {
+        ExprKind::FnN(_, args) => {
             for a in args {
                 collect_vars(a, vars);
             }
         }
-        Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => {}
-        Expr::Quantity(inner, _) => {
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => {}
+        ExprKind::Quantity(inner, _) => {
             collect_vars(inner, vars);
         }
     }
@@ -35,23 +35,23 @@ fn collect_vars(expr: &Expr, vars: &mut HashSet<String>) {
 /// Evaluate an expression to f64 given variable bindings.
 /// Returns None if evaluation fails (e.g., unbound variable, division by zero).
 pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
-    match expr {
-        Expr::Rational(r) => Some(r.num() as f64 / r.den() as f64),
-        Expr::FracPi(r) => Some((r.num() as f64 / r.den() as f64) * std::f64::consts::PI),
-        Expr::Named(nc) => Some(nc.value()),
-        Expr::Var { name, .. } => bindings.get(name).copied(),
-        Expr::Add(a, b) => {
+    match &expr.kind {
+        ExprKind::Rational(r) => Some(r.num() as f64 / r.den() as f64),
+        ExprKind::FracPi(r) => Some((r.num() as f64 / r.den() as f64) * std::f64::consts::PI),
+        ExprKind::Named(nc) => Some(nc.value()),
+        ExprKind::Var { name, .. } => bindings.get(name).copied(),
+        ExprKind::Add(a, b) => {
             let va = eval_f64(a, bindings)?;
             let vb = eval_f64(b, bindings)?;
             Some(va + vb)
         }
-        Expr::Mul(a, b) => {
+        ExprKind::Mul(a, b) => {
             let va = eval_f64(a, bindings)?;
             let vb = eval_f64(b, bindings)?;
             Some(va * vb)
         }
-        Expr::Neg(a) => Some(-eval_f64(a, bindings)?),
-        Expr::Inv(a) => {
+        ExprKind::Neg(a) => Some(-eval_f64(a, bindings)?),
+        ExprKind::Inv(a) => {
             let v = eval_f64(a, bindings)?;
             if v == 0.0 {
                 None
@@ -59,7 +59,7 @@ pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
                 Some(1.0 / v)
             }
         }
-        Expr::Pow(base, exp) => {
+        ExprKind::Pow(base, exp) => {
             let vb = eval_f64(base, bindings)?;
             let ve = eval_f64(exp, bindings)?;
             let result = vb.powf(ve);
@@ -69,7 +69,7 @@ pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
                 None
             }
         }
-        Expr::Fn(kind, arg) => {
+        ExprKind::Fn(kind, arg) => {
             let v = eval_f64(arg, bindings)?;
             let result = match kind {
                 FnKind::Sin => v.sin(),
@@ -103,7 +103,7 @@ pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
                 None
             }
         }
-        Expr::FnN(kind, args) => {
+        ExprKind::FnN(kind, args) => {
             let vals: Option<Vec<f64>> = args.iter().map(|a| eval_f64(a, bindings)).collect();
             let vals = vals?;
             match kind {
@@ -113,7 +113,7 @@ pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
                 _ => None,
             }
         }
-        Expr::Quantity(inner, unit) => {
+        ExprKind::Quantity(inner, unit) => {
             let v = eval_f64(inner, bindings)?;
             Some(v * unit.scale)
         }
@@ -177,6 +177,7 @@ pub struct SpotCheckFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expr::ExprKind;
     use crate::parser::parse_expr;
     use crate::unit::Unit;
 
@@ -195,7 +196,7 @@ mod tests {
     fn sign_positive() {
         assert_eq!(
             eval_f64(
-                &Expr::Fn(FnKind::Sign, Box::new(Expr::Rational(5.into()))),
+                &Expr::new(ExprKind::Fn(FnKind::Sign, Box::new(Expr::new(ExprKind::Rational(5.into()))))),
                 &HashMap::new()
             ),
             Some(1.0)
@@ -206,7 +207,7 @@ mod tests {
     fn sign_negative() {
         assert_eq!(
             eval_f64(
-                &Expr::Fn(FnKind::Sign, Box::new(Expr::Rational((-3).into()))),
+                &Expr::new(ExprKind::Fn(FnKind::Sign, Box::new(Expr::new(ExprKind::Rational((-3).into()))))),
                 &HashMap::new()
             ),
             Some(-1.0)
@@ -217,7 +218,7 @@ mod tests {
     fn sign_zero() {
         assert_eq!(
             eval_f64(
-                &Expr::Fn(FnKind::Sign, Box::new(Expr::Rational(0.into()))),
+                &Expr::new(ExprKind::Fn(FnKind::Sign, Box::new(Expr::new(ExprKind::Rational(0.into()))))),
                 &HashMap::new()
             ),
             Some(0.0)
@@ -226,10 +227,10 @@ mod tests {
 
     #[test]
     fn custom_fn_returns_none() {
-        let expr = Expr::Fn(
+        let expr = Expr::new(ExprKind::Fn(
             FnKind::Custom("foo".to_string()),
-            Box::new(Expr::Rational(1.into())),
-        );
+            Box::new(Expr::new(ExprKind::Rational(1.into()))),
+        ));
         assert_eq!(eval_f64(&expr, &HashMap::new()), None);
     }
 
@@ -258,21 +259,21 @@ mod tests {
             scale: 1000.0,
             display: "km".to_string(),
         };
-        let expr = Expr::Quantity(Box::new(Expr::Rational(3.into())), unit);
+        let expr = Expr::new(ExprKind::Quantity(Box::new(Expr::new(ExprKind::Rational(3.into()))), unit));
         assert_eq!(eval_f64(&expr, &HashMap::new()), Some(3000.0));
     }
 
     #[test]
     fn fnn_wrong_arity_returns_none() {
         // min with 3 args
-        let expr = Expr::FnN(
+        let expr = Expr::new(ExprKind::FnN(
             FnKind::Min,
             vec![
-                Expr::Rational(1.into()),
-                Expr::Rational(2.into()),
-                Expr::Rational(3.into()),
+                Expr::new(ExprKind::Rational(1.into())),
+                Expr::new(ExprKind::Rational(2.into())),
+                Expr::new(ExprKind::Rational(3.into())),
             ],
-        );
+        ));
         assert_eq!(eval_f64(&expr, &HashMap::new()), None);
     }
 
