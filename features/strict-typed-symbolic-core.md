@@ -5,7 +5,7 @@
 Make `verso_symbolic` strictly typed with respect to physical dimensions and type information. The symbolic core should distinguish:
 - dimensionless values, such as `4.5` with type `[1]`
 - explicitly typed values, such as `4.5 [m]` with type `[L]`
-- unresolved symbolic types, such as a free variable `x` before enough declarations or constraints are available
+- unresolved internal states that exist only before elaboration or across explicitly lossy boundaries
 
 The core design target is that "missing type information" is no longer modeled as absence. It must be represented explicitly in the IR so that rewrites, simplification, equality checks, tokenization, and ML tooling cannot silently erase or reinterpret type state.
 
@@ -69,7 +69,7 @@ Key invariants after elaboration:
 - Every numeric literal (`Rational`, `FracPi`, `Named`) has `Ty::Concrete([1])`
 - Every `Quantity` node has `Ty::Concrete(unit.dimension)`
 - Every `Var` with a declaration or inline annotation has `Ty::Concrete(dim)`
-- Undeclared variables remain `Ty::Unresolved`
+- Every bare `Var` without a declaration or inline annotation has `Ty::Concrete([1])`
 - Rewrites preserve `Ty`
 - Tokenization and ML-facing serialization either preserve `Ty` or operate on a clearly separate untyped projection with an explicit boundary
 
@@ -79,7 +79,7 @@ Key invariants after elaboration:
 
 Since `Expr` is already a struct (from the span-errors refactor), adding `ty: Ty` is a field addition — the same migration pattern as adding `span: Span`. Every `Expr::new(kind)` call sets `ty: Ty::Unresolved`. Every `Expr::spanned(kind, span)` call also sets `ty: Ty::Unresolved`.
 
-The parser continues to produce `Ty::Unresolved` expressions. A separate elaboration pass resolves types.
+The parser continues to produce `Ty::Unresolved` expressions structurally. A separate elaboration pass resolves them into the strict user-facing semantics, where bare variables are concrete `[1]`.
 
 #### 2. Elaboration pass
 
@@ -89,7 +89,7 @@ Add `elaborate(expr: &Expr, env: &DimEnv) -> Expr` that walks the tree and fills
 - `Quantity(_, unit)` → `Ty::Concrete(unit.dimension.clone())`
 - `Var { dim: Some(d), .. }` → `Ty::Concrete(d.clone())`
 - `Var { dim: None, name }` where `env.contains(name)` → `Ty::Concrete(env[name].clone())`
-- `Var { dim: None, name }` where `!env.contains(name)` → `Ty::Unresolved`
+- `Var { dim: None, name }` where `!env.contains(name)` → `Ty::Concrete(Dimension::dimensionless())`
 - `Add(a, b)` → propagate from children (must match)
 - `Mul(a, b)` → multiply dimensions
 - `Pow(base, exp)` → base dimension raised to integer exponent
@@ -212,7 +212,7 @@ The elaboration pass currently covers:
 - literals -> `Concrete([1])`
 - quantities -> `Concrete(unit.dimension)`
 - declared or inline-dimension variables -> `Concrete(dim)`
-- undeclared variables -> `Unresolved`
+- undeclared variables -> `Concrete([1])`
 - arithmetic/function nodes -> either a derived `Concrete(...)`, `Unresolved`, or the same `DimError` that the legacy checker would have reported for obviously ill-typed expressions
 
 Phase 2 is also now in place:
@@ -238,7 +238,7 @@ Phase 4 is now in place:
 
 Phase 5 is now in place:
 - `Context::infer_ty()` exposes `Ty` directly to consumer code instead of collapsing everything to `Option<Dimension>`
-- the REPL now distinguishes dimensionless results (`[1]`) from unresolved ones (`[?]`)
+- the REPL now shows bare undeclared symbols as dimensionless (`[1]`) and reserves unresolved (`[?]`) for internal/untyped states only
 - proof verification uses the typed equivalence path before reporting residuals
 
 Editor hover/type display is still deferred; the current editor integration only reports diagnostics. That is now treated as a separate UX follow-up rather than part of the strict-typed symbolic-core migration.
@@ -253,7 +253,7 @@ Editor hover/type display is still deferred; the current editor integration only
 
 - Extend `Expr` with `ty: Ty` rather than introducing a separate `TypedExpr` AST — the struct is already extensible and the migration pattern is proven
 - Treat dimensionless as `Ty::Concrete(Dimension::dimensionless())`, never as "missing"
-- Treat unresolved variables as `Ty::Unresolved`, never as `None`
+- Treat bare user variables as `Ty::Concrete(Dimension::dimensionless())`; reserve `Ty::Unresolved` for pre-elaboration or explicitly lossy internal states
 - Make every lossy typed-to-untyped conversion explicit in the API
 
 ## Verification
@@ -269,7 +269,7 @@ npm test
 Expected regression coverage:
 - literals elaborate to `Concrete([1])`
 - quantities elaborate to concrete physical dimensions
-- undeclared variables elaborate to `Unresolved`, not missing metadata
+- undeclared variables elaborate to `Concrete([1])`, not missing metadata
 - typed rewrites preserve type state
 - claim-derived rules do not erase quantity wrappers, units, or inline dimensions
 - tokenization either preserves type state or uses an explicitly lossy projection
@@ -278,7 +278,7 @@ Expected regression coverage:
 Manual checks:
 - In the REPL, `4.5` reports `[1]`
 - In the REPL, `4.5 [m]` reports `[L]`
-- A bare variable with no declaration is shown as having an unresolved type, not as silently dimensionless
+- A bare variable with no declaration is shown as `[1]`
 - Ill-typed equalities are rejected before symbolic or numerical equivalence fallback
 
 Completed this session:
@@ -288,7 +288,7 @@ Completed this session:
 New automated coverage added:
 - elaboration marks plain literals as `Ty::Concrete([1])`
 - elaboration marks quantities with the unit dimension
-- elaboration keeps undeclared variables `Ty::Unresolved`
+- elaboration marks undeclared variables as `Ty::Concrete([1])`
 - elaboration uses declared dimensions to type variables and typed addition
 - `check_dim` accepts an already-elaborated expression without needing the original `DimEnv`
 - variable-pattern substitution preserves `dim` and `ty`

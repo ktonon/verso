@@ -479,7 +479,7 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
                         .get(name)
                         .cloned()
                         .map(Ty::Concrete)
-                        .unwrap_or(Ty::Unresolved),
+                        .unwrap_or(Ty::Concrete(Dimension::dimensionless())),
                 },
             };
             Ok(Expr::spanned_typed(
@@ -1063,8 +1063,8 @@ mod tests {
     }
 
     #[test]
-    fn check_expr_dim_typed_plus_untyped_is_error() {
-        // x has no type, 4 [s] has type [T] → error
+    fn check_expr_dim_typed_plus_dimensionless_is_error() {
+        // x defaults to [1], 4 [s] has type [T] → error
         let ctx = Context::new();
         let expr = parse_expr("x + 4 [s]").unwrap();
         let result = ctx.check_expr_dim(&expr);
@@ -1170,10 +1170,23 @@ mod tests {
     }
 
     #[test]
-    fn infer_ty_undeclared_var_returns_unresolved() {
+    fn infer_ty_undeclared_var_returns_dimensionless() {
         let ctx = Context::new();
         let expr = parse_expr("x + 3").unwrap();
-        assert_eq!(ctx.infer_ty(&expr), Some(Ty::Unresolved));
+        assert_eq!(
+            ctx.infer_ty(&expr),
+            Some(Ty::Concrete(Dimension::dimensionless()))
+        );
+    }
+
+    #[test]
+    fn infer_ty_bare_undeclared_var_returns_dimensionless() {
+        let ctx = Context::new();
+        let expr = parse_expr("x").unwrap();
+        assert_eq!(
+            ctx.infer_ty(&expr),
+            Some(Ty::Concrete(Dimension::dimensionless()))
+        );
     }
 
     #[test]
@@ -1191,14 +1204,14 @@ mod tests {
     }
 
     #[test]
-    fn elaborate_expr_keeps_undeclared_vars_unresolved() {
+    fn elaborate_expr_marks_undeclared_vars_dimensionless() {
         let ctx = Context::new();
         let expr = ctx.elaborate_expr(&parse_expr("x + 1").unwrap()).unwrap();
         match &expr.kind {
             ExprKind::Add(lhs, rhs) => {
-                assert_eq!(lhs.ty, Ty::Unresolved);
+                assert_eq!(lhs.ty, Ty::Concrete(Dimension::dimensionless()));
                 assert_eq!(rhs.ty, Ty::Concrete(Dimension::dimensionless()));
-                assert_eq!(expr.ty, Ty::Unresolved);
+                assert_eq!(expr.ty, Ty::Concrete(Dimension::dimensionless()));
             }
             other => panic!("expected addition, got {:?}", other),
         }
@@ -1246,16 +1259,19 @@ mod tests {
     }
 
     #[test]
-    fn check_expr_dim_undeclared_var_no_vars_is_none() {
-        // No declarations, bare variable — should not produce noise
+    fn check_expr_dim_undeclared_var_no_vars_is_dimensionless() {
+        // No declarations, bare variables are explicitly dimensionless
         let ctx = Context::new();
         let expr = parse_expr("x + 3").unwrap();
-        assert!(ctx.check_expr_dim(&expr).is_none());
+        match ctx.check_expr_dim(&expr) {
+            Some(Ok(dim)) => assert_eq!(dim, Dimension::dimensionless()),
+            other => panic!("expected dimensionless result, got {:?}", other),
+        }
     }
 
     #[test]
     fn check_expr_dim_undeclared_var_with_units_is_error() {
-        // No :var declarations, but expression mixes units with typeless var → error
+        // No :var declarations, but expression mixes units with an implicit [1] var → error
         let ctx = Context::new();
         let expr = parse_expr("1 [m] + 2 [km] + x").unwrap();
         let result = ctx.check_expr_dim(&expr);
@@ -1267,8 +1283,8 @@ mod tests {
     }
 
     #[test]
-    fn typeless_var_in_typed_addition_reports_mismatch() {
-        // Typeless var in typed addition should produce a dimension mismatch
+    fn dimensionless_var_in_typed_addition_reports_mismatch() {
+        // An implicit [1] var in typed addition should produce a dimension mismatch
         let ctx = Context::new();
         let expr = parse_expr("1 [m] + x").unwrap();
         let result = ctx.check_expr_dim(&expr);
@@ -1281,7 +1297,7 @@ mod tests {
         );
         assert!(
             msg.contains("[1]"),
-            "typeless should show as [1], got: {}",
+            "dimensionless symbol should show as [1], got: {}",
             msg
         );
     }
@@ -1451,7 +1467,7 @@ mod tests {
 
     #[test]
     fn dim_error_display_typeless_as_mismatch() {
-        // Typeless values show as [1] in mismatch errors
+        // Dimensionless values show as [1] in mismatch errors
         let err = DimError::Mismatch {
             expected: Dimension::single(BaseDim::L, 1),
             got: Dimension::dimensionless(),
@@ -1587,14 +1603,20 @@ mod tests {
     // --- check_claim_dim paths ---
 
     #[test]
-    fn check_claim_dim_rhs_undeclared_skips() {
+    fn check_claim_dim_rhs_dimensionless_mismatches() {
         let mut env = DimEnv::new();
         env.insert("a".into(), Dimension::single(BaseDim::L, 1));
-        // lhs declared, rhs undeclared
+        // lhs declared as [L], rhs defaults to [1]
         let lhs = parse_expr("a").unwrap();
         let rhs = parse_expr("b").unwrap();
         let result = check_claim_dim(&lhs, &rhs, &env);
-        assert!(matches!(result, DimOutcome::Skipped { .. }));
+        assert!(matches!(
+            result,
+            DimOutcome::LhsRhsMismatch {
+                lhs,
+                rhs
+            } if lhs == Dimension::single(BaseDim::L, 1) && rhs == Dimension::dimensionless()
+        ));
     }
 
     #[test]

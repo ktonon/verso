@@ -340,25 +340,40 @@ fn record_result(
 /// Format the type suffix for a REPL result.
 /// - Symbolic results (containing variables) → dimension notation: `[L]`, `[M L T^-2]`
 /// - Numeric results → unit notation: `[m]`, `[N]`
-/// - Unresolved results → `"[?]"`
+/// - Unresolved internal results → `"[?]"`
 /// - Results already displaying units (Quantity nodes) → no suffix needed
 fn format_type_suffix(simplified: &Expr, ty: Option<&Ty>) -> String {
     let ty = match ty {
         Some(ty) => ty,
         None => return String::new(),
     };
-    if simplified.first_unit().is_some() {
+    if simplified.first_unit().is_some() || has_inline_dim_annotation(simplified) {
         return String::new();
     }
     match ty {
         Ty::Concrete(dim) => {
             if free_vars(simplified).is_empty() {
-                format!(" \x1b[36m[{}]\x1b[0m", base_si_display(dim))
+                format!(" \x1b[2m[{}]\x1b[0m", base_si_display(dim))
             } else {
-                format!(" \x1b[36m{}\x1b[0m", dim)
+                format!(" \x1b[2m{}\x1b[0m", dim)
             }
         }
         Ty::Unresolved => " \x1b[33m[?]\x1b[0m".to_string(),
+    }
+}
+
+fn has_inline_dim_annotation(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Var { dim: Some(_), .. } => true,
+        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
+            has_inline_dim_annotation(a) || has_inline_dim_annotation(b)
+        }
+        ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner) => {
+            has_inline_dim_annotation(inner)
+        }
+        ExprKind::FnN(_, args) => args.iter().any(has_inline_dim_annotation),
+        ExprKind::Quantity(_, _) => false,
+        _ => false,
     }
 }
 
@@ -380,11 +395,34 @@ mod tests {
             Some(&Ty::Concrete(Dimension::dimensionless())),
         );
         assert!(suffix.contains("[1]"));
+        assert!(suffix.contains("\x1b[2m"));
     }
 
     #[test]
-    fn format_type_suffix_shows_unresolved_marker() {
-        let suffix = format_type_suffix(&crate::expr::scalar("x"), Some(&Ty::Unresolved));
-        assert!(suffix.contains("[?]"));
+    fn format_type_suffix_shows_dimensionless_symbol_type() {
+        let suffix = format_type_suffix(
+            &crate::expr::scalar("x"),
+            Some(&Ty::Concrete(Dimension::dimensionless())),
+        );
+        assert!(suffix.contains("[1]"));
+        assert!(suffix.contains("\x1b[2m"));
+    }
+
+    #[test]
+    fn bare_symbol_repl_type_suffix_is_dimensionless() {
+        let ctx = Context::new();
+        let expr = parse_expr("x").unwrap();
+        let ty = ctx.infer_ty(&expr);
+        let suffix = format_type_suffix(&expr, ty.as_ref());
+        assert!(suffix.contains("[1]"));
+    }
+
+    #[test]
+    fn inline_dim_var_does_not_duplicate_type_suffix() {
+        let ctx = Context::new();
+        let expr = parse_expr("a [L]").unwrap();
+        let ty = ctx.infer_ty(&expr);
+        let suffix = format_type_suffix(&expr, ty.as_ref());
+        assert_eq!(suffix, "");
     }
 }

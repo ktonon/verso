@@ -149,7 +149,7 @@ pub fn infer_ty_from_kind(kind: &ExprKind) -> Ty {
             Ty::Concrete(Dimension::dimensionless())
         }
         ExprKind::Var { dim: Some(dim), .. } => Ty::Concrete(dim.clone()),
-        ExprKind::Var { dim: None, .. } => Ty::Unresolved,
+        ExprKind::Var { dim: None, .. } => Ty::Concrete(Dimension::dimensionless()),
         ExprKind::Add(a, b) => match (&a.ty, &b.ty) {
             (Ty::Concrete(da), Ty::Concrete(db)) if da == db => Ty::Concrete(da.clone()),
             _ => Ty::Unresolved,

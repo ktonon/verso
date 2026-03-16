@@ -610,7 +610,11 @@ impl Pattern {
             } => {
                 // Resolve variable name
                 let (var_name, dim, ty) = match pat_name {
-                    VarPattern::Exact(n) => (n.clone(), None, Ty::Unresolved),
+                    VarPattern::Exact(n) => (
+                        n.clone(),
+                        None,
+                        Ty::Concrete(crate::dim::Dimension::dimensionless()),
+                    ),
                     VarPattern::Wild(wildcard) => {
                         // Get the name from the bound expression (must be a Var)
                         match bindings.exprs.get(wildcard) {
