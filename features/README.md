@@ -8,4 +8,4 @@
 | [si-units.md](si-units.md) | SI Unit System | 2026-03-14 | 2026-03-14 | completed |
 | [verso-rename.md](verso-rename.md) | Verso Rename | 2026-03-14 | 2026-03-14 | wip |
 | [declarations.md](declarations.md) | Variable, Constant, and Function Declarations | 2026-03-15 | 2026-03-15 | completed |
-| [test-coverage.md](test-coverage.md) | Test Coverage Improvement | 2026-03-15 | 2026-03-15 | wip |
+| [test-coverage.md](test-coverage.md) | Test Coverage Improvement | 2026-03-15 | 2026-03-15 | completed |

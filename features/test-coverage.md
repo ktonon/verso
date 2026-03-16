@@ -12,7 +12,7 @@ Overall: **77.9% line coverage** (16,071 lines, 3,549 missed)
 
 | Date | Line Coverage | Notes |
 |------|--------------|-------|
-| 2026-03-15 | 77.9% → 79.2% | Phase 1 complete: eval.rs 67→83%, fmt.rs 64→96%, dim.rs 92→94% |
+| 2026-03-15 | 77.9% → 81.7% | All 4 phases complete |
 
 ## Plan
 
@@ -24,27 +24,27 @@ Overall: **77.9% line coverage** (16,071 lines, 3,549 missed)
 | fmt.rs | 64% | 96% | ~~`fmt_colored` entirely untested~~ |
 | dim.rs | 92% | 94% | ~~Parse error paths, edge cases~~ |
 
-### Phase 2 — Core correctness
+### Phase 2 — Core correctness ✓
 
-| File | Baseline | Key Gaps |
-|------|----------|----------|
-| validate.rs | 62% | `validate_with_trace` entirely untested |
-| context.rs | 67% | `check_equal` branches, `expand_funcs`, `DimError` display |
+| File | Baseline | After | Key Gaps |
+|------|----------|-------|----------|
+| validate.rs | 62% | 93% | ~~`validate_with_trace` entirely untested~~ |
+| context.rs | 67% | 87% | ~~`check_equal` branches, `expand_funcs`, `DimError` display~~ |
 
-### Phase 3 — Remaining gaps
+### Phase 3 — Remaining gaps ✓
 
-| File | Baseline | Key Gaps |
-|------|----------|----------|
-| to_tex.rs | 85% | Negative FracPi, `Quantity`, `Custom` fn |
-| expr.rs | 86% | `collect_units` nested paths, `first_unit` variants |
-| unit.rs | 83% | Compound `base_si_display`, unicode prefix, derived unit lookups |
+| File | Baseline | After | Key Gaps |
+|------|----------|-------|----------|
+| to_tex.rs | 85% | 93% | ~~Negative FracPi, `Quantity`, `Custom` fn~~ |
+| expr.rs | 86% | 99% | ~~`collect_units` nested paths, `first_unit` variants~~ |
+| unit.rs | 83% | 93% | ~~Compound `base_si_display`, unicode prefix, derived unit lookups~~ |
 
-### Phase 4 — Document parser
+### Phase 4 — Document parser ✓
 
-| File | Baseline | Key Gaps |
-|------|----------|----------|
-| parse.rs | 87% | Table parsing, URL fragments, error paths, `:include` |
-| config.rs | 87% | File I/O paths, `ConfigError` display |
+| File | Baseline | After | Key Gaps |
+|------|----------|-------|----------|
+| parse.rs | 87% | 88% | ~~Table parsing, URL fragments, error paths, `:include`~~ |
+| config.rs | 87% | 93% | ~~File I/O paths, `ConfigError` display~~ |
 
 ## Implementation Notes
 
