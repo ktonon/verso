@@ -44,8 +44,16 @@ Tokenizer now returns `Vec<(Token, Span)>` with character offset tracking. Every
 All `DimError` variants now carry a `Span`: `UndeclaredVar(String, Span)`, `Mismatch { ..., span }`, `NonDimensionlessFnArg { ..., span }`, `NonIntegerPower(Span)`. The span comes from the subexpression that caused the error (e.g., `expr.span` for the "got" side of a mismatch).
 
 ### Phase 4
-Added `DimError::span()` accessor and `format_dim_error(error, source, prefix_width)` function in `context.rs`. This renders a caret underline row aligned to the error span, followed by the error message, both in red. The REPL's three error display sites (`:const`, equality, expression) now call `format_dim_error` with the correct source string and prefix width to align carets under the prompt line. The document verification report (`report.rs`) was left unchanged as it doesn't carry source text.
+Added `DimError::span()` accessor and `format_dim_error(error, source, prefix_width)` function in `context.rs`. This renders a caret underline row aligned to the error span, followed by the error message, both in red. The REPL's three error display sites (`:const`, equality, expression) now call `format_dim_error` with the correct source string and prefix width to align carets under the prompt line.
+
+### Post-review fixes
+- **Span provenance through apply_consts**: `substitute_consts` and `expand_funcs` now use `Expr::spanned(..., expr.span)` to preserve original spans on compound nodes. Substituted const/func bodies inherit the call-site span so error carets point at the user's input, not the definition site.
+- **Byte/char offset mixing in REPL**: replaced `input.len()` with `input.chars().count()` in the two REPL offset calculations so that multibyte characters (π, θ, etc.) don't shift carets.
+
+### Scope
+
+This feature covers REPL-only underline support. Document verification (`report.rs`) and LSP diagnostics (`verso.rs`) still report line-level errors without expression-level span underlines. Extending to documents would require threading source text through the verification pipeline — left as future work.
 
 ## Verification
 
-Dimensional analysis errors in the REPL should show underlined source locations pointing at the exact subexpression that caused the error. Unit tests should assert that error spans cover the correct byte ranges.
+Dimensional analysis errors in the REPL should show underlined source locations pointing at the exact subexpression that caused the error. Unit tests assert that error spans cover the correct character ranges, including after const substitution and function expansion.

@@ -577,35 +577,38 @@ pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
     if consts.is_empty() {
         return expr.clone();
     }
+    let span = expr.span;
     match &expr.kind {
         ExprKind::Var { name, .. } => {
             if let Some(value) = consts.get(name) {
-                value.clone()
+                // Preserve the call-site span so error reporting points at
+                // the user's input, not the const definition site.
+                Expr::spanned(value.kind.clone(), span)
             } else {
                 expr.clone()
             }
         }
-        ExprKind::Add(a, b) => Expr::new(ExprKind::Add(
+        ExprKind::Add(a, b) => Expr::spanned(ExprKind::Add(
             Box::new(substitute_consts(a, consts)),
             Box::new(substitute_consts(b, consts)),
-        )),
-        ExprKind::Mul(a, b) => Expr::new(ExprKind::Mul(
+        ), span),
+        ExprKind::Mul(a, b) => Expr::spanned(ExprKind::Mul(
             Box::new(substitute_consts(a, consts)),
             Box::new(substitute_consts(b, consts)),
-        )),
-        ExprKind::Pow(a, b) => Expr::new(ExprKind::Pow(
+        ), span),
+        ExprKind::Pow(a, b) => Expr::spanned(ExprKind::Pow(
             Box::new(substitute_consts(a, consts)),
             Box::new(substitute_consts(b, consts)),
-        )),
-        ExprKind::Neg(inner) => Expr::new(ExprKind::Neg(Box::new(substitute_consts(inner, consts)))),
-        ExprKind::Inv(inner) => Expr::new(ExprKind::Inv(Box::new(substitute_consts(inner, consts)))),
-        ExprKind::Fn(kind, inner) => Expr::new(ExprKind::Fn(kind.clone(), Box::new(substitute_consts(inner, consts)))),
-        ExprKind::FnN(kind, args) => Expr::new(ExprKind::FnN(
+        ), span),
+        ExprKind::Neg(inner) => Expr::spanned(ExprKind::Neg(Box::new(substitute_consts(inner, consts))), span),
+        ExprKind::Inv(inner) => Expr::spanned(ExprKind::Inv(Box::new(substitute_consts(inner, consts))), span),
+        ExprKind::Fn(kind, inner) => Expr::spanned(ExprKind::Fn(kind.clone(), Box::new(substitute_consts(inner, consts))), span),
+        ExprKind::FnN(kind, args) => Expr::spanned(ExprKind::FnN(
             kind.clone(),
             args.iter().map(|a| substitute_consts(a, consts)).collect(),
-        )),
+        ), span),
         ExprKind::Quantity(inner, unit) => {
-            Expr::new(ExprKind::Quantity(Box::new(substitute_consts(inner, consts)), unit.clone()))
+            Expr::spanned(ExprKind::Quantity(Box::new(substitute_consts(inner, consts)), unit.clone()), span)
         }
         ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => expr.clone(),
     }
@@ -618,6 +621,7 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
     if funcs.is_empty() {
         return expr.clone();
     }
+    let span = expr.span;
     match &expr.kind {
         ExprKind::Fn(crate::expr::FnKind::Custom(name), arg) => {
             if let Some(def) = funcs.get(name) {
@@ -627,12 +631,14 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                     bindings.insert(param.clone(), expanded_arg);
                 }
                 let result = substitute_consts(&def.body, &bindings);
-                expand_funcs(&result, funcs)
+                // Preserve the call-site span on the expanded result.
+                let expanded = expand_funcs(&result, funcs);
+                Expr::spanned(expanded.kind, span)
             } else {
-                Expr::new(ExprKind::Fn(
+                Expr::spanned(ExprKind::Fn(
                     crate::expr::FnKind::Custom(name.clone()),
                     Box::new(expand_funcs(arg, funcs)),
-                ))
+                ), span)
             }
         }
         ExprKind::FnN(crate::expr::FnKind::Custom(name), args) => {
@@ -643,35 +649,36 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                     bindings.insert(param.clone(), arg);
                 }
                 let result = substitute_consts(&def.body, &bindings);
-                expand_funcs(&result, funcs)
+                let expanded = expand_funcs(&result, funcs);
+                Expr::spanned(expanded.kind, span)
             } else {
-                Expr::new(ExprKind::FnN(
+                Expr::spanned(ExprKind::FnN(
                     crate::expr::FnKind::Custom(name.clone()),
                     args.iter().map(|a| expand_funcs(a, funcs)).collect(),
-                ))
+                ), span)
             }
         }
-        ExprKind::Add(a, b) => Expr::new(ExprKind::Add(
+        ExprKind::Add(a, b) => Expr::spanned(ExprKind::Add(
             Box::new(expand_funcs(a, funcs)),
             Box::new(expand_funcs(b, funcs)),
-        )),
-        ExprKind::Mul(a, b) => Expr::new(ExprKind::Mul(
+        ), span),
+        ExprKind::Mul(a, b) => Expr::spanned(ExprKind::Mul(
             Box::new(expand_funcs(a, funcs)),
             Box::new(expand_funcs(b, funcs)),
-        )),
-        ExprKind::Pow(a, b) => Expr::new(ExprKind::Pow(
+        ), span),
+        ExprKind::Pow(a, b) => Expr::spanned(ExprKind::Pow(
             Box::new(expand_funcs(a, funcs)),
             Box::new(expand_funcs(b, funcs)),
-        )),
-        ExprKind::Neg(inner) => Expr::new(ExprKind::Neg(Box::new(expand_funcs(inner, funcs)))),
-        ExprKind::Inv(inner) => Expr::new(ExprKind::Inv(Box::new(expand_funcs(inner, funcs)))),
-        ExprKind::Fn(kind, inner) => Expr::new(ExprKind::Fn(kind.clone(), Box::new(expand_funcs(inner, funcs)))),
-        ExprKind::FnN(kind, args) => Expr::new(ExprKind::FnN(
+        ), span),
+        ExprKind::Neg(inner) => Expr::spanned(ExprKind::Neg(Box::new(expand_funcs(inner, funcs))), span),
+        ExprKind::Inv(inner) => Expr::spanned(ExprKind::Inv(Box::new(expand_funcs(inner, funcs))), span),
+        ExprKind::Fn(kind, inner) => Expr::spanned(ExprKind::Fn(kind.clone(), Box::new(expand_funcs(inner, funcs))), span),
+        ExprKind::FnN(kind, args) => Expr::spanned(ExprKind::FnN(
             kind.clone(),
             args.iter().map(|a| expand_funcs(a, funcs)).collect(),
-        )),
+        ), span),
         ExprKind::Quantity(inner, unit) => {
-            Expr::new(ExprKind::Quantity(Box::new(expand_funcs(inner, funcs)), unit.clone()))
+            Expr::spanned(ExprKind::Quantity(Box::new(expand_funcs(inner, funcs)), unit.clone()), span)
         }
         ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => expr.clone(),
     }
@@ -1295,5 +1302,57 @@ mod tests {
             .replace("\x1b[31m", "")
             .replace("\x1b[0m", "");
         assert!(plain.starts_with("    ^"), "carets should be offset by prefix_width");
+    }
+
+    // --- span provenance through apply_consts ---
+
+    #[test]
+    fn error_span_valid_after_const_substitution() {
+        // Regression: substitute_consts must preserve spans of compound nodes
+        // so that DimError spans remain within the current source bounds.
+        let mut ctx = Context::new();
+        ctx.declare_var("v", Some(Dimension::single(BaseDim::L, 1)));
+        ctx.declare_const("c", parse_expr("3*10^8 [m/s]").unwrap());
+        let source = "v + c";
+        let expr = parse_expr(source).unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some());
+        if let Some(Err(e)) = result {
+            let span = e.span();
+            let source_len = source.chars().count();
+            assert!(
+                span.end <= source_len,
+                "error span end {} exceeds source length {} — \
+                 apply_consts likely corrupted spans",
+                span.end, source_len,
+            );
+            assert!(
+                span.start < source_len,
+                "error span start {} at or beyond source length {}",
+                span.start, source_len,
+            );
+        }
+    }
+
+    #[test]
+    fn error_span_valid_after_func_expansion() {
+        // Regression: expand_funcs must preserve spans of compound nodes.
+        let mut ctx = Context::new();
+        ctx.declare_var("v", Some(Dimension::single(BaseDim::L, 1)));
+        ctx.declare_func("f", vec!["x".to_string()], parse_expr("x").unwrap());
+        let source = "v + f(4 [s])";
+        let expr = parse_expr(source).unwrap();
+        let result = ctx.check_expr_dim(&expr);
+        assert!(result.is_some());
+        if let Some(Err(e)) = result {
+            let span = e.span();
+            let source_len = source.chars().count();
+            assert!(
+                span.end <= source_len,
+                "error span end {} exceeds source length {} — \
+                 expand_funcs likely corrupted spans",
+                span.end, source_len,
+            );
+        }
     }
 }
