@@ -34,7 +34,17 @@ Format errors using the original source text and the span. Render an underline (
 
 ## Implementation Notes
 
-(empty)
+### Phase 1 (commit 29441a3)
+Refactored `Expr` from an enum to a struct wrapping `ExprKind`, with a `Span { start, end }` field. `PartialEq` compares only `kind` (ignores span). Touched 16 files for the Expr→ExprKind migration.
+
+### Phase 2 (commit c0fc1bc)
+Tokenizer now returns `Vec<(Token, Span)>` with character offset tracking. Every `parse_*` method records `start_pos()` at entry and sets `expr.span = Span::new(start, self.prev_end)` on the result. Added span tests covering atoms, addition, quantity, nested power+unit, function calls, and dimension annotations.
+
+### Phase 3 (commit 7191284)
+All `DimError` variants now carry a `Span`: `UndeclaredVar(String, Span)`, `Mismatch { ..., span }`, `NonDimensionlessFnArg { ..., span }`, `NonIntegerPower(Span)`. The span comes from the subexpression that caused the error (e.g., `expr.span` for the "got" side of a mismatch).
+
+### Phase 4
+Added `DimError::span()` accessor and `format_dim_error(error, source, prefix_width)` function in `context.rs`. This renders a caret underline row aligned to the error span, followed by the error message, both in red. The REPL's three error display sites (`:const`, equality, expression) now call `format_dim_error` with the correct source string and prefix width to align carets under the prompt line. The document verification report (`report.rs`) was left unchanged as it doesn't carry source text.
 
 ## Verification
 

@@ -1,4 +1,4 @@
-use crate::context::{Context, DimOutcome, EqualityResult};
+use crate::context::{format_dim_error, Context, DimOutcome, EqualityResult};
 use crate::dim::Dimension;
 use crate::eval::free_vars;
 use crate::expr::{Expr, ExprKind};
@@ -82,7 +82,9 @@ pub fn run() -> Result<(), ReadlineError> {
                     match parse_const_decl(rest) {
                         Ok((name, value)) => {
                             if let Some(Err(e)) = ctx.check_expr_dim(&value) {
-                                println!("\x1b[31mdim error: {}\x1b[0m", e);
+                                let value_str = rest[rest.find('=').unwrap() + 1..].trim();
+                                let value_offset = input.len() - value_str.len();
+                                println!("{}", format_dim_error(&e, value_str, 2 + value_offset));
                             }
                             let expr_type = ctx.infer_type(&value);
                             let simplified = ctx.simplify(&value);
@@ -137,10 +139,12 @@ pub fn run() -> Result<(), ReadlineError> {
                                     );
                                 }
                                 DimOutcome::ExprError { side, error } => {
-                                    println!(
-                                        "\x1b[31mdim error in {}: {}\x1b[0m",
-                                        side, error
-                                    );
+                                    let (source, offset) = if side == "lhs" {
+                                        (lhs_str, 0)
+                                    } else {
+                                        (rhs_str, input.len() - rhs_str.len())
+                                    };
+                                    println!("{}", format_dim_error(&error, source, 2 + offset));
                                 }
                             }
                             let result = ctx.check_equal(&lhs, &rhs);
@@ -182,7 +186,7 @@ pub fn run() -> Result<(), ReadlineError> {
                         Ok(expr) => {
                             // Dimensional consistency check
                             if let Some(Err(e)) = ctx.check_expr_dim(&expr) {
-                                println!("\x1b[31mdim error: {}\x1b[0m", e);
+                                println!("{}", format_dim_error(&e, input, 2));
                             }
                             let expr_type = ctx.infer_type(&expr);
                             if show_trace {

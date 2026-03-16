@@ -16,7 +16,7 @@ pub mod token;
 pub mod training_data;
 pub mod validate;
 
-pub use context::{Context, DimEnv, DimError, DimOutcome, EqualityResult, is_zero};
+pub use context::{Context, DimEnv, DimError, DimOutcome, EqualityResult, format_dim_error, is_zero};
 pub use dim::{BaseDim, Dimension};
 pub use eval::{eval_f64, free_vars, spot_check, SpotCheckFailure};
 pub use unit::Unit;

@@ -256,6 +256,38 @@ impl std::fmt::Display for DimError {
     }
 }
 
+impl DimError {
+    /// Return the source span associated with this error.
+    pub fn span(&self) -> Span {
+        match self {
+            DimError::UndeclaredVar(_, span) => *span,
+            DimError::Mismatch { span, .. } => *span,
+            DimError::NonDimensionlessFnArg { span, .. } => *span,
+            DimError::NonIntegerPower(span) => *span,
+        }
+    }
+}
+
+/// Format a dim error with a caret underline pointing at the offending span.
+///
+/// `source` is the parsed source text. `prefix_width` is the number of display
+/// characters before the source on the prompt line (e.g. 2 for `"> "`).
+///
+/// Returns a two-line string: a caret row and the error message, both colored red.
+pub fn format_dim_error(error: &DimError, source: &str, prefix_width: usize) -> String {
+    let span = error.span();
+    let start = span.start.min(source.chars().count());
+    let end = span.end.min(source.chars().count());
+    let caret_len = if end > start { end - start } else { 1 };
+    format!(
+        "\x1b[31m{:>width$}{}\ndim error: {}\x1b[0m",
+        "",
+        "^".repeat(caret_len),
+        error,
+        width = prefix_width + start,
+    )
+}
+
 /// Result of dimension checking a claim.
 #[derive(Debug)]
 pub enum DimOutcome {
@@ -1201,5 +1233,67 @@ mod tests {
     #[test]
     fn is_zero_var() {
         assert!(!is_zero(&parse_expr("x").unwrap()));
+    }
+
+    // --- DimError::span ---
+
+    #[test]
+    fn dim_error_span_from_mismatch() {
+        let mut ctx = Context::new();
+        ctx.declare_var("v", Some(Dimension::single(BaseDim::L, 1)));
+        let source = "v + 4 [s]";
+        let expr = parse_expr(source).unwrap();
+        let err = ctx.check_expr_dim(&expr).unwrap().unwrap_err();
+        let span = err.span();
+        // The span should point at the "4 [s]" part (the "got" side)
+        assert!(span.start > 0, "span should not start at 0");
+        assert!(span.end <= source.chars().count());
+    }
+
+    // --- format_dim_error ---
+
+    #[test]
+    fn format_dim_error_produces_caret_underline() {
+        let mut ctx = Context::new();
+        ctx.declare_var("v", Some(Dimension::single(BaseDim::L, 1)));
+        let source = "v + 4 [s]";
+        let expr = parse_expr(source).unwrap();
+        let err = ctx.check_expr_dim(&expr).unwrap().unwrap_err();
+        let formatted = format_dim_error(&err, source, 2); // 2 for "> " prompt
+        // Should contain carets
+        assert!(formatted.contains('^'), "should have caret underline");
+        // Should contain the error message
+        assert!(formatted.contains("dimension mismatch"));
+    }
+
+    #[test]
+    fn format_dim_error_caret_width_matches_span() {
+        let err = DimError::Mismatch {
+            expected: Dimension::dimensionless(),
+            got: Dimension::single(BaseDim::L, 1),
+            context: "test".to_string(),
+            span: Span::new(5, 10),
+        };
+        let source = "hello world test";
+        let formatted = format_dim_error(&err, source, 0);
+        // Extract the caret line (first line of the formatted output, stripping ANSI)
+        let plain: String = formatted.chars().filter(|c| !c.is_control()).collect();
+        // Should have 5 carets (span length = 10 - 5)
+        assert!(plain.contains("^^^^^"));
+    }
+
+    #[test]
+    fn format_dim_error_prefix_width_offsets_carets() {
+        let err = DimError::UndeclaredVar("x".to_string(), Span::new(0, 1));
+        let source = "x + y";
+        let formatted = format_dim_error(&err, source, 4); // 4 char prefix
+        let lines: Vec<&str> = formatted.lines().collect();
+        // First line is caret line — should have 4 spaces before the caret
+        let caret_line = lines[0];
+        // Strip ANSI escape
+        let plain: String = caret_line
+            .replace("\x1b[31m", "")
+            .replace("\x1b[0m", "");
+        assert!(plain.starts_with("    ^"), "carets should be offset by prefix_width");
     }
 }
