@@ -450,3 +450,211 @@ pub fn classify_mul(left: &Expr, right: &Expr) -> MulKind {
         _ => MulKind::Double,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dim::{BaseDim, Dimension};
+    use crate::unit::Unit;
+
+    fn test_unit(sym: &str) -> Unit {
+        Unit {
+            dimension: Dimension::single(BaseDim::L, 1),
+            scale: 1.0,
+            display: sym.to_string(),
+        }
+    }
+
+    // --- collect_units ---
+
+    #[test]
+    fn collect_units_quantity() {
+        let e = quantity(constant(5.0), test_unit("m"));
+        assert_eq!(e.collect_units(), vec!["m"]);
+    }
+
+    #[test]
+    fn collect_units_nested_add() {
+        let e = add(
+            quantity(constant(1.0), test_unit("m")),
+            quantity(constant(2.0), test_unit("m")),
+        );
+        assert_eq!(e.collect_units(), vec!["m"]);
+    }
+
+    #[test]
+    fn collect_units_mul() {
+        let u1 = Unit {
+            dimension: Dimension::single(BaseDim::L, 1),
+            scale: 1.0,
+            display: "m".to_string(),
+        };
+        let u2 = Unit {
+            dimension: Dimension::single(BaseDim::T, 1),
+            scale: 1.0,
+            display: "s".to_string(),
+        };
+        let e = mul(quantity(constant(1.0), u1), quantity(constant(2.0), u2));
+        assert_eq!(e.collect_units(), vec!["m", "s"]);
+    }
+
+    #[test]
+    fn collect_units_neg() {
+        let e = neg(quantity(constant(1.0), test_unit("m")));
+        assert_eq!(e.collect_units(), vec!["m"]);
+    }
+
+    #[test]
+    fn collect_units_inv() {
+        let e = inv(quantity(constant(1.0), test_unit("m")));
+        assert_eq!(e.collect_units(), vec!["m"]);
+    }
+
+    #[test]
+    fn collect_units_fn() {
+        let e = sin(quantity(constant(1.0), test_unit("rad")));
+        assert_eq!(e.collect_units(), vec!["rad"]);
+    }
+
+    #[test]
+    fn collect_units_fnn() {
+        let e = min(
+            quantity(constant(1.0), test_unit("m")),
+            quantity(constant(2.0), test_unit("m")),
+        );
+        assert_eq!(e.collect_units(), vec!["m"]);
+    }
+
+    #[test]
+    fn collect_units_no_units() {
+        let e = add(scalar("x"), constant(1.0));
+        assert!(e.collect_units().is_empty());
+    }
+
+    // --- first_unit ---
+
+    #[test]
+    fn first_unit_quantity() {
+        let u = test_unit("m");
+        let e = quantity(constant(5.0), u.clone());
+        assert_eq!(e.first_unit(), Some(&u));
+    }
+
+    #[test]
+    fn first_unit_in_add() {
+        let u = test_unit("m");
+        let e = add(scalar("x"), quantity(constant(1.0), u.clone()));
+        assert_eq!(e.first_unit(), Some(&u));
+    }
+
+    #[test]
+    fn first_unit_in_neg() {
+        let u = test_unit("m");
+        let e = neg(quantity(constant(1.0), u.clone()));
+        assert_eq!(e.first_unit(), Some(&u));
+    }
+
+    #[test]
+    fn first_unit_in_fnn() {
+        let u = test_unit("m");
+        let e = min(quantity(constant(1.0), u.clone()), constant(2.0));
+        assert_eq!(e.first_unit(), Some(&u));
+    }
+
+    #[test]
+    fn first_unit_none() {
+        assert!(scalar("x").first_unit().is_none());
+        assert!(constant(1.0).first_unit().is_none());
+        assert!(pi().first_unit().is_none());
+        assert!(e_const().first_unit().is_none());
+    }
+
+    // --- complexity ---
+
+    #[test]
+    fn complexity_atoms() {
+        assert_eq!(scalar("x").complexity(), 1);
+        assert_eq!(constant(1.0).complexity(), 1);
+        assert_eq!(pi().complexity(), 1);
+        assert_eq!(e_const().complexity(), 1);
+    }
+
+    #[test]
+    fn complexity_quantity() {
+        let e = quantity(constant(5.0), test_unit("m"));
+        assert_eq!(e.complexity(), 2); // 1 for Quantity + 1 for inner
+    }
+
+    #[test]
+    fn complexity_compound() {
+        let e = add(scalar("x"), mul(scalar("y"), constant(2.0)));
+        assert_eq!(e.complexity(), 5);
+    }
+
+    #[test]
+    fn complexity_fnn() {
+        let e = clamp(scalar("x"), constant(0.0), constant(1.0));
+        assert_eq!(e.complexity(), 4);
+    }
+
+    // --- PartialEq ---
+
+    #[test]
+    fn eq_quantity() {
+        let u = test_unit("m");
+        let a = quantity(constant(5.0), u.clone());
+        let b = quantity(constant(5.0), u);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn neq_different_types() {
+        assert_ne!(scalar("x"), constant(1.0));
+        assert_ne!(pi(), e_const());
+    }
+
+    // --- NamedConst ---
+
+    #[test]
+    fn named_const_from_value_e() {
+        assert_eq!(NamedConst::from_value(std::f64::consts::E), Some(NamedConst::E));
+    }
+
+    #[test]
+    fn named_const_from_value_sqrt2() {
+        assert_eq!(NamedConst::from_value(std::f64::consts::SQRT_2), Some(NamedConst::Sqrt2));
+    }
+
+    #[test]
+    fn named_const_from_value_none() {
+        assert_eq!(NamedConst::from_value(42.0), None);
+    }
+
+    // --- classify_mul ---
+
+    #[test]
+    fn classify_mul_scalar() {
+        assert_eq!(classify_mul(&scalar("a"), &scalar("b")), MulKind::Scalar);
+    }
+
+    #[test]
+    fn classify_mul_outer() {
+        let a = tensor("A", vec![upper("i")]);
+        let b = tensor("B", vec![upper("j")]);
+        assert_eq!(classify_mul(&a, &b), MulKind::Outer);
+    }
+
+    #[test]
+    fn classify_mul_single() {
+        let a = tensor("A", vec![upper("i")]);
+        let b = tensor("B", vec![lower("i")]);
+        assert_eq!(classify_mul(&a, &b), MulKind::Single);
+    }
+
+    #[test]
+    fn classify_mul_double() {
+        let a = tensor("A", vec![upper("i"), upper("j")]);
+        let b = tensor("B", vec![lower("i"), lower("j")]);
+        assert_eq!(classify_mul(&a, &b), MulKind::Double);
+    }
+}

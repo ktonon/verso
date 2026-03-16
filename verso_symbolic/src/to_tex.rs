@@ -399,6 +399,85 @@ mod tests {
     }
 
     #[test]
+    fn to_tex_frac_pi_negative_numerator() {
+        // -3π/4
+        let e = frac_pi(-3, 4);
+        assert_eq!(e.to_tex(), "-\\frac{3\\pi}{4}");
+    }
+
+    #[test]
+    fn to_tex_frac_pi_negative_one_over_d() {
+        // -π/2
+        let e = frac_pi(-1, 2);
+        assert_eq!(e.to_tex(), "-\\frac{\\pi}{2}");
+    }
+
+    #[test]
+    fn to_tex_frac_pi_integer_multiple() {
+        // 3π
+        let e = frac_pi(3, 1);
+        assert_eq!(e.to_tex(), "3\\pi");
+    }
+
+    #[test]
+    fn to_tex_frac_pi_zero() {
+        let e = frac_pi(0, 1);
+        assert_eq!(e.to_tex(), "0");
+    }
+
+    #[test]
+    fn to_tex_negative_rational_fraction() {
+        let e = rational(-3, 4);
+        assert_eq!(e.to_tex(), "-\\frac{3}{4}");
+    }
+
+    #[test]
+    fn to_tex_quantity() {
+        use crate::dim::{BaseDim, Dimension};
+        use crate::unit::Unit;
+        let unit = Unit {
+            dimension: Dimension::single(BaseDim::L, 1),
+            scale: 1.0,
+            display: "m".to_string(),
+        };
+        let e = quantity(constant(5.0), unit);
+        assert_eq!(e.to_tex(), "5 \\; \\mathrm{m}");
+    }
+
+    #[test]
+    fn to_tex_custom_fn() {
+        let e = Expr::Fn(
+            FnKind::Custom("foo".to_string()),
+            Box::new(scalar("x")),
+        );
+        assert_eq!(e.to_tex(), "\\operatorname{foo}{x}");
+    }
+
+    #[test]
+    fn to_tex_neg_needs_parens() {
+        // -(x + y)
+        let e = neg(add(scalar("x"), scalar("y")));
+        assert_eq!(e.to_tex(), "-\\left( x + y \\right)");
+    }
+
+    #[test]
+    fn to_tex_log_base_reversed() {
+        // ln(base)^-1 * ln(arg) — reversed order
+        let e = mul(inv(ln(constant(2.0))), ln(scalar("x")));
+        assert_eq!(e.to_tex(), "\\log_{2}{x}");
+    }
+
+    #[test]
+    fn to_tex_sqrt_via_inv() {
+        // x^(1/2) expressed as Pow(x, Inv(2))
+        let e = Expr::Pow(
+            Box::new(scalar("x")),
+            Box::new(Expr::Inv(Box::new(constant(2.0)))),
+        );
+        assert_eq!(e.to_tex(), "\\sqrt{x}");
+    }
+
+    #[test]
     fn to_tex_quadratic() {
         // ax^2 + bx + c
         let e = add(

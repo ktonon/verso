@@ -559,6 +559,130 @@ mod tests {
     }
 
     #[test]
+    fn base_si_display_compound() {
+        // velocity: [L T^-1] → m/s
+        let dim = Dimension::single(BaseDim::L, 1).mul(&Dimension::single(BaseDim::T, -1));
+        assert_eq!(base_si_display(&dim), "m/s");
+    }
+
+    #[test]
+    fn base_si_display_compound_powers() {
+        // acceleration: [L T^-2] → m/s^2
+        let dim = Dimension::single(BaseDim::L, 1).mul(&Dimension::single(BaseDim::T, -2));
+        assert_eq!(base_si_display(&dim), "m/s^2");
+    }
+
+    #[test]
+    fn base_si_display_all_denominator() {
+        // [T^-1] → Hz (derived unit)
+        let dim = Dimension::single(BaseDim::T, -1);
+        assert_eq!(base_si_display(&dim), "Hz");
+    }
+
+    #[test]
+    fn base_si_display_dimensionless() {
+        assert_eq!(base_si_display(&Dimension::dimensionless()), "1");
+    }
+
+    #[test]
+    fn base_si_display_mass_uses_kg() {
+        // [M] should display as "kg" not "g"
+        let dim = Dimension::single(BaseDim::M, 1);
+        assert_eq!(base_si_display(&dim), "kg");
+    }
+
+    #[test]
+    fn lookup_ohm_unicode() {
+        let (dim, scale) = lookup_unit("Ω").unwrap();
+        assert_eq!(dim, lookup_unit("Ohm").unwrap().0);
+        assert_eq!(scale, 1.0);
+    }
+
+    #[test]
+    fn lookup_micro_prefix_unicode() {
+        let (dim, scale) = lookup_unit("μm").unwrap();
+        assert_eq!(dim, Dimension::single(BaseDim::L, 1));
+        assert!((scale - 1e-6).abs() < 1e-20);
+    }
+
+    #[test]
+    fn lookup_mu_prefix_ascii() {
+        let (dim, scale) = lookup_unit("mum").unwrap();
+        assert_eq!(dim, Dimension::single(BaseDim::L, 1));
+        assert!((scale - 1e-6).abs() < 1e-20);
+    }
+
+    #[test]
+    fn from_derived_with_prefix() {
+        let unit = Unit::from_derived("N", Some(SiPrefix::Kilo)).unwrap();
+        assert_eq!(unit.dimension, Dimension::parse("[M L T^-2]").unwrap());
+        assert_eq!(unit.scale, 1e3);
+        assert_eq!(unit.display, "kN");
+    }
+
+    #[test]
+    fn from_derived_unknown_returns_none() {
+        assert!(Unit::from_derived("xyz", None).is_none());
+    }
+
+    #[test]
+    fn unit_display() {
+        let m = Unit::from_base(BaseUnit::Meter, None);
+        assert_eq!(format!("{}", m), "m");
+    }
+
+    #[test]
+    fn best_prefix_zero() {
+        let (val, unit) = best_prefix(0.0, "m");
+        assert_eq!(val, 0.0);
+        assert_eq!(unit, "m");
+    }
+
+    #[test]
+    fn best_prefix_no_fit() {
+        // 50 m — no SI prefix improves the display, falls through to base unit
+        let (val, unit) = best_prefix(50.0, "m");
+        assert_eq!(unit, "m");
+        assert!((val - 50.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn unit_mul_display() {
+        let m = Unit::from_base(BaseUnit::Meter, None);
+        let s = Unit::from_base(BaseUnit::Second, None);
+        let ms = m.mul(&s);
+        assert_eq!(ms.display, "m*s");
+    }
+
+    #[test]
+    fn unit_inv_display() {
+        let s = Unit::from_base(BaseUnit::Second, None);
+        let inv_s = s.inv();
+        assert_eq!(inv_s.display, "1/s");
+    }
+
+    #[test]
+    fn unit_pow_1_display() {
+        let m = Unit::from_base(BaseUnit::Meter, None);
+        let m1 = m.pow(1);
+        assert_eq!(m1.display, "m");
+    }
+
+    #[test]
+    fn unit_eq() {
+        let a = Unit::from_base(BaseUnit::Meter, None);
+        let b = Unit::from_base(BaseUnit::Meter, None);
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn unit_neq_different_dimension() {
+        let m = Unit::from_base(BaseUnit::Meter, None);
+        let s = Unit::from_base(BaseUnit::Second, None);
+        assert_ne!(m, s);
+    }
+
+    #[test]
     fn kg_special_case() {
         // kg is the SI base for mass — scale should be 1.0
         let (dim, scale) = lookup_unit("kg").unwrap();
