@@ -14,173 +14,202 @@ The core design target is that "missing type information" is no longer modeled a
 ### Problem statement
 
 Today the symbolic core is only partially typed:
-- `Expr::Var` stores `dim: Option<Dimension>`
-- numeric literals have no attached type in the AST and are treated as dimensionless only during `check_dim`
-- `Quantity` stores unit information, but several downstream systems intentionally strip it
-- `UndeclaredVar` is used as a runtime error path to represent "typeless" expressions
+- `ExprKind::Var { name, indices, dim: Option<Dimension> }` uses `None` to mean both "dimensionless" and "type not yet known"
+- Numeric literals (`Rational`, `FracPi`, `Named`) carry no type in the AST; `check_dim` treats them as `[1]` at runtime
+- `Quantity(inner, Unit)` stores unit information, but tokenization drops it (`token.rs:173`: "unit info is lost") and `expr_to_pattern` strips it when converting claims to rewrite rules
+- `UndeclaredVar` is a runtime error path used to represent "typeless" — not a first-class type state
 
 This causes three architectural problems:
-1. The AST conflates "dimensionless" and "type not known yet"
-2. Typed information is lost when expressions move through rewrite, token, and training-data boundaries
-3. Type validity is enforced late by helper passes instead of by the shape of the core IR
+1. The AST conflates "dimensionless" and "type not known yet" — both are `dim: None`
+2. Type information is lost at three boundaries: `Pattern::substitute` (always sets `dim: None`), `tokenize`/`detokenize` (drops units and dims), and `expr_to_pattern` (strips Quantity wrappers)
+3. Type validity is enforced late by `check_dim` rather than by the shape of the core IR
+
+### Current architecture
+
+After the span-errors feature, `Expr` is a struct:
+
+```rust
+pub struct Expr {
+    pub kind: ExprKind,
+    pub span: Span,
+}
+```
+
+`ExprKind` is the expression enum with variants: `Rational`, `FracPi`, `Named`, `Var { name, indices, dim }`, `Add`, `Mul`, `Neg`, `Inv`, `Pow`, `Fn`, `FnN`, `Quantity(inner, Unit)`.
+
+Type-related state is currently stored in three places:
+- **Inline on Var**: `dim: Option<Dimension>` — set by parser when `[L T^-1]` follows a variable
+- **In Quantity nodes**: `Unit` carries `dimension: Dimension` and `scale: f64`
+- **In Context.dims**: `DimEnv = HashMap<String, Dimension>` — populated by `:var` declarations
+
+`check_dim` (context.rs) walks the expression tree bottom-up, checking Var inline dims first, then falling back to `DimEnv` lookups. It returns `DimError` with `Span` for error reporting.
 
 ### Target model
 
-Introduce an explicit type layer.
+Add an explicit `Ty` field to `Expr`, extending the existing struct:
 
-```text
-SurfaceExpr
-  Parser output, unresolved names, optional annotations
+```rust
+pub enum Ty {
+    /// Resolved physical dimension: [1], [L], [M L T^-2], etc.
+    Concrete(Dimension),
+    /// Unresolved — type is not yet known. Not dimensionless.
+    Unresolved,
+}
 
-Ty
-  Concrete(Dimension)
-  Symbol(TypeVarId)
-
-TypedExpr
-  Every node carries a Ty
+pub struct Expr {
+    pub kind: ExprKind,
+    pub span: Span,
+    pub ty: Ty,
+}
 ```
 
-Key invariants:
-- Every numeric literal is `Concrete([1])`
-- Every quantity with a unit is `Concrete(unit.dimension)`
-- Every variable has a type at construction time: either `Concrete(...)` or `Symbol(...)`
+This avoids duplicating the AST into separate SurfaceExpr/TypedExpr types. The parser produces expressions with `Ty::Unresolved` by default, then an elaboration pass fills in concrete types using the same information `check_dim` uses today.
+
+Key invariants after elaboration:
+- Every numeric literal (`Rational`, `FracPi`, `Named`) has `Ty::Concrete([1])`
+- Every `Quantity` node has `Ty::Concrete(unit.dimension)`
+- Every `Var` with a declaration or inline annotation has `Ty::Concrete(dim)`
+- Undeclared variables remain `Ty::Unresolved`
 - Rewrites preserve `Ty`
 - Tokenization and ML-facing serialization either preserve `Ty` or operate on a clearly separate untyped projection with an explicit boundary
 
 ### Core design
 
-#### 1. Split parsing/binding from typed core
+#### 1. Extend Expr with Ty
 
-Keep a surface AST for parsing user input and a typed core IR for symbolic manipulation.
+Since `Expr` is already a struct (from the span-errors refactor), adding `ty: Ty` is a field addition — the same migration pattern as adding `span: Span`. Every `Expr::new(kind)` call sets `ty: Ty::Unresolved`. Every `Expr::spanned(kind, span)` call also sets `ty: Ty::Unresolved`.
 
-Suggested layering:
+The parser continues to produce `Ty::Unresolved` expressions. A separate elaboration pass resolves types.
 
-```text
-parser -> SurfaceExpr
-binder/type elaboration -> TypedExpr
-search/rules/equality -> TypedExpr
-ML/token projection -> UntypedExpr or typed token stream
-```
+#### 2. Elaboration pass
 
-The parser should not be responsible for global type resolution. Its job is to preserve source meaning. A later elaboration step should resolve names, attach concrete dimensions, or allocate symbolic type variables.
+Add `elaborate(expr: &Expr, env: &DimEnv) -> Expr` that walks the tree and fills in `Ty`:
 
-#### 2. Make type state explicit
+- `Rational`, `FracPi`, `Named` → `Ty::Concrete(Dimension::dimensionless())`
+- `Quantity(_, unit)` → `Ty::Concrete(unit.dimension.clone())`
+- `Var { dim: Some(d), .. }` → `Ty::Concrete(d.clone())`
+- `Var { dim: None, name }` where `env.contains(name)` → `Ty::Concrete(env[name].clone())`
+- `Var { dim: None, name }` where `!env.contains(name)` → `Ty::Unresolved`
+- `Add(a, b)` → propagate from children (must match)
+- `Mul(a, b)` → multiply dimensions
+- `Pow(base, exp)` → base dimension raised to integer exponent
+- `Fn(_, arg)` → `Ty::Concrete([1])` (trig/log require dimensionless args)
+- `Neg(inner)` / `Inv(inner)` → propagate from child
 
-Replace `Option<Dimension>` with a first-class type representation.
-
-Suggested starting point:
-
-```rust
-pub enum Ty {
-    Concrete(Dimension),
-    Symbol(TypeVarId),
-}
-```
-
-Then either:
-- add `ty: Ty` to every `TypedExpr` node, or
-- use typed wrappers around the existing expression shape if that produces a cleaner migration
-
-Important semantic distinction:
-- `[1]` is a real, concrete type
-- `Symbol(t0)` is unresolved, not dimensionless
+This is essentially `check_dim` rewritten to attach results rather than just validate.
 
 #### 3. Preserve type information through rewrites
 
-Rules and rewrites currently operate on expression shape only. The typed design must define one of these approaches:
-- typed rules, where patterns carry type constraints
-- untyped structural rules plus a typed post-check that rejects ill-typed rewrites
+`Pattern::substitute` (rule.rs) currently hardcodes `dim: None` when reconstructing `Var` nodes. Fix this by:
+- Storing the matched expression's `Ty` in `Bindings` alongside the structural match
+- Restoring `Ty` during substitution
 
-Preferred direction:
-- keep rule syntax mostly structural
-- attach typed binding validation during match/substitute
-- require rule application to preserve or consistently transform `Ty`
+For `Quantity` in `expr_to_pattern` (context.rs), which currently strips the unit wrapper:
+- Either preserve unit information in the pattern, or
+- Re-elaborate after substitution to restore types
 
-Examples:
-- `x + 0 -> x` is valid only when both sides have the same `Ty`
-- `x * x -> x^2` must preserve `Ty`
-- trig/log rules should require dimensionless arguments
-- claim-derived rules must include type constraints from the verified claim
+Preferred direction: keep rule patterns mostly structural, but carry `Ty` through bindings so substitution preserves it. Add a typed post-check that rejects ill-typed rewrites.
 
 #### 4. Define a deliberate boundary for ML/token tooling
 
-Current tokenization drops units and inline dimensions. That is acceptable only if it is treated as an explicit projection, not as a round-trip representation of the core symbolic term.
+Current tokenization (`token.rs`) explicitly drops units and dims:
+- `Quantity(inner, _unit)` → tokenizes only `inner`
+- `Var { name, indices, .. }` → tokenizes as De Bruijn index, no dim
+- `detokenize` → reconstructs with `dim: None`
 
 Two viable options:
-- typed tokenization: include type tokens and make ML artifacts type-aware
-- untyped projection: create a separate `UntypedExpr` used only for training/search data generation, with explicit conversion from `TypedExpr`
+- **Typed tokenization**: add `Ty` tokens to the vocabulary, making ML artifacts type-aware
+- **Explicit untyped projection**: create `strip_types(expr) -> Expr` that sets all `ty` to `Unresolved` and unwraps `Quantity` nodes, used only at the ML boundary
 
-The second path is lower-risk initially, but the conversion must be explicit and documented as lossy.
+The second path is lower-risk initially. The conversion must be explicit and documented as lossy.
 
 ### Phased migration
 
-#### Phase 1 — Type model and typed elaboration
+#### Phase 1 — Ty field and elaboration
 
-- Introduce `Ty`
-- Add a binder/elaboration pass from parser output to typed core
-- Make literals elaborate to `Concrete([1])`
-- Make `:var` declarations elaborate to `Concrete(dim)` when provided, otherwise `Symbol(...)`
-- Make `:const` declarations elaborate once and store typed values in `Context`
+- Add `Ty` enum to `expr.rs`
+- Add `ty: Ty` field to `Expr` struct
+- Update `Expr::new` and `Expr::spanned` to default to `Ty::Unresolved`
+- Update all `ExprKind` match sites (same migration pattern as span-errors Phase 1 — `PartialEq` ignores `ty`, just like it ignores `span`)
+- Add `elaborate(expr, env) -> Expr` in `context.rs`
+- Wire elaboration into `Context` methods so expressions are elaborated after parsing
 
-#### Phase 2 — Typed equality and dimensional analysis
+This is the heaviest phase (touches every Expr construction site), but the span-errors refactor established the pattern.
 
-- Replace `check_dim` as the primary source of type truth
-- Reframe dimension checking as validation over `TypedExpr`
-- Keep diagnostic helpers for user-facing errors, but not as the main type engine
-- Make `check_equal` reject or classify ill-typed equalities before numerical fallback
+#### Phase 2 — Replace check_dim with Ty-based validation
+
+- Rewrite `check_dim` to read `ty` fields rather than recomputing dimensions bottom-up
+- Or: keep `check_dim` as a validator that confirms `ty` fields are consistent (simpler migration)
+- `check_expr_dim`, `check_claim_dim`, and `check_dims` consume `Ty` instead of re-inferring
+- DimError continues to carry spans for underline display
+- `infer_type` reads `ty` directly instead of running check_dim
 
 #### Phase 3 — Rewrite/search preservation
 
-- Update `Pattern`, `Bindings`, and substitution to preserve typed variables and quantities
-- Ensure claim-derived rules retain type constraints
-- Audit simplification helpers for typed correctness
+- Update `Bindings` (rule.rs) to store `Ty` for matched wildcards
+- Update `Pattern::substitute` to restore `Ty` on reconstructed nodes (especially `Var`)
+- Update `expr_to_pattern` (context.rs) to preserve `Quantity` type information in claim-derived rules
+- Audit `eval_constants`, `simplify`, `all_rewrites_depth` in `search.rs` for `Ty` preservation
+- Add tests: rewrite `x + 0 → x` preserves `Ty`, `Quantity` survives simplification
 
-#### Phase 4 — Token and ML boundary cleanup
+#### Phase 4 — Token and ML boundary
 
-- Decide on typed tokenization or explicit untyped projection
-- Remove any APIs that appear round-trippable while silently dropping types
-- Update training-data vocabulary and validation docs accordingly
+- Add explicit `strip_types(expr) -> Expr` projection
+- Update `tokenize`/`detokenize` to use the projection (making type loss explicit)
+- Or: add type tokens to vocabulary if typed ML training is desired
+- Update training-data validation to document the typed/untyped boundary
 
 #### Phase 5 — Consumer integration
 
-- Update repl to display explicit type state
-- Update `verso_doc` verification to consume typed expressions
-- Add regression tests around declarations, claims, proof steps, and unit-bearing constants
+- REPL: display `Ty` alongside results (already partially done via `infer_type`/`format_type_suffix`)
+- `verso_doc` verification: `verify_claim`/`verify_proof` consume elaborated expressions
+- LSP diagnostics: use `Ty` for hover-over type display
+- Regression tests for declarations, claims, proof steps, and unit-bearing constants
 
 ### Key files
 
-- `verso_symbolic/src/expr.rs` — current AST conflates missing and resolved type state
-- `verso_symbolic/src/context.rs` — type checking and declaration storage currently depend on runtime dimension inference
-- `verso_symbolic/src/parser.rs` — parser currently encodes some typing rules as syntax-time heuristics
-- `verso_symbolic/src/rule.rs` — substitution rebuilds vars without preserved type state
-- `verso_symbolic/src/search.rs` — simplification assumes `Expr` is safe to rewrite structurally
-- `verso_symbolic/src/token.rs` — token round-trip currently drops units and inline dimensions
-- `verso_symbolic/src/training_data.rs` — ML vocabulary assumes an untyped expression language
-- `verso_doc/src/verify.rs` — document verification should eventually consume typed expressions from the core
+| File | Current state | Changes needed |
+|------|--------------|----------------|
+| `verso_symbolic/src/expr.rs` | `Expr { kind, span }`, `ExprKind::Var { dim: Option<Dimension> }` | Add `ty: Ty` field, `Ty` enum, update `PartialEq` to ignore `ty` |
+| `verso_symbolic/src/context.rs` | `check_dim` walks tree bottom-up, `DimEnv` stores declared dims, `DimError` carries `Span` | Add `elaborate()`, refactor `check_dim` to validate `Ty` fields |
+| `verso_symbolic/src/parser.rs` | Attaches inline dims to Var, wraps numeric+unit as Quantity, enforces dim-on-vars/unit-on-numbers constraint | No changes needed — parser continues producing `Ty::Unresolved`; elaboration is separate |
+| `verso_symbolic/src/rule.rs` | `Pattern::substitute` hardcodes `dim: None` on Var reconstruction | Store and restore `Ty` through `Bindings` |
+| `verso_symbolic/src/search.rs` | `eval_constants`, `simplify`, `all_rewrites_depth` rebuild expressions without type consideration | Propagate `Ty` through expression reconstruction |
+| `verso_symbolic/src/token.rs` | `tokenize` drops Quantity units, `detokenize` sets `dim: None` | Use explicit `strip_types` projection; document as lossy |
+| `verso_symbolic/src/training_data.rs` | ML vocabulary is untyped | Document untyped boundary; optionally add type tokens |
+| `verso_doc/src/verify.rs` | Calls `check_dims` for claim verification | Consume elaborated expressions with `Ty` |
 
 ## Implementation Notes
 
-### Current issues observed
+### Current type-loss points (verified)
 
-- `Expr::Var { ..., dim: Option<Dimension> }` models typed state as optional metadata
-- `check_dim()` interprets literals as `[1]` and unresolved vars as runtime errors instead of core IR states
-- `expr_to_pattern()` strips `Quantity` units when converting claims into rewrite rules
-- `Pattern::substitute()` reconstructs `Expr::Var` with `dim: None`
-- `tokenize()` serializes `Quantity` by dropping the unit, and `detokenize()` restores vars with `dim: None`
+1. **Pattern::substitute** (rule.rs) — reconstructs `Var` with `dim: None` always
+2. **tokenize** (token.rs:173) — `Quantity(inner, _unit)` drops unit, comment says "unit info is lost"
+3. **detokenize** (token.rs:254) — reconstructs `Var` with `dim: None` always
+4. **expr_to_pattern** (context.rs) — strips `Quantity` wrapper: `Quantity(inner, _unit) => expr_to_pattern(inner, wildcards)`
+5. **substitute_consts** (context.rs) — reconstructs `Quantity` preserving unit, but doesn't propagate dim to inner Var nodes
+
+### Relationship to span-errors feature
+
+The span-errors feature (completed) established the pattern for extending `Expr` with metadata:
+- `Expr` became a struct wrapping `ExprKind` + `Span`
+- `PartialEq` compares only `kind` (ignores `span`)
+- Every construction site was updated in a single migration phase
+
+Adding `ty: Ty` follows the same pattern. `PartialEq` will ignore both `span` and `ty`, comparing only structural `kind`. The span-errors migration touched 16 files; the `ty` migration will touch the same files.
 
 ### Open questions
 
-- Should every expression node carry a cached `Ty`, or should type be derivable from a typed environment plus explicit annotations?
-- Should symbolic type variables unify during elaboration, or only during later verification?
-- Should user-defined functions carry typed signatures in `Context`?
-- Should the ML subsystem remain intentionally untyped, or should it be upgraded to typed token streams?
+- Should `Ty` use `Unresolved` (simple) or `Symbol(TypeVarId)` (supports unification)? Start with `Unresolved`; add type variables only if unification is needed later.
+- Should user-defined functions (`:func`) carry typed signatures? Not initially — elaborate the body at call sites.
+- Should the ML subsystem remain intentionally untyped? Yes initially — use an explicit untyped projection with `strip_types`.
 
 ### Recommended decisions
 
-- Use a separate typed IR rather than trying to mutate the current parser AST into a strict type system
-- Treat dimensionless as `Concrete(Dimension::dimensionless())`, never as "missing"
-- Treat untyped free variables as `Symbol(...)`, never as `None`
-- Make every lossy typed-to-untyped conversion explicit in the API and documentation
+- Extend `Expr` with `ty: Ty` rather than introducing a separate `TypedExpr` AST — the struct is already extensible and the migration pattern is proven
+- Treat dimensionless as `Ty::Concrete(Dimension::dimensionless())`, never as "missing"
+- Treat unresolved variables as `Ty::Unresolved`, never as `None`
+- Make every lossy typed-to-untyped conversion explicit in the API
 
 ## Verification
 
@@ -195,7 +224,7 @@ npm test
 Expected regression coverage:
 - literals elaborate to `Concrete([1])`
 - quantities elaborate to concrete physical dimensions
-- undeclared variables elaborate to symbolic types, not missing metadata
+- undeclared variables elaborate to `Unresolved`, not missing metadata
 - typed rewrites preserve type state
 - claim-derived rules do not erase units or inline dimensions
 - tokenization either preserves type state or uses an explicitly lossy projection
@@ -204,5 +233,5 @@ Expected regression coverage:
 Manual checks:
 - In the REPL, `4.5` reports `[1]`
 - In the REPL, `4.5 [m]` reports `[L]`
-- A bare variable with no declaration is shown as having a symbolic unresolved type, not as silently dimensionless
+- A bare variable with no declaration is shown as having an unresolved type, not as silently dimensionless
 - Ill-typed equalities are rejected before symbolic or numerical equivalence fallback
