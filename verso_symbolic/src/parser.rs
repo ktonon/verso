@@ -404,15 +404,15 @@ impl Parser {
                     return Ok(expr);
                 }
                 if name == "log" && self.peek() == Some(&Token::Underscore) {
-                    return self.parse_log_base_tokens_spanned(start);
+                    return self.parse_log_base_tokens(start);
                 }
                 if name.starts_with("log_") {
-                    return self.parse_log_base_spanned(name, start);
+                    return self.parse_log_base(name, start);
                 }
                 // Multi-character names followed by ( are function calls;
                 // single-character names are implicit multiplication: x(y+1) = x*(y+1)
                 if self.peek() == Some(&Token::LParen) && name.len() > 1 {
-                    return self.parse_function_call_spanned(name, start);
+                    return self.parse_function_call(name, start);
                 }
                 let mut expr = scalar(&name);
                 expr.span = Span::new(start, self.prev_end);
@@ -432,11 +432,7 @@ impl Parser {
         }
     }
 
-    fn parse_function_call(&mut self, name: String) -> Result<crate::expr::Expr, ParseError> {
-        self.parse_function_call_spanned(name, self.start_pos())
-    }
-
-    fn parse_function_call_spanned(
+    fn parse_function_call(
         &mut self,
         name: String,
         start: usize,
@@ -502,11 +498,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn parse_log_base(&mut self, name: String) -> Result<crate::expr::Expr, ParseError> {
-        self.parse_log_base_spanned(name, self.start_pos())
-    }
-
-    fn parse_log_base_spanned(
+    fn parse_log_base(
         &mut self,
         name: String,
         start: usize,
@@ -538,11 +530,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn parse_log_base_tokens(&mut self) -> Result<crate::expr::Expr, ParseError> {
-        self.parse_log_base_tokens_spanned(self.start_pos())
-    }
-
-    fn parse_log_base_tokens_spanned(
+    fn parse_log_base_tokens(
         &mut self,
         start: usize,
     ) -> Result<crate::expr::Expr, ParseError> {
