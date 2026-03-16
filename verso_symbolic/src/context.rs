@@ -143,7 +143,7 @@ impl Context {
     /// at all (no units, no inline dimensions, no :var declarations).
     pub fn check_expr_dim(&self, expr: &Expr) -> Option<Result<Dimension, DimError>> {
         let expr = self.apply_consts(expr);
-        match infer_dim(&expr, &self.dims) {
+        match check_dim(&expr, &self.dims) {
             Ok(d) => Some(Ok(d)),
             Err(DimError::UndeclaredVar(_))
                 if !self.has_dims() && !has_type_info(&expr) =>
@@ -159,7 +159,7 @@ impl Context {
     /// :var declarations. Returns None if dimensionless or inference fails.
     pub fn infer_type(&self, expr: &Expr) -> Option<Dimension> {
         let expr = self.apply_consts(expr);
-        infer_dim(&expr, &self.dims)
+        check_dim(&expr, &self.dims)
             .ok()
             .filter(|d| !d.is_dimensionless())
     }
@@ -273,7 +273,7 @@ impl DimOutcome {
 }
 
 /// Infer the dimension of an expression given a dimension environment.
-pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
+pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
     match expr {
         Expr::Rational(_) | Expr::FracPi(_) | Expr::Named(_) => Ok(Dimension::dimensionless()),
         Expr::Quantity(_inner, unit) => Ok(unit.dimension.clone()),
@@ -286,10 +286,10 @@ pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                 .ok_or_else(|| DimError::UndeclaredVar(name.clone()))
         }
         Expr::Add(a, b) => {
-            let da = match infer_dim(a, env) {
+            let da = match check_dim(a, env) {
                 Ok(d) => d,
                 Err(DimError::UndeclaredVar(v)) => {
-                    if let Ok(db) = infer_dim(b, env) {
+                    if let Ok(db) = check_dim(b, env) {
                         if !db.is_dimensionless() {
                             return Err(DimError::Mismatch {
                                 expected: db,
@@ -302,7 +302,7 @@ pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                 }
                 Err(e) => return Err(e),
             };
-            let db = match infer_dim(b, env) {
+            let db = match check_dim(b, env) {
                 Ok(d) => d,
                 Err(DimError::UndeclaredVar(v)) => {
                     if !da.is_dimensionless() {
@@ -326,19 +326,19 @@ pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
             Ok(da)
         }
         Expr::Mul(a, b) => {
-            let da = infer_dim(a, env)?;
-            let db = infer_dim(b, env)?;
+            let da = check_dim(a, env)?;
+            let db = check_dim(b, env)?;
             Ok(da.mul(&db))
         }
-        Expr::Neg(inner) => infer_dim(inner, env),
+        Expr::Neg(inner) => check_dim(inner, env),
         Expr::Inv(inner) => {
-            let d = infer_dim(inner, env)?;
+            let d = check_dim(inner, env)?;
             Ok(d.inv())
         }
         Expr::Pow(base, exp) => {
-            let db = infer_dim(base, env)?;
+            let db = check_dim(base, env)?;
             if db.is_dimensionless() {
-                let de = infer_dim(exp, env)?;
+                let de = check_dim(exp, env)?;
                 if !de.is_dimensionless() {
                     return Err(DimError::Mismatch {
                         expected: Dimension::dimensionless(),
@@ -352,7 +352,7 @@ pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
             Ok(db.pow(n))
         }
         Expr::Fn(kind, arg) => {
-            let da = infer_dim(arg, env)?;
+            let da = check_dim(arg, env)?;
             if !da.is_dimensionless() {
                 return Err(DimError::NonDimensionlessFnArg {
                     func: format!("{:?}", kind).to_lowercase(),
@@ -363,7 +363,7 @@ pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
         }
         Expr::FnN(kind, args) => {
             for arg in args {
-                let da = infer_dim(arg, env)?;
+                let da = check_dim(arg, env)?;
                 if !da.is_dimensionless() {
                     return Err(DimError::NonDimensionlessFnArg {
                         func: format!("{:?}", kind).to_lowercase(),
@@ -378,7 +378,7 @@ pub fn infer_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
 
 /// Check that two sides of a claim have the same dimension.
 pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
-    let dl = match infer_dim(lhs, env) {
+    let dl = match check_dim(lhs, env) {
         Ok(d) => d,
         Err(DimError::UndeclaredVar(v)) => {
             let mut undeclared = collect_undeclared(lhs, env);
@@ -398,7 +398,7 @@ pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
         }
     };
 
-    let dr = match infer_dim(rhs, env) {
+    let dr = match check_dim(rhs, env) {
         Ok(d) => d,
         Err(DimError::UndeclaredVar(v)) => {
             let mut undeclared = collect_undeclared(rhs, env);
@@ -1007,15 +1007,15 @@ mod tests {
         .passed());
     }
 
-    // --- infer_dim branches ---
+    // --- check_dim branches ---
 
     #[test]
-    fn infer_dim_mul() {
+    fn check_dim_mul() {
         let mut env = DimEnv::new();
         env.insert("a".into(), Dimension::single(BaseDim::L, 1));
         env.insert("b".into(), Dimension::single(BaseDim::T, -1));
         let expr = parse_expr("a * b").unwrap();
-        let dim = infer_dim(&expr, &env).unwrap();
+        let dim = check_dim(&expr, &env).unwrap();
         assert_eq!(
             dim,
             Dimension::single(BaseDim::L, 1).mul(&Dimension::single(BaseDim::T, -1))
@@ -1023,49 +1023,49 @@ mod tests {
     }
 
     #[test]
-    fn infer_dim_inv() {
+    fn check_dim_inv() {
         let mut env = DimEnv::new();
         env.insert("t".into(), Dimension::single(BaseDim::T, 1));
         let expr = parse_expr("1/t").unwrap();
-        let dim = infer_dim(&expr, &env).unwrap();
+        let dim = check_dim(&expr, &env).unwrap();
         assert_eq!(dim, Dimension::single(BaseDim::T, -1));
     }
 
     #[test]
-    fn infer_dim_pow_dimensional_base() {
+    fn check_dim_pow_dimensional_base() {
         let mut env = DimEnv::new();
         env.insert("x".into(), Dimension::single(BaseDim::L, 1));
         let expr = parse_expr("x^3").unwrap();
-        let dim = infer_dim(&expr, &env).unwrap();
+        let dim = check_dim(&expr, &env).unwrap();
         assert_eq!(dim, Dimension::single(BaseDim::L, 3));
     }
 
     #[test]
-    fn infer_dim_pow_non_integer_exponent_error() {
+    fn check_dim_pow_non_integer_exponent_error() {
         let mut env = DimEnv::new();
         env.insert("x".into(), Dimension::single(BaseDim::L, 1));
         // x^(1/3) — non-integer power of dimensional quantity
         let expr = parse_expr("x^(1/3)").unwrap();
-        let result = infer_dim(&expr, &env);
+        let result = check_dim(&expr, &env);
         assert!(matches!(result, Err(DimError::NonIntegerPower)));
     }
 
     #[test]
-    fn infer_dim_pow_dimensional_exponent_error() {
+    fn check_dim_pow_dimensional_exponent_error() {
         let mut env = DimEnv::new();
         env.insert("x".into(), Dimension::single(BaseDim::T, 1));
         // 2^x where x has dimension [T] — exponent must be dimensionless
         let expr = parse_expr("2^x").unwrap();
-        let result = infer_dim(&expr, &env);
+        let result = check_dim(&expr, &env);
         assert!(matches!(result, Err(DimError::Mismatch { .. })));
     }
 
     #[test]
-    fn infer_dim_fn_dimensional_arg_error() {
+    fn check_dim_fn_dimensional_arg_error() {
         let mut env = DimEnv::new();
         env.insert("x".into(), Dimension::single(BaseDim::L, 1));
         let expr = parse_expr("sin(x)").unwrap();
-        let result = infer_dim(&expr, &env);
+        let result = check_dim(&expr, &env);
         assert!(matches!(
             result,
             Err(DimError::NonDimensionlessFnArg { .. })
@@ -1073,14 +1073,14 @@ mod tests {
     }
 
     #[test]
-    fn infer_dim_fnn_dimensional_arg_error() {
+    fn check_dim_fnn_dimensional_arg_error() {
         let mut env = DimEnv::new();
         env.insert("x".into(), Dimension::single(BaseDim::L, 1));
         let expr = Expr::FnN(
             crate::expr::FnKind::Min,
             vec![parse_expr("x").unwrap(), parse_expr("1").unwrap()],
         );
-        let result = infer_dim(&expr, &env);
+        let result = check_dim(&expr, &env);
         assert!(matches!(
             result,
             Err(DimError::NonDimensionlessFnArg { .. })

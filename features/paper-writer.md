@@ -74,7 +74,7 @@ Raw LaTeX via tex`\vec{v}`.
 ### M4 (completed)
 
 - **Dimension types**: `dim.rs` with `BaseDim` enum (L, M, T, Θ, I, N, J), `Dimension` type (BTreeMap of exponents), parsing from bracket notation `[M L T^-2]`.
-- **Dimension inference**: `infer_dim(expr, env)` propagates dimensions through all Expr variants — multiplication adds exponents, division subtracts, power multiplies, functions require dimensionless args.
+- **Dimension inference**: `check_dim(expr, env)` propagates dimensions through all Expr variants — multiplication adds exponents, division subtracts, power multiplies, functions require dimensionless args.
 - **Claim checking**: `check_claim_dim(lhs, rhs, env)` with four outcomes: Pass, Skipped (undeclared vars), LhsRhsMismatch, ExprError (e.g., adding length to time).
 - **Integration into verifier**: `VerificationResult.dim_outcome` is `Some` when document has `:var` blocks, `None` otherwise. A claim must pass both symbolic and dimensional checks.
 - **Parser**: `:var varname [dim spec]` blocks parsed as `Block::Var(VarDecl)`.

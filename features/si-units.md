@@ -32,7 +32,7 @@ New variant `Quantity(Box<Expr>, Unit)` wrapping a numeric expression with its u
 
 ### Dimensional verification
 
-Units imply dimensions: `[m/s]` automatically carries `[L T^-1]`. `infer_dim` for Quantity returns `unit.dimension`.
+Units imply dimensions: `[m/s]` automatically carries `[L T^-1]`. `check_dim` for Quantity returns `unit.dimension`.
 
 ### Unit-aware arithmetic
 
@@ -50,7 +50,7 @@ All values convert to canonical base SI form internally. Display chooses suitabl
 - `verso_symbolic/src/parser.rs` — context-sensitive bracket parsing with `parse_unit_bracket`, `expr_has_vars` helper, improved error messages for dimension/unit mismatches
 - `verso_symbolic/src/fmt.rs` — Display and colored output for Quantity
 - `verso_symbolic/src/to_tex.rs` — LaTeX rendering: `{value} \; \mathrm{{unit}}`
-- `verso_doc/src/dim.rs` — `infer_dim` for Quantity returns `unit.dimension`; uses verso_symbolic::Dimension
+- `verso_doc/src/dim.rs` — `check_dim` for Quantity returns `unit.dimension`; uses verso_symbolic::Dimension
 - `verso_doc/src/eval.rs` — `eval_f64` for Quantity: `eval(inner) * unit.scale`
 - `verso_symbolic/src/search.rs` — pass-through for Quantity
 - `verso_symbolic/src/token.rs` — pass-through for Quantity

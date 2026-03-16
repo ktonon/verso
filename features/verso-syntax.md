@@ -609,7 +609,7 @@ G (giga, 10⁹), T (tera, 10¹²).
 
 Quantities are evaluated by converting to base SI: `eval(5 [km]) = 5000.0`.
 Dimensional analysis uses the unit's implied dimension:
-`infer_dim(3 [m/s]) = [L T⁻¹]`.
+`check_dim(3 [m/s]) = [L T⁻¹]`.
 
 ---
 
