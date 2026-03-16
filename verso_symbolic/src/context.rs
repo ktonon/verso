@@ -1,6 +1,6 @@
 use crate::dim::Dimension;
 use crate::eval::{free_vars, spot_check};
-use crate::expr::{Expr, ExprKind};
+use crate::expr::{Expr, ExprKind, Span};
 use crate::rule::{self, Pattern, Rule, RuleSet};
 use crate::search;
 use std::collections::{HashMap, HashSet};
@@ -145,7 +145,7 @@ impl Context {
         let expr = self.apply_consts(expr);
         match check_dim(&expr, &self.dims) {
             Ok(d) => Some(Ok(d)),
-            Err(DimError::UndeclaredVar(_))
+            Err(DimError::UndeclaredVar(_, _))
                 if !self.has_dims() && !has_type_info(&expr) =>
             {
                 None
@@ -213,40 +213,43 @@ pub fn is_zero(expr: &Expr) -> bool {
 /// A dimensional analysis error.
 #[derive(Debug)]
 pub enum DimError {
-    UndeclaredVar(String),
+    UndeclaredVar(String, Span),
     Mismatch {
         expected: Dimension,
         got: Dimension,
         context: String,
+        span: Span,
     },
     NonDimensionlessFnArg {
         func: String,
         dim: Dimension,
+        span: Span,
     },
-    NonIntegerPower,
+    NonIntegerPower(Span),
 }
 
 impl std::fmt::Display for DimError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DimError::UndeclaredVar(v) => write!(f, "'{}' is typeless", v),
+            DimError::UndeclaredVar(v, _) => write!(f, "'{}' is typeless", v),
             DimError::Mismatch {
                 expected,
                 got,
                 context,
+                ..
             } => write!(
                 f,
                 "dimension mismatch in {}: expected {}, got {}",
                 context, expected, got
             ),
-            DimError::NonDimensionlessFnArg { func, dim } => {
+            DimError::NonDimensionlessFnArg { func, dim, .. } => {
                 write!(
                     f,
                     "argument to {}() must be dimensionless, got {}",
                     func, dim
                 )
             }
-            DimError::NonIntegerPower => {
+            DimError::NonIntegerPower(_) => {
                 write!(f, "cannot raise dimensional quantity to non-integer power")
             }
         }
@@ -283,36 +286,38 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
             }
             env.get(name)
                 .cloned()
-                .ok_or_else(|| DimError::UndeclaredVar(name.clone()))
+                .ok_or_else(|| DimError::UndeclaredVar(name.clone(), expr.span))
         }
         ExprKind::Add(a, b) => {
             let da = match check_dim(a, env) {
                 Ok(d) => d,
-                Err(DimError::UndeclaredVar(v)) => {
+                Err(DimError::UndeclaredVar(v, span)) => {
                     if let Ok(db) = check_dim(b, env) {
                         if !db.is_dimensionless() {
                             return Err(DimError::Mismatch {
                                 expected: db,
                                 got: Dimension::dimensionless(),
                                 context: "addition".to_string(),
+                                span: a.span,
                             });
                         }
                     }
-                    return Err(DimError::UndeclaredVar(v));
+                    return Err(DimError::UndeclaredVar(v, span));
                 }
                 Err(e) => return Err(e),
             };
             let db = match check_dim(b, env) {
                 Ok(d) => d,
-                Err(DimError::UndeclaredVar(v)) => {
+                Err(DimError::UndeclaredVar(v, span)) => {
                     if !da.is_dimensionless() {
                         return Err(DimError::Mismatch {
                             expected: da,
                             got: Dimension::dimensionless(),
                             context: "addition".to_string(),
+                            span: b.span,
                         });
                     }
-                    return Err(DimError::UndeclaredVar(v));
+                    return Err(DimError::UndeclaredVar(v, span));
                 }
                 Err(e) => return Err(e),
             };
@@ -321,6 +326,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                     expected: da,
                     got: db,
                     context: "addition".to_string(),
+                    span: b.span,
                 });
             }
             Ok(da)
@@ -344,11 +350,12 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                         expected: Dimension::dimensionless(),
                         got: de,
                         context: "exponent".to_string(),
+                        span: exp.span,
                     });
                 }
                 return Ok(Dimension::dimensionless());
             }
-            let n = expr_as_integer(exp).ok_or(DimError::NonIntegerPower)?;
+            let n = expr_as_integer(exp).ok_or(DimError::NonIntegerPower(exp.span))?;
             Ok(db.pow(n))
         }
         ExprKind::Fn(kind, arg) => {
@@ -357,6 +364,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                 return Err(DimError::NonDimensionlessFnArg {
                     func: format!("{:?}", kind).to_lowercase(),
                     dim: da,
+                    span: arg.span,
                 });
             }
             Ok(Dimension::dimensionless())
@@ -368,6 +376,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
                     return Err(DimError::NonDimensionlessFnArg {
                         func: format!("{:?}", kind).to_lowercase(),
                         dim: da,
+                        span: arg.span,
                     });
                 }
             }
@@ -380,7 +389,7 @@ pub fn check_dim(expr: &Expr, env: &DimEnv) -> Result<Dimension, DimError> {
 pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
     let dl = match check_dim(lhs, env) {
         Ok(d) => d,
-        Err(DimError::UndeclaredVar(v)) => {
+        Err(DimError::UndeclaredVar(v, _)) => {
             let mut undeclared = collect_undeclared(lhs, env);
             undeclared.extend(collect_undeclared(rhs, env));
             undeclared.sort();
@@ -400,7 +409,7 @@ pub fn check_claim_dim(lhs: &Expr, rhs: &Expr, env: &DimEnv) -> DimOutcome {
 
     let dr = match check_dim(rhs, env) {
         Ok(d) => d,
-        Err(DimError::UndeclaredVar(v)) => {
+        Err(DimError::UndeclaredVar(v, _)) => {
             let mut undeclared = collect_undeclared(rhs, env);
             if undeclared.is_empty() {
                 undeclared.push(v);
@@ -713,7 +722,7 @@ mod tests {
         assert!(result.is_some());
         match result.unwrap() {
             Err(DimError::Mismatch { .. }) => {} // expected: [L T^-1] + [1]
-            Err(DimError::UndeclaredVar(_)) => {
+            Err(DimError::UndeclaredVar(..)) => {
                 panic!("const 'g' should be substituted before dim check")
             }
             other => panic!("expected Mismatch, got {:?}", other),
@@ -928,7 +937,7 @@ mod tests {
 
     #[test]
     fn dim_error_display_undeclared_var() {
-        let err = DimError::UndeclaredVar("x".to_string());
+        let err = DimError::UndeclaredVar("x".to_string(), Span::default());
         assert!(err.to_string().contains("x"));
         assert!(err.to_string().contains("typeless"));
     }
@@ -939,6 +948,7 @@ mod tests {
             expected: Dimension::single(BaseDim::L, 1),
             got: Dimension::single(BaseDim::T, 1),
             context: "addition".to_string(),
+            span: Span::default(),
         };
         let s = err.to_string();
         assert!(s.contains("addition"));
@@ -950,6 +960,7 @@ mod tests {
         let err = DimError::NonDimensionlessFnArg {
             func: "sin".to_string(),
             dim: Dimension::single(BaseDim::L, 1),
+            span: Span::default(),
         };
         let s = err.to_string();
         assert!(s.contains("sin"));
@@ -958,7 +969,7 @@ mod tests {
 
     #[test]
     fn dim_error_display_non_integer_power() {
-        let err = DimError::NonIntegerPower;
+        let err = DimError::NonIntegerPower(Span::default());
         assert!(err.to_string().contains("non-integer power"));
     }
 
@@ -969,6 +980,7 @@ mod tests {
             expected: Dimension::single(BaseDim::L, 1),
             got: Dimension::dimensionless(),
             context: "addition".to_string(),
+            span: Span::default(),
         };
         let s = err.to_string();
         assert_eq!(s, "dimension mismatch in addition: expected [L], got [1]");
@@ -1002,7 +1014,7 @@ mod tests {
     fn dim_outcome_not_passed_for_expr_error() {
         assert!(!DimOutcome::ExprError {
             side: "lhs".to_string(),
-            error: DimError::NonIntegerPower,
+            error: DimError::NonIntegerPower(Span::default()),
         }
         .passed());
     }
@@ -1047,7 +1059,7 @@ mod tests {
         // x^(1/3) — non-integer power of dimensional quantity
         let expr = parse_expr("x^(1/3)").unwrap();
         let result = check_dim(&expr, &env);
-        assert!(matches!(result, Err(DimError::NonIntegerPower)));
+        assert!(matches!(result, Err(DimError::NonIntegerPower(_))));
     }
 
     #[test]
