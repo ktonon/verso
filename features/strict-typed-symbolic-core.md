@@ -220,7 +220,15 @@ Phase 2 is also now in place:
 - typed expressions can now be dimension-checked again without requiring the original environment for already-resolved variables
 - `check_expr_dim` and `check_dims` therefore consume the typed elaboration path through `check_dim`
 
-This is intentionally not the full migration yet. Rewrite substitution, simplification/search, and tokenization still do not preserve `ty` end-to-end.
+Phase 3 is now in place:
+- added `Expr::derived(...)` / `Expr::spanned_derived(...)` and `infer_ty_from_kind(...)` in `expr.rs`
+- `Pattern::substitute` now reconstructs typed nodes instead of defaulting to `Ty::Unresolved`
+- wildcard-driven `Var` substitution preserves the bound variable's `dim` and `ty`
+- claim-derived rewrite rules preserve `Quantity` wrappers instead of stripping unit-bearing nodes
+- `search.rs` rebuild sites and constant-folding now derive `ty` from their typed children instead of erasing it
+- `Context::simplify`, `check_equal`, and `exprs_equivalent` feed elaborated expressions into the rewrite pipeline when elaboration succeeds
+
+This is intentionally not the full migration yet. Tokenization and ML serialization still do not preserve `ty` end-to-end, and the consumer-facing integrations are still incomplete.
 
 ### Open questions
 
@@ -250,7 +258,7 @@ Expected regression coverage:
 - quantities elaborate to concrete physical dimensions
 - undeclared variables elaborate to `Unresolved`, not missing metadata
 - typed rewrites preserve type state
-- claim-derived rules do not erase units or inline dimensions
+- claim-derived rules do not erase quantity wrappers, units, or inline dimensions
 - tokenization either preserves type state or uses an explicitly lossy projection
 - REPL displays consistent types for `4.5`, `4.5 [m]`, declared vars, and consts with units
 
@@ -270,3 +278,5 @@ New automated coverage added:
 - elaboration keeps undeclared variables `Ty::Unresolved`
 - elaboration uses declared dimensions to type variables and typed addition
 - `check_dim` accepts an already-elaborated expression without needing the original `DimEnv`
+- variable-pattern substitution preserves `dim` and `ty`
+- simplification preserves a concrete type through rule application for a typed expression like `x * 1`

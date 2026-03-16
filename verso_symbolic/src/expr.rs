@@ -51,6 +51,20 @@ impl Expr {
     pub fn spanned_typed(kind: ExprKind, span: Span, ty: Ty) -> Self {
         Expr { kind, span, ty }
     }
+
+    pub fn derived(kind: ExprKind) -> Self {
+        let ty = infer_ty_from_kind(&kind);
+        Expr {
+            kind,
+            span: Span::default(),
+            ty,
+        }
+    }
+
+    pub fn spanned_derived(kind: ExprKind, span: Span) -> Self {
+        let ty = infer_ty_from_kind(&kind);
+        Expr { kind, span, ty }
+    }
 }
 
 impl PartialEq for Expr {
@@ -64,6 +78,62 @@ pub enum Ty {
     Concrete(Dimension),
     #[default]
     Unresolved,
+}
+
+pub fn infer_ty_from_kind(kind: &ExprKind) -> Ty {
+    match kind {
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => {
+            Ty::Concrete(Dimension::dimensionless())
+        }
+        ExprKind::Var { dim: Some(dim), .. } => Ty::Concrete(dim.clone()),
+        ExprKind::Var { dim: None, .. } => Ty::Unresolved,
+        ExprKind::Add(a, b) => match (&a.ty, &b.ty) {
+            (Ty::Concrete(da), Ty::Concrete(db)) if da == db => Ty::Concrete(da.clone()),
+            _ => Ty::Unresolved,
+        },
+        ExprKind::Mul(a, b) => match (&a.ty, &b.ty) {
+            (Ty::Concrete(da), Ty::Concrete(db)) => Ty::Concrete(da.mul(db)),
+            _ => Ty::Unresolved,
+        },
+        ExprKind::Neg(inner) => inner.ty.clone(),
+        ExprKind::Inv(inner) => match &inner.ty {
+            Ty::Concrete(dim) => Ty::Concrete(dim.inv()),
+            Ty::Unresolved => Ty::Unresolved,
+        },
+        ExprKind::Pow(base, exp) => match (&base.ty, &exp.ty) {
+            (Ty::Concrete(dim), Ty::Concrete(exp_dim)) if dim.is_dimensionless() && exp_dim.is_dimensionless() => {
+                Ty::Concrete(Dimension::dimensionless())
+            }
+            (Ty::Concrete(dim), Ty::Concrete(_)) => match expr_as_integer(exp) {
+                Some(n) => Ty::Concrete(dim.pow(n)),
+                None => Ty::Unresolved,
+            },
+            _ => Ty::Unresolved,
+        },
+        ExprKind::Fn(_, inner) => match &inner.ty {
+            Ty::Concrete(dim) if dim.is_dimensionless() => Ty::Concrete(Dimension::dimensionless()),
+            _ => Ty::Unresolved,
+        },
+        ExprKind::FnN(_, args) => {
+            if args
+                .iter()
+                .all(|arg| matches!(&arg.ty, Ty::Concrete(dim) if dim.is_dimensionless()))
+            {
+                Ty::Concrete(Dimension::dimensionless())
+            } else {
+                Ty::Unresolved
+            }
+        }
+        ExprKind::Quantity(_, unit) => Ty::Concrete(unit.dimension.clone()),
+    }
+}
+
+fn expr_as_integer(expr: &Expr) -> Option<i32> {
+    match &expr.kind {
+        ExprKind::Rational(r) if r.den() == 1 => Some(r.num() as i32),
+        ExprKind::Neg(inner) => expr_as_integer(inner).map(|n| -n),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -96,6 +96,7 @@ impl Context {
     /// Constants are substituted before simplification.
     pub fn simplify(&self, expr: &Expr) -> Expr {
         let expr = self.apply_consts(expr);
+        let expr = elaborate_expr(&expr, &self.dims).unwrap_or(expr);
         search::simplify(&expr, &self.rules)
     }
 
@@ -105,9 +106,11 @@ impl Context {
     pub fn check_equal(&self, lhs: &Expr, rhs: &Expr) -> EqualityResult {
         let lhs = self.apply_consts(lhs);
         let rhs = self.apply_consts(rhs);
-        let diff = Expr::new(ExprKind::Add(
+        let lhs = elaborate_expr(&lhs, &self.dims).unwrap_or(lhs);
+        let rhs = elaborate_expr(&rhs, &self.dims).unwrap_or(rhs);
+        let diff = Expr::derived(ExprKind::Add(
             Box::new(lhs.clone()),
-            Box::new(Expr::new(ExprKind::Neg(Box::new(rhs.clone())))),
+            Box::new(Expr::derived(ExprKind::Neg(Box::new(rhs.clone())))),
         ));
         let residual = search::simplify(&diff, &self.rules);
 
@@ -129,9 +132,11 @@ impl Context {
         if a == b {
             return true;
         }
-        let diff = Expr::new(ExprKind::Add(
-            Box::new(a.clone()),
-            Box::new(Expr::new(ExprKind::Neg(Box::new(b.clone())))),
+        let a = elaborate_expr(a, &self.dims).unwrap_or_else(|_| a.clone());
+        let b = elaborate_expr(b, &self.dims).unwrap_or_else(|_| b.clone());
+        let diff = Expr::derived(ExprKind::Add(
+            Box::new(a),
+            Box::new(Expr::derived(ExprKind::Neg(Box::new(b)))),
         ));
         is_zero(&search::simplify(&diff, &self.rules))
     }
@@ -810,9 +815,8 @@ fn expr_to_pattern(expr: &Expr, wildcards: &HashSet<String>) -> Pattern {
             kind.clone(),
             args.iter().map(|a| expr_to_pattern(a, wildcards)).collect(),
         ),
-        ExprKind::Quantity(inner, _unit) => {
-            // Quantities lose their unit in patterns — match on the inner expression
-            expr_to_pattern(inner, wildcards)
+        ExprKind::Quantity(inner, unit) => {
+            Pattern::Quantity(Box::new(expr_to_pattern(inner, wildcards)), unit.clone())
         }
     }
 }
@@ -1019,6 +1023,7 @@ mod tests {
     use crate::dim::BaseDim;
     use crate::expr::Ty;
     use crate::parser::parse_expr;
+    use crate::rule::Pattern;
 
     #[test]
     fn check_expr_dim_catches_length_plus_time() {
@@ -1348,6 +1353,32 @@ mod tests {
         ));
         let expanded = ctx.apply_consts(&expr);
         assert_eq!(expanded, expr);
+    }
+
+    #[test]
+    fn simplify_preserves_type_through_rule_application() {
+        let mut ctx = Context::new();
+        ctx.declare_var("x", Some(Dimension::single(BaseDim::L, 1)));
+        let result = ctx.simplify(&parse_expr("x * 1").unwrap());
+        assert_eq!(result.ty, Ty::Concrete(Dimension::single(BaseDim::L, 1)));
+    }
+
+    #[test]
+    fn add_claim_as_rule_preserves_quantity_patterns() {
+        let mut ctx = Context::new();
+        let lhs = parse_expr("1 [km]").unwrap();
+        let rhs = parse_expr("1000 [m]").unwrap();
+
+        ctx.add_claim_as_rule("unit_conv", &lhs, &rhs);
+
+        let rule = ctx.rules.find_rule("claim:unit_conv").unwrap();
+        match (&rule.lhs, &rule.rhs) {
+            (Pattern::Quantity(_, lhs_unit), Pattern::Quantity(_, rhs_unit)) => {
+                assert_eq!(lhs_unit.display, "km");
+                assert_eq!(rhs_unit.display, "m");
+            }
+            _ => panic!("expected quantity patterns"),
+        }
     }
 
     // --- DimError Display ---

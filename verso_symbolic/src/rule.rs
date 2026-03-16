@@ -1,7 +1,8 @@
 #[allow(unused_imports)] // NamedConst is used in pattern matching via nc.value()
-use crate::expr::{Expr, ExprKind, FnKind, Index, IndexPosition, NamedConst};
+use crate::expr::{Expr, ExprKind, FnKind, Index, IndexPosition, NamedConst, Ty};
 use crate::fmt::fmt_frac_pi;
 use crate::rational::Rational;
+use crate::unit::Unit;
 use std::collections::HashMap;
 
 /// Pattern for matching index names in tensor expressions.
@@ -31,9 +32,9 @@ pub enum Pattern {
     IntEvenWild(String), // Matches Integer with even last digit
     IntOddWild(String),  // Matches Integer with odd last digit
     Const(f64),
-    Rational(Rational),  // Matches exact Rational value
+    Rational(Rational), // Matches exact Rational value
     Named(NamedConst),
-    FracPi(Rational),    // Matches exact FracPi value
+    FracPi(Rational), // Matches exact FracPi value
     Add(Box<Pattern>, Box<Pattern>),
     Mul(Box<Pattern>, Box<Pattern>),
     Neg(Box<Pattern>),
@@ -41,6 +42,7 @@ pub enum Pattern {
     Pow(Box<Pattern>, Box<Pattern>),
     Fn(FnKind, Box<Pattern>),
     FnN(FnKind, Vec<Pattern>),
+    Quantity(Box<Pattern>, Unit),
     /// Match a variable with specific name pattern and index structure.
     Var {
         name: VarPattern,
@@ -236,7 +238,8 @@ impl Pattern {
             | Pattern::FracPi(_)
             | Pattern::Var { .. }
             | Pattern::Fn(_, _)
-            | Pattern::FnN(_, _) => 100,
+            | Pattern::FnN(_, _)
+            | Pattern::Quantity(_, _) => 100,
             Pattern::Pow(_, _) => 80,
             Pattern::Neg(_) | Pattern::Inv(_) => 70,
             Pattern::Mul(_, _) => 60,
@@ -333,6 +336,7 @@ impl std::fmt::Display for Pattern {
                 let rendered: Vec<String> = args.iter().map(|a| format!("{}", a)).collect();
                 write!(f, "{}({})", kind, rendered.join(", "))
             }
+            Pattern::Quantity(inner, unit) => write!(f, "{} [{}]", inner, unit),
         }
     }
 }
@@ -405,9 +409,7 @@ impl Pattern {
             (Pattern::IntEvenWild(_), _) => false,
 
             // IntOddWild matches Rational with odd value
-            (Pattern::IntOddWild(name), ExprKind::Rational(r))
-                if r.is_integer() && r.is_odd() =>
-            {
+            (Pattern::IntOddWild(name), ExprKind::Rational(r)) if r.is_integer() && r.is_odd() => {
                 bind_expr(name, expr.clone(), bindings)
             }
             (Pattern::IntOddWild(_), _) => false,
@@ -453,7 +455,9 @@ impl Pattern {
             (Pattern::Inv(_), _) => false,
 
             // Function matching requires same function kind
-            (Pattern::Fn(pk, p), ExprKind::Fn(ek, a)) if pk == ek => p.match_expr_inner(a, bindings),
+            (Pattern::Fn(pk, p), ExprKind::Fn(ek, a)) if pk == ek => {
+                p.match_expr_inner(a, bindings)
+            }
             (Pattern::Fn(_, _), _) => false,
 
             (Pattern::FnN(pk, ps), ExprKind::FnN(ek, args)) if pk == ek => {
@@ -465,6 +469,13 @@ impl Pattern {
                     .all(|(p, a)| p.match_expr_inner(a, bindings))
             }
             (Pattern::FnN(_, _), _) => false,
+
+            (Pattern::Quantity(pattern_inner, pattern_unit), ExprKind::Quantity(expr_inner, expr_unit))
+                if pattern_unit == expr_unit =>
+            {
+                pattern_inner.match_expr_inner(expr_inner, bindings)
+            }
+            (Pattern::Quantity(_, _), _) => false,
 
             // Variable matching with index patterns
             (
@@ -534,7 +545,7 @@ impl Pattern {
             Pattern::Const(n) => {
                 // Produce Rational for integer values, otherwise keep as constant
                 if n.fract() == 0.0 && n.abs() < (i64::MAX / 2) as f64 {
-                    Expr::new(ExprKind::Rational(Rational::from_i64(*n as i64)))
+                    Expr::derived(ExprKind::Rational(Rational::from_i64(*n as i64)))
                 } else {
                     // Try small denominators for non-integer constants
                     let mut result = None;
@@ -542,43 +553,55 @@ impl Pattern {
                         let numerator = n * d as f64;
                         let rounded = numerator.round();
                         if (numerator - rounded).abs() < 1e-10 {
-                            result = Some(Expr::new(ExprKind::Rational(Rational::new(rounded as i64, d))));
+                            result = Some(Expr::derived(ExprKind::Rational(Rational::new(
+                                rounded as i64,
+                                d,
+                            ))));
                             break;
                         }
                     }
-                    result.unwrap_or_else(|| panic!("Cannot convert Pattern::Const({}) to Rational", n))
+                    result.unwrap_or_else(|| {
+                        panic!("Cannot convert Pattern::Const({}) to Rational", n)
+                    })
                 }
             }
 
-            Pattern::Rational(r) => Expr::new(ExprKind::Rational(*r)),
+            Pattern::Rational(r) => Expr::derived(ExprKind::Rational(*r)),
 
-            Pattern::Named(nc) => Expr::new(ExprKind::Named(*nc)),
+            Pattern::Named(nc) => Expr::derived(ExprKind::Named(*nc)),
 
-            Pattern::FracPi(r) => Expr::new(ExprKind::FracPi(*r)),
+            Pattern::FracPi(r) => Expr::derived(ExprKind::FracPi(*r)),
 
-            Pattern::Add(pa, pb) => Expr::new(ExprKind::Add(
+            Pattern::Add(pa, pb) => Expr::derived(ExprKind::Add(
                 Box::new(pa.substitute(bindings)),
                 Box::new(pb.substitute(bindings)),
             )),
 
-            Pattern::Mul(pa, pb) => Expr::new(ExprKind::Mul(
+            Pattern::Mul(pa, pb) => Expr::derived(ExprKind::Mul(
                 Box::new(pa.substitute(bindings)),
                 Box::new(pb.substitute(bindings)),
             )),
 
-            Pattern::Pow(pb, pe) => Expr::new(ExprKind::Pow(
+            Pattern::Pow(pb, pe) => Expr::derived(ExprKind::Pow(
                 Box::new(pb.substitute(bindings)),
                 Box::new(pe.substitute(bindings)),
             )),
 
-            Pattern::Neg(p) => Expr::new(ExprKind::Neg(Box::new(p.substitute(bindings)))),
+            Pattern::Neg(p) => Expr::derived(ExprKind::Neg(Box::new(p.substitute(bindings)))),
 
-            Pattern::Inv(p) => Expr::new(ExprKind::Inv(Box::new(p.substitute(bindings)))),
+            Pattern::Inv(p) => Expr::derived(ExprKind::Inv(Box::new(p.substitute(bindings)))),
 
-            Pattern::Fn(kind, p) => Expr::new(ExprKind::Fn(kind.clone(), Box::new(p.substitute(bindings)))),
-            Pattern::FnN(kind, args) => Expr::new(ExprKind::FnN(
+            Pattern::Fn(kind, p) => {
+                Expr::derived(ExprKind::Fn(kind.clone(), Box::new(p.substitute(bindings))))
+            }
+            Pattern::FnN(kind, args) => Expr::derived(ExprKind::FnN(
                 kind.clone(),
                 args.iter().map(|a| a.substitute(bindings)).collect(),
+            )),
+
+            Pattern::Quantity(inner, unit) => Expr::derived(ExprKind::Quantity(
+                Box::new(inner.substitute(bindings)),
+                unit.clone(),
             )),
 
             Pattern::Var {
@@ -586,12 +609,16 @@ impl Pattern {
                 indices: pat_indices,
             } => {
                 // Resolve variable name
-                let var_name = match pat_name {
-                    VarPattern::Exact(n) => n.clone(),
+                let (var_name, dim, ty) = match pat_name {
+                    VarPattern::Exact(n) => (n.clone(), None, Ty::Unresolved),
                     VarPattern::Wild(wildcard) => {
                         // Get the name from the bound expression (must be a Var)
                         match bindings.exprs.get(wildcard) {
-                            Some(Expr { kind: ExprKind::Var { name, .. }, .. }) => name.clone(),
+                            Some(Expr {
+                                kind: ExprKind::Var { name, dim, .. },
+                                ty,
+                                ..
+                            }) => (name.clone(), dim.clone(), ty.clone()),
                             Some(_) => {
                                 panic!("Var wildcard {} bound to non-Var expression", wildcard)
                             }
@@ -624,11 +651,14 @@ impl Pattern {
                     })
                     .collect();
 
-                Expr::new(ExprKind::Var {
-                    name: var_name,
-                    indices: var_indices,
-                    dim: None,
-                })
+                Expr::typed(
+                    ExprKind::Var {
+                        name: var_name,
+                        indices: var_indices,
+                        dim,
+                    },
+                    ty,
+                )
             }
         }
     }
@@ -885,16 +915,8 @@ impl RuleSet {
         rs.add(rule("max_commute", p_max(x(), y()), p_max(y(), x())));
 
         // Absorption
-        rs.add(rule(
-            "min_absorb",
-            p_min(x(), p_max(x(), y())),
-            x(),
-        ));
-        rs.add(rule(
-            "max_absorb",
-            p_max(x(), p_min(x(), y())),
-            x(),
-        ));
+        rs.add(rule("min_absorb", p_min(x(), p_max(x(), y())), x()));
+        rs.add(rule("max_absorb", p_max(x(), p_min(x(), y())), x()));
 
         // min(x, y) + max(x, y) = x + y
         rs.add(rule(
@@ -911,11 +933,7 @@ impl RuleSet {
         ));
 
         // sign(-x) = -sign(x)
-        rs.add(rule(
-            "sign_neg",
-            p_sign(p_neg(x())),
-            p_neg(p_sign(x())),
-        ));
+        rs.add(rule("sign_neg", p_sign(p_neg(x())), p_neg(p_sign(x()))));
 
         // sign(x)^2 = 1 (for x != 0)
         rs.add(rule(
@@ -951,57 +969,69 @@ impl RuleSet {
         rs.add(rule("tan_zero", p_tan(p_const(0.0)), p_const(0.0)));
 
         // === sin evaluation at special angles (FracPi patterns) ===
-        rs.add(rule("sin_0",     p_sin(p_frac_pi(0, 1)),  p_rational(0, 1)));
-        rs.add(rule("sin_pi_6",  p_sin(p_frac_pi(1, 6)),  p_rational(1, 2)));
-        rs.add(rule("sin_pi_4",  p_sin(p_frac_pi(1, 4)),  sqrt2_2()));
-        rs.add(rule("sin_pi_3",  p_sin(p_frac_pi(1, 3)),  sqrt3_2()));
-        rs.add(rule("sin_pi_2",  p_sin(p_frac_pi(1, 2)),  p_rational(1, 1)));
-        rs.add(rule("sin_2pi_3", p_sin(p_frac_pi(2, 3)),  sqrt3_2()));
-        rs.add(rule("sin_3pi_4", p_sin(p_frac_pi(3, 4)),  sqrt2_2()));
-        rs.add(rule("sin_5pi_6", p_sin(p_frac_pi(5, 6)),  p_rational(1, 2)));
-        rs.add(rule("sin_pi",    p_sin(p_frac_pi(1, 1)),  p_rational(0, 1)));
-        rs.add(rule("sin_7pi_6", p_sin(p_frac_pi(7, 6)),  p_rational(-1, 2)));
-        rs.add(rule("sin_5pi_4", p_sin(p_frac_pi(5, 4)),  p_neg(sqrt2_2())));
-        rs.add(rule("sin_4pi_3", p_sin(p_frac_pi(4, 3)),  p_neg(sqrt3_2())));
-        rs.add(rule("sin_3pi_2", p_sin(p_frac_pi(3, 2)),  p_rational(-1, 1)));
-        rs.add(rule("sin_5pi_3", p_sin(p_frac_pi(5, 3)),  p_neg(sqrt3_2())));
-        rs.add(rule("sin_7pi_4", p_sin(p_frac_pi(7, 4)),  p_neg(sqrt2_2())));
-        rs.add(rule("sin_11pi_6",p_sin(p_frac_pi(11, 6)), p_rational(-1, 2)));
+        rs.add(rule("sin_0", p_sin(p_frac_pi(0, 1)), p_rational(0, 1)));
+        rs.add(rule("sin_pi_6", p_sin(p_frac_pi(1, 6)), p_rational(1, 2)));
+        rs.add(rule("sin_pi_4", p_sin(p_frac_pi(1, 4)), sqrt2_2()));
+        rs.add(rule("sin_pi_3", p_sin(p_frac_pi(1, 3)), sqrt3_2()));
+        rs.add(rule("sin_pi_2", p_sin(p_frac_pi(1, 2)), p_rational(1, 1)));
+        rs.add(rule("sin_2pi_3", p_sin(p_frac_pi(2, 3)), sqrt3_2()));
+        rs.add(rule("sin_3pi_4", p_sin(p_frac_pi(3, 4)), sqrt2_2()));
+        rs.add(rule("sin_5pi_6", p_sin(p_frac_pi(5, 6)), p_rational(1, 2)));
+        rs.add(rule("sin_pi", p_sin(p_frac_pi(1, 1)), p_rational(0, 1)));
+        rs.add(rule("sin_7pi_6", p_sin(p_frac_pi(7, 6)), p_rational(-1, 2)));
+        rs.add(rule("sin_5pi_4", p_sin(p_frac_pi(5, 4)), p_neg(sqrt2_2())));
+        rs.add(rule("sin_4pi_3", p_sin(p_frac_pi(4, 3)), p_neg(sqrt3_2())));
+        rs.add(rule("sin_3pi_2", p_sin(p_frac_pi(3, 2)), p_rational(-1, 1)));
+        rs.add(rule("sin_5pi_3", p_sin(p_frac_pi(5, 3)), p_neg(sqrt3_2())));
+        rs.add(rule("sin_7pi_4", p_sin(p_frac_pi(7, 4)), p_neg(sqrt2_2())));
+        rs.add(rule(
+            "sin_11pi_6",
+            p_sin(p_frac_pi(11, 6)),
+            p_rational(-1, 2),
+        ));
 
         // === cos evaluation at special angles (FracPi patterns) ===
-        rs.add(rule("cos_0",     p_cos(p_frac_pi(0, 1)),  p_rational(1, 1)));
-        rs.add(rule("cos_pi_6",  p_cos(p_frac_pi(1, 6)),  sqrt3_2()));
-        rs.add(rule("cos_pi_4",  p_cos(p_frac_pi(1, 4)),  sqrt2_2()));
-        rs.add(rule("cos_pi_3",  p_cos(p_frac_pi(1, 3)),  p_rational(1, 2)));
-        rs.add(rule("cos_pi_2",  p_cos(p_frac_pi(1, 2)),  p_rational(0, 1)));
-        rs.add(rule("cos_2pi_3", p_cos(p_frac_pi(2, 3)),  p_rational(-1, 2)));
-        rs.add(rule("cos_3pi_4", p_cos(p_frac_pi(3, 4)),  p_neg(sqrt2_2())));
-        rs.add(rule("cos_5pi_6", p_cos(p_frac_pi(5, 6)),  p_neg(sqrt3_2())));
-        rs.add(rule("cos_pi",    p_cos(p_frac_pi(1, 1)),  p_rational(-1, 1)));
-        rs.add(rule("cos_7pi_6", p_cos(p_frac_pi(7, 6)),  p_neg(sqrt3_2())));
-        rs.add(rule("cos_5pi_4", p_cos(p_frac_pi(5, 4)),  p_neg(sqrt2_2())));
-        rs.add(rule("cos_4pi_3", p_cos(p_frac_pi(4, 3)),  p_rational(-1, 2)));
-        rs.add(rule("cos_3pi_2", p_cos(p_frac_pi(3, 2)),  p_rational(0, 1)));
-        rs.add(rule("cos_5pi_3", p_cos(p_frac_pi(5, 3)),  p_rational(1, 2)));
-        rs.add(rule("cos_7pi_4", p_cos(p_frac_pi(7, 4)),  sqrt2_2()));
-        rs.add(rule("cos_11pi_6",p_cos(p_frac_pi(11, 6)), sqrt3_2()));
+        rs.add(rule("cos_0", p_cos(p_frac_pi(0, 1)), p_rational(1, 1)));
+        rs.add(rule("cos_pi_6", p_cos(p_frac_pi(1, 6)), sqrt3_2()));
+        rs.add(rule("cos_pi_4", p_cos(p_frac_pi(1, 4)), sqrt2_2()));
+        rs.add(rule("cos_pi_3", p_cos(p_frac_pi(1, 3)), p_rational(1, 2)));
+        rs.add(rule("cos_pi_2", p_cos(p_frac_pi(1, 2)), p_rational(0, 1)));
+        rs.add(rule("cos_2pi_3", p_cos(p_frac_pi(2, 3)), p_rational(-1, 2)));
+        rs.add(rule("cos_3pi_4", p_cos(p_frac_pi(3, 4)), p_neg(sqrt2_2())));
+        rs.add(rule("cos_5pi_6", p_cos(p_frac_pi(5, 6)), p_neg(sqrt3_2())));
+        rs.add(rule("cos_pi", p_cos(p_frac_pi(1, 1)), p_rational(-1, 1)));
+        rs.add(rule("cos_7pi_6", p_cos(p_frac_pi(7, 6)), p_neg(sqrt3_2())));
+        rs.add(rule("cos_5pi_4", p_cos(p_frac_pi(5, 4)), p_neg(sqrt2_2())));
+        rs.add(rule("cos_4pi_3", p_cos(p_frac_pi(4, 3)), p_rational(-1, 2)));
+        rs.add(rule("cos_3pi_2", p_cos(p_frac_pi(3, 2)), p_rational(0, 1)));
+        rs.add(rule("cos_5pi_3", p_cos(p_frac_pi(5, 3)), p_rational(1, 2)));
+        rs.add(rule("cos_7pi_4", p_cos(p_frac_pi(7, 4)), sqrt2_2()));
+        rs.add(rule("cos_11pi_6", p_cos(p_frac_pi(11, 6)), sqrt3_2()));
 
         // === tan evaluation at special angles ===
-        rs.add(rule("tan_0",     p_tan(p_frac_pi(0, 1)),  p_rational(0, 1)));
-        rs.add(rule("tan_pi_6",  p_tan(p_frac_pi(1, 6)),  p_mul(sqrt3(), p_inv(p_rational(3, 1)))));
-        rs.add(rule("tan_pi_4",  p_tan(p_frac_pi(1, 4)),  p_rational(1, 1)));
-        rs.add(rule("tan_pi_3",  p_tan(p_frac_pi(1, 3)),  sqrt3()));
-        rs.add(rule("tan_2pi_3", p_tan(p_frac_pi(2, 3)),  p_neg(sqrt3())));
-        rs.add(rule("tan_3pi_4", p_tan(p_frac_pi(3, 4)),  p_rational(-1, 1)));
-        rs.add(rule("tan_5pi_6", p_tan(p_frac_pi(5, 6)),  p_neg(p_mul(sqrt3(), p_inv(p_rational(3, 1))))));
-        rs.add(rule("tan_pi",    p_tan(p_frac_pi(1, 1)),  p_rational(0, 1)));
+        rs.add(rule("tan_0", p_tan(p_frac_pi(0, 1)), p_rational(0, 1)));
+        rs.add(rule(
+            "tan_pi_6",
+            p_tan(p_frac_pi(1, 6)),
+            p_mul(sqrt3(), p_inv(p_rational(3, 1))),
+        ));
+        rs.add(rule("tan_pi_4", p_tan(p_frac_pi(1, 4)), p_rational(1, 1)));
+        rs.add(rule("tan_pi_3", p_tan(p_frac_pi(1, 3)), sqrt3()));
+        rs.add(rule("tan_2pi_3", p_tan(p_frac_pi(2, 3)), p_neg(sqrt3())));
+        rs.add(rule("tan_3pi_4", p_tan(p_frac_pi(3, 4)), p_rational(-1, 1)));
+        rs.add(rule(
+            "tan_5pi_6",
+            p_tan(p_frac_pi(5, 6)),
+            p_neg(p_mul(sqrt3(), p_inv(p_rational(3, 1)))),
+        ));
+        rs.add(rule("tan_pi", p_tan(p_frac_pi(1, 1)), p_rational(0, 1)));
 
         // === Inverse trig at special values ===
-        rs.add(rule("asin_zero", p_asin(p_const(0.0)),  p_frac_pi(0, 1)));
-        rs.add(rule("acos_one",  p_acos(p_const(1.0)),  p_frac_pi(0, 1)));
-        rs.add(rule("acos_zero", p_acos(p_const(0.0)),  p_frac_pi(1, 2)));
-        rs.add(rule("atan_zero", p_atan(p_const(0.0)),  p_frac_pi(0, 1)));
-        rs.add(rule("atan_one",  p_atan(p_const(1.0)),  p_frac_pi(1, 4)));
+        rs.add(rule("asin_zero", p_asin(p_const(0.0)), p_frac_pi(0, 1)));
+        rs.add(rule("acos_one", p_acos(p_const(1.0)), p_frac_pi(0, 1)));
+        rs.add(rule("acos_zero", p_acos(p_const(0.0)), p_frac_pi(1, 2)));
+        rs.add(rule("atan_zero", p_atan(p_const(0.0)), p_frac_pi(0, 1)));
+        rs.add(rule("atan_one", p_atan(p_const(1.0)), p_frac_pi(1, 4)));
 
         // === Parity (odd/even functions) ===
         // sin(-x) = -sin(x)
@@ -1197,10 +1227,7 @@ impl RuleSet {
         rs.add(rule_reversible(
             "sin_sum",
             p_sin(p_add(a(), b())),
-            p_add(
-                p_mul(p_sin(a()), p_cos(b())),
-                p_mul(p_cos(a()), p_sin(b())),
-            ),
+            p_add(p_mul(p_sin(a()), p_cos(b())), p_mul(p_cos(a()), p_sin(b()))),
         ));
 
         // sin(a - b) = sin(a)·cos(b) - cos(a)·sin(b)
@@ -1227,10 +1254,7 @@ impl RuleSet {
         rs.add(rule_reversible(
             "cos_diff",
             p_cos(p_add(a(), p_neg(b()))),
-            p_add(
-                p_mul(p_cos(a()), p_cos(b())),
-                p_mul(p_sin(a()), p_sin(b())),
-            ),
+            p_add(p_mul(p_cos(a()), p_cos(b())), p_mul(p_sin(a()), p_sin(b()))),
         ));
 
         // === Product-to-sum identities ===
@@ -1242,10 +1266,7 @@ impl RuleSet {
             p_mul(p_sin(a()), p_cos(b())),
             p_mul(
                 p_inv(p_const(2.0)),
-                p_add(
-                    p_sin(p_add(a(), b())),
-                    p_sin(p_add(a(), p_neg(b()))),
-                ),
+                p_add(p_sin(p_add(a(), b())), p_sin(p_add(a(), p_neg(b())))),
             ),
         ));
 
@@ -1255,10 +1276,7 @@ impl RuleSet {
             p_mul(p_cos(a()), p_cos(b())),
             p_mul(
                 p_inv(p_const(2.0)),
-                p_add(
-                    p_cos(p_add(a(), b())),
-                    p_cos(p_add(a(), p_neg(b()))),
-                ),
+                p_add(p_cos(p_add(a(), b())), p_cos(p_add(a(), p_neg(b())))),
             ),
         ));
 
@@ -1268,10 +1286,7 @@ impl RuleSet {
             p_mul(p_sin(a()), p_sin(b())),
             p_mul(
                 p_inv(p_const(2.0)),
-                p_add(
-                    p_cos(p_add(a(), p_neg(b()))),
-                    p_neg(p_cos(p_add(a(), b()))),
-                ),
+                p_add(p_cos(p_add(a(), p_neg(b()))), p_neg(p_cos(p_add(a(), b())))),
             ),
         ));
 
@@ -1698,7 +1713,10 @@ impl RuleSet {
         rs.add(rule(
             "perfect_square_plus_1",
             p_add(
-                p_add(p_pow(a(), p_const(2.0)), p_mul(p_mul(p_const(2.0), a()), b())),
+                p_add(
+                    p_pow(a(), p_const(2.0)),
+                    p_mul(p_mul(p_const(2.0), a()), b()),
+                ),
                 p_pow(b(), p_const(2.0)),
             ),
             p_pow(p_add(a(), b()), p_const(2.0)),
@@ -1708,7 +1726,10 @@ impl RuleSet {
         rs.add(rule(
             "perfect_square_plus_2",
             p_add(
-                p_add(p_mul(p_mul(p_const(2.0), a()), b()), p_pow(a(), p_const(2.0))),
+                p_add(
+                    p_mul(p_mul(p_const(2.0), a()), b()),
+                    p_pow(a(), p_const(2.0)),
+                ),
                 p_pow(b(), p_const(2.0)),
             ),
             p_pow(p_add(a(), b()), p_const(2.0)),
@@ -1732,7 +1753,10 @@ impl RuleSet {
         // x² + 2x + 1 = (x + 1)²
         rs.add(rule(
             "perfect_square_plus_one",
-            p_add(p_add(p_pow(x(), p_const(2.0)), p_mul(p_const(2.0), x())), p_const(1.0)),
+            p_add(
+                p_add(p_pow(x(), p_const(2.0)), p_mul(p_const(2.0), x())),
+                p_const(1.0),
+            ),
             p_pow(p_add(x(), p_const(1.0)), p_const(2.0)),
         ));
 
@@ -1750,20 +1774,14 @@ impl RuleSet {
         rs.add(rule(
             "diff_of_squares_one",
             p_add(p_pow(x(), p_const(2.0)), p_neg(p_const(1.0))),
-            p_mul(
-                p_add(x(), p_const(1.0)),
-                p_add(x(), p_neg(p_const(1.0))),
-            ),
+            p_mul(p_add(x(), p_const(1.0)), p_add(x(), p_neg(p_const(1.0)))),
         ));
 
         // x² - 1 with Const(-1) instead of Neg(Const(1))
         rs.add(rule(
             "diff_of_squares_one_const",
             p_add(p_pow(x(), p_const(2.0)), p_const(-1.0)),
-            p_mul(
-                p_add(x(), p_const(1.0)),
-                p_add(x(), p_const(-1.0)),
-            ),
+            p_mul(p_add(x(), p_const(1.0)), p_add(x(), p_const(-1.0))),
         ));
 
         // === Factor out when one term is the factor itself ===
@@ -1937,9 +1955,10 @@ impl RuleSet {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dim::{BaseDim, Dimension};
     use crate::expr::{
-        acos, add, asin, atan, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
-        min, mul, neg, round, scalar, sign, sin, sinh, tan, tanh,
+        acos, add, asin, atan, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max, min,
+        mul, neg, round, scalar, sign, sin, sinh, tan, tanh, Expr, ExprKind, Ty,
     };
     use crate::pow;
 
@@ -2164,7 +2183,11 @@ mod tests {
     #[test]
     fn apply_ltr_identity() {
         // Rule: x + 0 -> x (additive identity)
-        let r = rule("add_zero", p_add(wildcard("x"), Pattern::Const(0.0)), wildcard("x"));
+        let r = rule(
+            "add_zero",
+            p_add(wildcard("x"), Pattern::Const(0.0)),
+            wildcard("x"),
+        );
 
         // Expression: a + 0
         let expr = add(scalar("a"), constant(0.0));
@@ -2175,7 +2198,11 @@ mod tests {
     #[test]
     fn apply_ltr_no_match() {
         // Rule: x + 0 -> x
-        let r = rule("add_zero", p_add(wildcard("x"), Pattern::Const(0.0)), wildcard("x"));
+        let r = rule(
+            "add_zero",
+            p_add(wildcard("x"), Pattern::Const(0.0)),
+            wildcard("x"),
+        );
 
         // Expression: a + b (doesn't match x + 0)
         let expr = add(scalar("a"), scalar("b"));
@@ -2185,7 +2212,11 @@ mod tests {
     #[test]
     fn apply_rtl_identity() {
         // Rule: x + 0 -> x (apply in reverse: x -> x + 0)
-        let r = rule("add_zero", p_add(wildcard("x"), Pattern::Const(0.0)), wildcard("x"));
+        let r = rule(
+            "add_zero",
+            p_add(wildcard("x"), Pattern::Const(0.0)),
+            wildcard("x"),
+        );
 
         // Expression: a (matches rhs pattern "x")
         let expr = scalar("a");
@@ -2549,10 +2580,7 @@ mod tests {
             .find(|r| r.name == "round_def")
             .and_then(|r| r.apply_ltr(&expr));
 
-        assert_eq!(
-            result,
-            Some(floor(add(scalar("a"), inv(constant(2.0)))))
-        );
+        assert_eq!(result, Some(floor(add(scalar("a"), inv(constant(2.0))))));
     }
 
     // === Trigonometric RuleSet tests ===
@@ -2669,10 +2697,7 @@ mod tests {
             .find(|r| r.name == "tan_def")
             .and_then(|r| r.apply_ltr(&expr));
 
-        assert_eq!(
-            result,
-            Some(mul(sin(scalar("a")), inv(cos(scalar("a")))))
-        );
+        assert_eq!(result, Some(mul(sin(scalar("a")), inv(cos(scalar("a"))))));
     }
 
     #[test]
@@ -2834,10 +2859,7 @@ mod tests {
             .find(|r| r.name == "tanh_def")
             .and_then(|r| r.apply_ltr(&expr));
 
-        assert_eq!(
-            result,
-            Some(mul(sinh(scalar("a")), inv(cosh(scalar("a")))))
-        );
+        assert_eq!(result, Some(mul(sinh(scalar("a")), inv(cosh(scalar("a"))))));
     }
 
     #[test]
@@ -3195,6 +3217,34 @@ mod tests {
 
         let result = pattern.substitute(&bindings);
         assert_eq!(result, tensor("T", vec![upper("mu"), lower("nu")]));
+    }
+
+    #[test]
+    fn substitute_var_wildcard_preserves_dim_and_ty() {
+        let pattern = p_var_wild("v", vec![idx_upper("i")]);
+        let mut bindings = Bindings::new();
+        bindings.indices.insert("i".to_string(), "alpha".to_string());
+        bindings.exprs.insert(
+            "v".to_string(),
+            Expr::typed(
+                ExprKind::Var {
+                    name: "velocity".to_string(),
+                    indices: vec![upper("mu")],
+                    dim: Some(Dimension::single(BaseDim::L, 1)),
+                },
+                Ty::Concrete(Dimension::single(BaseDim::L, 1)),
+            ),
+        );
+
+        let result = pattern.substitute(&bindings);
+        assert_eq!(result.ty, Ty::Concrete(Dimension::single(BaseDim::L, 1)));
+        match result.kind {
+            ExprKind::Var { name, dim, .. } => {
+                assert_eq!(name, "velocity");
+                assert_eq!(dim, Some(Dimension::single(BaseDim::L, 1)));
+            }
+            other => panic!("expected Var, got {:?}", other),
+        }
     }
 
     #[test]
