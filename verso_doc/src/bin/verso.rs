@@ -528,6 +528,10 @@ async fn cmd_lsp() {
                             ..Default::default()
                         },
                     )),
+                    completion_provider: Some(CompletionOptions {
+                        trigger_characters: Some(vec![":".to_string()]),
+                        ..Default::default()
+                    }),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -559,6 +563,28 @@ async fn cmd_lsp() {
                     .publish_diagnostics(params.text_document.uri, diagnostics, None)
                     .await;
             }
+        }
+
+        async fn completion(
+            &self,
+            params: CompletionParams,
+        ) -> Result<Option<CompletionResponse>> {
+            let items: Vec<CompletionItem> = verso_symbolic::unicode::completions("")
+                .into_iter()
+                .map(|(name, ch)| {
+                    let label = format!(":{}:", name);
+                    CompletionItem {
+                        label: label.clone(),
+                        kind: Some(CompletionItemKind::TEXT),
+                        detail: Some(format!("{} (U+{:04X})", ch, ch as u32)),
+                        insert_text: Some(format!("{}:", name)),
+                        filter_text: Some(label),
+                        ..Default::default()
+                    }
+                })
+                .collect();
+            let _ = params;
+            Ok(Some(CompletionResponse::Array(items)))
         }
 
         async fn did_save(&self, params: DidSaveTextDocumentParams) {
