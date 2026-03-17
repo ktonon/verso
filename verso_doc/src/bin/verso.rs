@@ -527,6 +527,7 @@ async fn cmd_lsp() {
     use tower_lsp::{Client, LanguageServer, LspService, Server};
     use verso_doc::compile_tex::{
         collect_symbols, find_claim_line, find_label_line, find_unresolved_refs_against,
+        SymbolInfo,
     };
     use verso_doc::dim::DimOutcome;
     use verso_doc::parse::{collect_dependencies, parse_document, parse_document_from_file};
@@ -807,18 +808,16 @@ async fn cmd_lsp() {
 
                 if let Some(doc) = doc {
                     let symbols = collect_symbols(doc);
-                    for sym in &symbols {
-                        if sym.name == symbol {
-                            let markdown =
-                                format!("**{}** `{}`\n\n{}", sym.kind, sym.name, sym.detail);
-                            return Ok(Some(Hover {
-                                contents: HoverContents::Markup(MarkupContent {
-                                    kind: MarkupKind::Markdown,
-                                    value: markdown,
-                                }),
-                                range: None,
-                            }));
-                        }
+                    if let Some(sym) = find_symbol(&symbols, &symbol) {
+                        let markdown =
+                            format!("**{}** `{}`\n\n{}", sym.kind, sym.name, sym.detail);
+                        return Ok(Some(Hover {
+                            contents: HoverContents::Markup(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: markdown,
+                            }),
+                            range: None,
+                        }));
                     }
                 }
             }
@@ -1089,6 +1088,19 @@ async fn cmd_lsp() {
             return None;
         }
         Some(ident.to_string())
+    }
+
+    /// Look up a symbol by name, falling back to subscript base matching.
+    /// For example, looking up `ℓ_{n-1}` will match a symbol named `ℓ_{n}`
+    /// because both have the base name `ℓ`.
+    fn find_symbol<'a>(symbols: &'a [SymbolInfo], query: &str) -> Option<&'a SymbolInfo> {
+        // Exact match first
+        if let Some(sym) = symbols.iter().find(|s| s.name == query) {
+            return Some(sym);
+        }
+        // Subscript base fallback: strip `_{...}` from both query and symbol name
+        let query_base = verso_symbolic::context::subscript_base(query);
+        symbols.iter().find(|s| verso_symbolic::context::subscript_base(&s.name) == query_base)
     }
 
     fn find_root_document(file_path: &Path) -> Option<PathBuf> {

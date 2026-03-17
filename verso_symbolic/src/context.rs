@@ -8,6 +8,15 @@ use std::collections::{HashMap, HashSet};
 /// Map from variable name to its declared dimension.
 pub type DimEnv = HashMap<String, Dimension>;
 
+/// Extract the base name of a variable, stripping any subscript.
+/// For example, `ℓ_{n}` → `ℓ`, `ρ_{0}` → `ρ`, `v` → `v`.
+pub fn subscript_base(name: &str) -> &str {
+    match name.find("_{") {
+        Some(pos) => &name[..pos],
+        None => name,
+    }
+}
+
 /// Mathematical context accumulating declarations and verified results.
 ///
 /// Used by both `verso_doc` (document verification) and the repl.
@@ -36,9 +45,15 @@ impl Context {
     }
 
     /// Declare a variable with optional dimensions.
+    ///
+    /// If the name contains a subscript (e.g. `ℓ_{n}`), the dimension is
+    /// registered under the base name (`ℓ`). The expression parser stores
+    /// subscripts as indices on a `Var` node whose `name` is the base, so
+    /// this ensures that `ℓ_{n-1}`, `ℓ_{0}`, etc. all resolve correctly.
     pub fn declare_var(&mut self, name: &str, dim: Option<Dimension>) {
         if let Some(d) = dim {
-            self.dims.insert(name.to_string(), d);
+            let base = subscript_base(name);
+            self.dims.insert(base.to_string(), d);
         }
     }
 
@@ -1822,5 +1837,30 @@ mod tests {
                 source_len,
             );
         }
+    }
+
+    #[test]
+    fn subscript_base_strips_subscript() {
+        assert_eq!(subscript_base("ℓ_{n}"), "ℓ");
+        assert_eq!(subscript_base("ρ_{0}"), "ρ");
+        assert_eq!(subscript_base("v"), "v");
+        assert_eq!(subscript_base("T_{ij}"), "T");
+    }
+
+    #[test]
+    fn declare_var_subscript_resolves_base() {
+        let mut ctx = Context::new();
+        ctx.declare_var("ℓ_{n}", Some(Dimension::single(BaseDim::L, 1)));
+        // The expression parser produces Var { name: "ℓ", ... } for ℓ_{n-1},
+        // so the dim env must have "ℓ" as the key.
+        assert!(ctx.dims.contains_key("ℓ"));
+        assert!(!ctx.dims.contains_key("ℓ_{n}"));
+    }
+
+    #[test]
+    fn declare_var_plain_name_unchanged() {
+        let mut ctx = Context::new();
+        ctx.declare_var("v", Some(Dimension::single(BaseDim::L, 1)));
+        assert!(ctx.dims.contains_key("v"));
     }
 }
