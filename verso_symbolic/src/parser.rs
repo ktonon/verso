@@ -303,13 +303,23 @@ impl Parser {
     fn parse_multiplicative(&mut self) -> Result<crate::expr::Expr, ParseError> {
         let start = self.start_pos();
         let mut expr = self.parse_unary()?;
+        // Check for unit annotation on the first operand (e.g., `1 [kg] * ...`)
+        let has_quantity;
+        (expr, has_quantity) = self.try_unit_annotation(expr, start)?;
 
         loop {
             match self.peek() {
                 Some(Token::Star) | Some(Token::Slash) | Some(Token::Tensor)
                 | Some(Token::DotOp) | Some(Token::Colon) => {
                     let op = self.next().unwrap();
-                    let rhs = self.parse_unary()?;
+                    let rhs_start = self.start_pos();
+                    let mut rhs = self.parse_unary()?;
+                    // Only check RHS for unit annotations if we already have a quantity
+                    // operand (e.g., `1 [kg] * 10 [m/s^2]`). Otherwise, defer to the
+                    // post-loop check (e.g., `3*10^8 [m/s]`).
+                    if has_quantity {
+                        (rhs, _) = self.try_unit_annotation(rhs, rhs_start)?;
+                    }
                     expr = match op {
                         Token::Slash => mul(expr, inv(rhs)),
                         _ => mul(expr, rhs),
@@ -329,15 +339,31 @@ impl Parser {
             }
         }
 
-        // Check for unit annotation: [unit] on purely numeric expressions
+        // Post-loop: annotate the whole expression if no per-operand unit was found
+        if !has_quantity {
+            (expr, _) = self.try_unit_annotation(expr, start)?;
+        }
+
+        Ok(expr)
+    }
+
+    /// If the next token is `[` and the expression is purely numeric,
+    /// parse a unit annotation and wrap in a Quantity node.
+    /// Returns `(annotated_expr, was_annotated)`.
+    fn try_unit_annotation(
+        &mut self,
+        mut expr: crate::expr::Expr,
+        start: usize,
+    ) -> Result<(crate::expr::Expr, bool), ParseError> {
         if matches!(self.peek(), Some(Token::LBracket)) && !expr_has_vars(&expr) {
             self.next(); // consume [
             let unit = self.parse_unit_bracket()?;
             expr = quantity(expr, unit);
             expr.span = Span::new(start, self.prev_end);
+            Ok((expr, true))
+        } else {
+            Ok((expr, false))
         }
-
-        Ok(expr)
     }
 
     fn parse_power(&mut self) -> Result<crate::expr::Expr, ParseError> {

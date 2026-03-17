@@ -466,6 +466,15 @@ pub fn simplify_with_trace(expr: &Expr, rules: &RuleSet) -> (Expr, Vec<TraceStep
     (current, trace)
 }
 
+/// Integer square root: returns Some(r) if n = r*r, None otherwise.
+fn isqrt(n: i64) -> Option<i64> {
+    if n < 0 {
+        return None;
+    }
+    let r = (n as f64).sqrt().round() as i64;
+    if r * r == n { Some(r) } else { None }
+}
+
 /// Pure constant evaluation: arithmetic on Rational/FracPi values and trig at constant arguments.
 /// No normalization (no factor sorting, no mul shortcuts). This is mathematical evaluation,
 /// not a search strategy choice.
@@ -533,6 +542,16 @@ pub fn eval_constants(expr: &Expr) -> Expr {
             Expr::derived(ExprKind::Add(Box::new(left), Box::new(right)))
         }
         ExprKind::Mul(a, b) => {
+            // Check for Quantity * Quantity before recursing (recursion strips wrappers)
+            if let (ExprKind::Quantity(a_inner, u1), ExprKind::Quantity(b_inner, u2)) =
+                (&a.kind, &b.kind)
+            {
+                let inner = eval_constants(&Expr::derived(ExprKind::Mul(
+                    Box::new(eval_constants(a_inner)),
+                    Box::new(eval_constants(b_inner)),
+                )));
+                return Expr::derived(ExprKind::Quantity(Box::new(inner), u1.mul(u2)));
+            }
             let left = eval_constants(a);
             let right = eval_constants(b);
             // Rational * Rational → Rational
@@ -549,6 +568,13 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                 } else {
                     Expr::derived(ExprKind::FracPi(prod))
                 };
+            }
+            // Collect x * x → x^2 (for non-constant expressions)
+            if left == right && !matches!(left.kind, ExprKind::Rational(_) | ExprKind::FracPi(_)) {
+                return Expr::derived(ExprKind::Pow(
+                    Box::new(left),
+                    Box::new(Expr::derived(ExprKind::Rational(Rational::TWO))),
+                ));
             }
             Expr::derived(ExprKind::Mul(Box::new(left), Box::new(right)))
         }
@@ -575,11 +601,63 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                         return Expr::derived(ExprKind::Rational(Rational::ONE / result));
                     }
                 }
+                // sqrt: exponent = 1/2, non-negative base with perfect square num/den
+                if *exp_r == Rational::new(1, 2) && !base_r.is_negative() {
+                    let ns = isqrt(base_r.num());
+                    let ds = isqrt(base_r.den());
+                    if let (Some(n), Some(d)) = (ns, ds) {
+                        return Expr::derived(ExprKind::Rational(Rational::new(n, d)));
+                    }
+                }
+            }
+            // (-x)^(even integer) → x^(even integer)
+            if let ExprKind::Neg(inner) = &b.kind {
+                if let ExprKind::Rational(exp_r) = &e.kind {
+                    if exp_r.is_even() {
+                        return Expr::derived(ExprKind::Pow(inner.clone(), Box::new(e)));
+                    }
+                }
             }
             Expr::derived(ExprKind::Pow(Box::new(b), Box::new(e)))
         }
         ExprKind::Fn(kind, a) => {
             let arg = eval_constants(a);
+            // Evaluate numeric functions on rational arguments
+            if let ExprKind::Rational(r) = &arg.kind {
+                match kind {
+                    FnKind::Floor => {
+                        return Expr::derived(ExprKind::Rational(Rational::from_i64(r.floor())));
+                    }
+                    FnKind::Ceil => {
+                        let f = r.floor();
+                        let c = if r.fract().is_zero() { f } else { f + 1 };
+                        return Expr::derived(ExprKind::Rational(Rational::from_i64(c)));
+                    }
+                    FnKind::Round => {
+                        let f = r.floor();
+                        let c = if r.fract() >= Rational::new(1, 2) {
+                            f + 1
+                        } else {
+                            f
+                        };
+                        return Expr::derived(ExprKind::Rational(Rational::from_i64(c)));
+                    }
+                    FnKind::Sign => {
+                        let v = if r.is_positive() {
+                            1
+                        } else if r.is_negative() {
+                            -1
+                        } else {
+                            0
+                        };
+                        return Expr::derived(ExprKind::Rational(Rational::from_i64(v)));
+                    }
+                    FnKind::Custom(name) if name == "abs" => {
+                        return Expr::derived(ExprKind::Rational(r.abs()));
+                    }
+                    _ => {}
+                }
+            }
             let arg = match (&arg.kind, kind) {
                 // Normalize FracPi mod 2 for trig functions
                 (ExprKind::FracPi(r), FnKind::Sin | FnKind::Cos | FnKind::Tan) => {

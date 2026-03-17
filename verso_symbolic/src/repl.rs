@@ -180,6 +180,11 @@ impl Session {
         // Expression evaluation
         Some(match parse_expr(input) {
             Ok(expr) => {
+                // Check for division by zero before simplification
+                if contains_div_by_zero(&expr) {
+                    return Some("Error: division by zero is undefined".to_string());
+                }
+
                 let (expr, inline_dims) = match self.ctx.push_inline_dims(&expr) {
                     Ok(r) => r,
                     Err(e) => return Some(format!("Error: {}", e)),
@@ -237,6 +242,17 @@ impl Session {
             Err(err) => format!("Error: {:?}", err),
         })
     }
+}
+
+/// Check if an expression contains division by zero (Inv of a zero constant).
+fn contains_div_by_zero(expr: &Expr) -> bool {
+    use crate::expr::ExprKind;
+    expr.any(&|e| {
+        matches!(
+            &e.kind,
+            ExprKind::Inv(inner) if matches!(&inner.kind, ExprKind::Rational(r) if r.is_zero())
+        )
+    })
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -527,6 +543,79 @@ mod tests {
             Some(&Ty::Concrete(Dimension::dimensionless())),
         );
         assert!(suffix.contains("[1]"));
+    }
+
+    // ── e2e session tests: regression guards for fixed bugs ────────
+
+    #[test]
+    fn bug_zero_div_zero_should_be_undefined() {
+        let mut s = Session::new();
+        let out = eval(&mut s, "0/0");
+        assert!(
+            out.contains("undefined") || out.contains("Error"),
+            "0/0 should be undefined, got: {}",
+            out
+        );
+    }
+
+    #[test]
+    fn bug_sqrt_numeric_not_evaluated() {
+        session!(
+            r#"
+> sqrt(4)
+2 [1]
+"#
+        );
+    }
+
+    #[test]
+    fn bug_neg_squared_not_collected() {
+        session!(
+            r#"
+> (-x)^2
+x^2 [1]
+"#
+        );
+    }
+
+    #[test]
+    fn bug_abs_numeric_not_evaluated() {
+        session!(
+            r#"
+> abs(-3)
+3 [1]
+"#
+        );
+    }
+
+    #[test]
+    fn bug_floor_numeric_not_evaluated() {
+        session!(
+            r#"
+> floor(3/2)
+1 [1]
+"#
+        );
+    }
+
+    #[test]
+    fn bug_ceil_numeric_not_evaluated() {
+        session!(
+            r#"
+> ceil(3/2)
+2 [1]
+"#
+        );
+    }
+
+    #[test]
+    fn bug_unit_quantity_multiplication() {
+        session!(
+            r#"
+> 1 [kg] * 10 [m/s^2]
+10 [N]
+"#
+        );
     }
 
     // ── e2e session tests ─────────────────────────────────────────

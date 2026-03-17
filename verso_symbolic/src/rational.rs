@@ -13,7 +13,7 @@ fn gcd(a: i64, b: i64) -> i64 {
 
 /// Exact rational number with i64 numerator and denominator.
 /// Invariants: den > 0, gcd(|num|, den) == 1, zero is 0/1.
-#[derive(Clone, Copy, Debug, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Rational {
     num: i64,
     den: i64,
@@ -107,13 +107,6 @@ impl Rational {
         );
         let q = (*self / modulus).floor();
         *self - Rational::from_i64(q) * modulus
-    }
-}
-
-impl PartialEq for Rational {
-    fn eq(&self, other: &Self) -> bool {
-        // Both are always GCD-reduced with positive denominator
-        self.num == other.num && self.den == other.den
     }
 }
 
