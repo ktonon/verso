@@ -404,7 +404,7 @@ fn cmd_build(file: &str, output: Option<&str>) {
 }
 
 struct WatchTask {
-    /// Canonical paths this task depends on (the input file + all its :includes)
+    /// Canonical paths this task depends on (the input file + all its !includes)
     deps: Vec<std::path::PathBuf>,
     /// Callback to run when a dependency changes
     run: Box<dyn Fn()>,

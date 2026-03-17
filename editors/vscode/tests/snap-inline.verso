@@ -8,7 +8,7 @@ A cross-ref ref`earth-and-the-solar-system|Hydrogen creation` here.
 A plain ref ref`some-label` here.
 Visit url`https://example.com|Example Site` now.
 ## Absolute Time label`absolute-time`
-:var v [L T^-1]
-:var F [M L T^-2]
-:const c = 3*10^8
-:func KE(m, v) = (1/2)*m*v^2
+!var v [L T^-1]
+!var F [M L T^-2]
+!const c = 3*10^8
+!func KE(m, v) = (1/2)*m*v^2

@@ -64,35 +64,35 @@ fn run<B: burn::prelude::Backend>(args: &Args) {
                 if input.is_empty() {
                     continue;
                 }
-                if input == ":q" || input == ":quit" || input == ":exit" {
+                if input == "!q" || input == "!quit" || input == "!exit" {
                     break;
                 }
-                if input == ":trace" {
+                if input == "!trace" {
                     show_trace = !show_trace;
                     println!("trace: {}\n", if show_trace { "on" } else { "off" });
                     continue;
                 }
-                if input == ":debug" {
+                if input == "!debug" {
                     show_debug = !show_debug;
                     println!("debug: {}\n", if show_debug { "on" } else { "off" });
                     continue;
                 }
-                if input == ":ml" {
+                if input == "!ml" {
                     mode = Mode::MlOnly;
                     println!("mode: ml only\n");
                     continue;
                 }
-                if input == ":beam" {
+                if input == "!beam" {
                     mode = Mode::BeamOnly;
                     println!("mode: beam search only\n");
                     continue;
                 }
-                if input == ":hybrid" {
+                if input == "!hybrid" {
                     mode = Mode::Hybrid;
                     println!("mode: hybrid (ml + beam fallback)\n");
                     continue;
                 }
-                if input == ":history" || input == ":hist" {
+                if input == "!history" || input == "!hist" {
                     history_mode = match history_mode {
                         HistoryMode::Results => HistoryMode::Inputs,
                         HistoryMode::Inputs => HistoryMode::Results,

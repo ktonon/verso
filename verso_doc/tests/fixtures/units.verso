@@ -2,11 +2,11 @@
 
 Verifiable claims with unit-annotated quantities and inline dimensions.
 
-:var m [M]
-:var v [L T^-1]
+!var m [M]
+!var v [L T^-1]
 
-:claim dim_commutative
+!claim dim_commutative
   m * v = v * m
 
-:claim unit_conversion
+!claim unit_conversion
   1000 [m] = 1 [km]

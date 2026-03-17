@@ -2,16 +2,16 @@
 
 Algebraic identities with dimension annotations.
 
-:var m [M]
-:var v [L T^-1]
-:var x [L]
-:var t [T]
+!var m [M]
+!var v [L T^-1]
+!var x [L]
+!var t [T]
 
-:claim ke_commutative
+!claim ke_commutative
   (1/2) * m * v * v = (1/2) * m * v^2
 
-:claim vel_commutative
+!claim vel_commutative
   m * v = v * m
 
-:claim displacement_algebra
+!claim displacement_algebra
   x / t * t = x

@@ -22,39 +22,39 @@ pub enum Block {
     Claim(Claim),
     /// A proof chain for a named claim.
     Proof(Proof),
-    /// A variable declaration with dimensions: `:var varname [dims]`
+    /// A variable declaration with dimensions: `!var varname [dims]`
     Var(VarDecl),
-    /// A constant declaration: `:const name = expr`
+    /// A constant declaration: `!const name = expr`
     Const(ConstDecl),
-    /// A function declaration: `:func name(params) = expr`
+    /// A function declaration: `!func name(params) = expr`
     Func(FuncDecl),
     /// A list (bullet or numbered).
     List(List),
     /// A displayed math block (not verified).
     MathBlock(MathBlock),
-    /// A bibliography declaration: `:bibliography refs.bib`
+    /// A bibliography declaration: `!bibliography refs.bib`
     Bibliography { path: String, span: Span },
-    /// A theorem-like environment: `:theorem`, `:definition`, etc.
+    /// A theorem-like environment: `!theorem`, `!definition`, etc.
     Environment(Environment),
     /// A block quote: lines starting with `> `.
     BlockQuote(Vec<ProseFragment>),
-    /// Document title: `:title text` or multiline with indented body
+    /// Document title: `!title text` or multiline with indented body
     Title(Vec<String>),
-    /// Document author: `:author name`
+    /// Document author: `!author name`
     Author(String),
-    /// Document date: `:date YYYY-MM-DD` or `:date` for today
+    /// Document date: `!date YYYY-MM-DD` or `!date` for today
     Date(Option<String>),
-    /// Document abstract: `:abstract` with indented body
+    /// Document abstract: `!abstract` with indented body
     Abstract(Vec<ProseFragment>),
-    /// A figure: `:figure path` with optional caption, label, width
+    /// A figure: `!figure path` with optional caption, label, width
     Figure(Figure),
-    /// A table: `:table Title` with pipe-delimited rows
+    /// A table: `!table Title` with pipe-delimited rows
     Table(Table),
-    /// Centered block: `:center` with indented body
+    /// Centered block: `!center` with indented body
     Center(Vec<ProseFragment>),
-    /// Page break: `:pagebreak`
+    /// Page break: `!pagebreak`
     PageBreak,
-    /// Table of contents: `:toc`
+    /// Table of contents: `!toc`
     Toc,
 }
 
@@ -188,7 +188,7 @@ pub struct ProofStep {
     pub span: Span,
 }
 
-/// A variable declaration: `:var varname [M L T^-2]`
+/// A variable declaration: `!var varname [M L T^-2]`
 #[derive(Debug)]
 pub struct VarDecl {
     pub var_name: String,
@@ -196,7 +196,7 @@ pub struct VarDecl {
     pub span: Span,
 }
 
-/// A constant declaration: `:const name = value_expr`
+/// A constant declaration: `!const name = value_expr`
 #[derive(Debug)]
 pub struct ConstDecl {
     pub name: String,
@@ -204,7 +204,7 @@ pub struct ConstDecl {
     pub span: Span,
 }
 
-/// A function declaration: `:func name(params) = body_expr`
+/// A function declaration: `!func name(params) = body_expr`
 #[derive(Debug)]
 pub struct FuncDecl {
     pub name: String,

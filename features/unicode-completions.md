@@ -15,7 +15,7 @@ The user types `:name:` (e.g., `:mu:`, `:partial:`, `:nabla:`) and the text is r
 
 ### No conflict with REPL commands
 
-REPL commands (`:var`, `:const`, `:func`, `:reset`, etc.) use a single colon at the start of the line. Unicode triggers use *paired* colons (`:name:`), so there is no ambiguity. (Once bang-directives lands, REPL commands will use `!` and even the theoretical conflict disappears.)
+REPL commands and document directives use `!` as their prefix (`!var`, `!const`, `!claim`, etc.). Unicode triggers use *paired* colons (`:name:`). There is no ambiguity.
 
 ### LaTeX transpilation
 

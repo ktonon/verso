@@ -40,11 +40,11 @@ and front matter.
 Single-line title:
 
 ```
-:title Quantum Corrections to the Classical Limit
-:author Alice Smith
-:author Bob Jones
-:date 2026-03-13
-:abstract
+!title Quantum Corrections to the Classical Limit
+!author Alice Smith
+!author Bob Jones
+!date 2026-03-13
+!abstract
   We present a novel approach to computing quantum corrections
   in the semiclassical regime.
 ```
@@ -52,24 +52,24 @@ Single-line title:
 Multiline title (indented body, each line becomes a line break in the title):
 
 ```
-:title
+!title
 	Quantum Corrections to the Classical Limit:
 	A Novel Approach
-:author Alice Smith
-:date
+!author Alice Smith
+!date
 ```
 
 | Directive | LaTeX output | Notes |
 |-----------|-------------|-------|
-| `:title text` | `\title{text}` | Single-line title |
-| `:title` + indented body | `\title{line1 \\\\ line2}` | Multiline title |
-| `:author name` | `\author{name}` | Multiple authors joined with `\and` |
-| `:date YYYY-MM-DD` | `\date{March 14, 2026}` | ISO dates are formatted automatically |
-| `:date` | `\date{\today}` | No value → today's date |
-| `:abstract` | `\begin{abstract}...\end{abstract}` | Indented body, supports inline formatting |
+| `!title text` | `\title{text}` | Single-line title |
+| `!title` + indented body | `\title{line1 \\\\ line2}` | Multiline title |
+| `!author name` | `\author{name}` | Multiple authors joined with `\and` |
+| `!date YYYY-MM-DD` | `\date{March 14, 2026}` | ISO dates are formatted automatically |
+| `!date` | `\date{\today}` | No value → today's date |
+| `!abstract` | `\begin{abstract}...\end{abstract}` | Indented body, supports inline formatting |
 
-When any of `:title`, `:author`, or `:date` is present, `\maketitle` is emitted
-after `\begin{document}`. If `:date` is omitted entirely, LaTeX defaults to today's date.
+When any of `!title`, `!author`, or `!date` is present, `\maketitle` is emitted
+after `\begin{document}`. If `!date` is omitted entirely, LaTeX defaults to today's date.
 
 ---
 
@@ -220,7 +220,7 @@ A claim is a named equation that Verso verifies. Verification checks that
 simplification doesn't reach zero.
 
 ```
-:claim pythagorean
+!claim pythagorean
   sin(x)^2 + cos(x)^2 = 1
 ```
 
@@ -237,7 +237,7 @@ A proof is a step-by-step derivation that references a claim. Each adjacent pair
 of steps is verified. Justifications are optional annotations after `;`.
 
 ```
-:proof pythagorean
+!proof pythagorean
   sin(x)^2 + cos(x)^2
   = 1 - cos(x)^2 + cos(x)^2      ; sin_sq
   = 1                              ; add_cancel
@@ -258,9 +258,9 @@ Declare a variable with its physical dimensions. When present, Verso checks that
 sides of every claim have matching dimensions.
 
 ```
-:var v [L T^-1]
-:var m [M]
-:var F [M L T^-2]
+!var v [L T^-1]
+!var m [M]
+!var F [M L T^-2]
 ```
 
 - Bracket notation: base dimensions separated by spaces, exponents via `^`.
@@ -276,9 +276,9 @@ sides of every claim have matching dimensions.
 Bind a name to a fixed value. The value is substituted wherever the name appears in subsequent claims and proofs.
 
 ```
-:const c = 3*10^8
-:const G = 6.674*10^-11
-:const pi_approx = 355/113
+!const c = 3*10^8
+!const G = 6.674*10^-11
+!const pi_approx = 355/113
 ```
 
 - Constants carry dimensions implicitly from their value expression.
@@ -291,9 +291,9 @@ Bind a name to a fixed value. The value is substituted wherever the name appears
 Define a named parameterized expression that expands at use sites.
 
 ```
-:func KE(m, v) = (1/2)*m*v^2
-:func PE(m, h) = m*g*h
-:func gamma(v) = 1/sqrt(1 - v^2/c^2)
+!func KE(m, v) = (1/2)*m*v^2
+!func PE(m, h) = m*g*h
+!func gamma(v) = 1/sqrt(1 - v^2/c^2)
 ```
 
 - Parameters are positional. The body can reference previously declared constants and variables.
@@ -315,7 +315,7 @@ p = mv
 
 - Each line is a separate expression, parsed by verso_symbolic.
 - Compiles to a LaTeX `gather*` (un-numbered) or `align*` environment.
-- Not verified — use `:claim` for equations that should be checked.
+- Not verified — use `!claim` for equations that should be checked.
 
 A `math` block with alignment (using `&`) compiles to `align*`:
 
@@ -366,7 +366,7 @@ Inline formatting (bold, italic, math, citations) works inside list items.
 #### Declaring a bibliography
 
 ```
-:bibliography refs.bib
+!bibliography refs.bib
 ```
 
 Points to a BibTeX file. Compiles to `\bibliography{refs}` with
@@ -387,7 +387,7 @@ Compiles to `\cite{einstein1905}`. Multiple keys: `cite`einstein1905,dirac1928``
 Include images with optional captions, labels, and width control:
 
 ```
-:figure plots/energy-levels.pdf
+!figure plots/energy-levels.pdf
   caption: Energy levels of the hydrogen atom.
   label: fig-energy-levels
   width: 0.8
@@ -407,7 +407,7 @@ Compiles to `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
 ### Table of contents
 
 ```
-:toc
+!toc
 ```
 
 Compiles to `\tableofcontents`.
@@ -417,7 +417,7 @@ Compiles to `\tableofcontents`.
 ### Page breaks
 
 ```
-:pagebreak
+!pagebreak
 ```
 
 Compiles to `\newpage`.
@@ -429,8 +429,8 @@ Compiles to `\newpage`.
 Split a document across multiple `.verso` files:
 
 ```
-:include chapters/introduction.verso
-:include chapters/methods.verso
+!include chapters/introduction.verso
+!include chapters/methods.verso
 ```
 
 - Included files are parsed and inlined at the include point.
@@ -458,10 +458,10 @@ Documents do not need to specify packages — verso chooses reasonable defaults.
 
 ### Tables
 
-Tables use the `:table` directive with pipe-delimited rows:
+Tables use the `!table` directive with pipe-delimited rows:
 
 ```
-:table Experimental Results
+!table Experimental Results
   | Parameter | Value | Unit |
   |-----------|-------|------|
   | Mass      | 1.67  | kg   |
@@ -473,7 +473,7 @@ Tables use the `:table` directive with pipe-delimited rows:
 - Column alignment inferred from separator: `:---` left, `:---:` center, `---:` right. Default is left.
 - Cells support inline formatting (math, bold, etc.).
 - Optional `label:` line (prefixed with `tab:` in LaTeX).
-- Optional title after `:table` becomes `\caption{}`.
+- Optional title after `!table` becomes `\caption{}`.
 - Compiles to `\begin{table}[htbp]` with `tabular`.
 
 ---
@@ -482,15 +482,15 @@ Tables use the `:table` directive with pipe-delimited rows:
 For theorems, lemmas, definitions, corollaries, and remarks:
 
 ```
-:theorem Noether's Theorem
+!theorem Noether's Theorem
   Every differentiable symmetry of the action of a physical system
   has a corresponding conservation law.
 
-:definition Conservative Force
+!definition Conservative Force
   A force is conservative if the work done moving a particle between
   two points is independent of the path taken.
 
-:lemma orthogonality
+!lemma orthogonality
   If math`\langle u, v \rangle = 0`, then math`u` and math`v` are
   linearly independent.
 ```
@@ -506,7 +506,7 @@ appropriate `\newtheorem` declarations in the preamble.
 ### Centered blocks
 
 ```
-:center
+!center
 	url`https://github.com/example/repo`
 ```
 
@@ -657,7 +657,7 @@ Dimensional analysis uses the unit's implied dimension:
 
 - Added `ProseFragment::Cite(Vec<String>)` and `Block::Bibliography { path, span }` to AST
 - `cite` added to `find_tagged_backtick` tag list; comma-separated keys parsed
-- `:bibliography path.bib` directive parsed at block level
+- `!bibliography path.bib` directive parsed at block level
 - Bibliography output placed at end of document (before `\end{document}`)
 - `.bib` extension stripped from path in `\bibliography{}` output
 - 6 new tests (4 parse, 2 compile)
@@ -665,7 +665,7 @@ Dimensional analysis uses the unit's implied dimension:
 ### Phase 5: Theorem-like environments (completed)
 
 - Added `Environment { kind, title, body, span }` and `EnvKind` enum (6 variants) to AST
-- Parser detects `:theorem`, `:lemma`, `:definition`, `:corollary`, `:remark`, `:example` directives
+- Parser detects `!theorem`, `!lemma`, `!definition`, `!corollary`, `!remark`, `!example` directives
 - Title is optional text after the directive keyword; body is indented continuation lines parsed for inline fragments
 - `compile_tex.rs` collects used `EnvKind`s and emits `\newtheorem` declarations in the preamble (once per kind)
 - Environments compile to `\begin{theorem}[Title]` ... `\end{theorem}` (or without `[Title]` when none given)
@@ -769,26 +769,26 @@ Add fenced `math` blocks for displayed equations that don't need verification.
 
 ### Phase 4: Citations and bibliography (M4)
 
-Add `cite` inline tag and `:bibliography` directive.
+Add `cite` inline tag and `!bibliography` directive.
 
 **Key files:**
 - `verso_doc/src/ast.rs` — add `ProseFragment::Cite(Vec<String>)` (multiple keys),
   `Block::Bibliography { path: String }`
 - `verso_doc/src/parse.rs` — add `"cite"` to the tag list in `find_tagged_backtick`;
-  parse comma-separated keys; detect `:bibliography` directive
+  parse comma-separated keys; detect `!bibliography` directive
 - `verso_doc/src/compile_tex.rs` — `Cite` → `\cite{key1,key2}`;
   `Bibliography` → `\bibliographystyle{plain}\n\bibliography{path}`
   (strip `.bib` extension from path)
 
 **Design decisions:**
 - No built-in BibTeX validation — that's `pdflatex`/`bibtex`'s job
-- `:bibliography` can appear anywhere but compiles at end of document (before `\end{document}`)
-- Multiple `:bibliography` directives are an error
+- `!bibliography` can appear anywhere but compiles at end of document (before `\end{document}`)
+- Multiple `!bibliography` directives are an error
 
 **Tests:**
 - Parse `cite`key`` → `Cite(["key"])`
 - Parse `cite`a,b,c`` → `Cite(["a", "b", "c"])`
-- Parse `:bibliography refs.bib` → `Bibliography { path: "refs.bib" }`
+- Parse `!bibliography refs.bib` → `Bibliography { path: "refs.bib" }`
 - Compile cite to `\cite{key}`
 - Compile bibliography to `\bibliography{refs}`
 
@@ -798,12 +798,12 @@ Add `cite` inline tag and `:bibliography` directive.
 
 ### Phase 5: Theorem-like environments (M5)
 
-Add `:theorem`, `:definition`, `:lemma`, `:corollary`, `:remark`, `:example` directives.
+Add `!theorem`, `!definition`, `!lemma`, `!corollary`, `!remark`, `!example` directives.
 
 **Key files:**
 - `verso_doc/src/ast.rs` — add `Block::Environment { kind: EnvKind, title: Option<String>, body: Vec<ProseFragment> }`
   and `EnvKind` enum
-- `verso_doc/src/parse.rs` — detect `:theorem`, `:definition`, etc. at block level;
+- `verso_doc/src/parse.rs` — detect `!theorem`, `!definition`, etc. at block level;
   title is the rest of the directive line; body is indented continuation lines
   (parsed for inline fragments)
 - `verso_doc/src/compile_tex.rs` — emit `\newtheorem` declarations in preamble (once per
@@ -812,12 +812,12 @@ Add `:theorem`, `:definition`, `:lemma`, `:corollary`, `:remark`, `:example` dir
 **Design decisions:**
 - Body supports full inline formatting (math, bold, italic, cite)
 - Theorems are not verified — they're prose containers, not claims
-- If a theorem contains a verifiable statement, the author should also write a `:claim`
+- If a theorem contains a verifiable statement, the author should also write a `!claim`
 - Numbering handled by LaTeX's `\newtheorem` counter
 
 **Tests:**
-- Parse `:theorem Name` with indented body
-- Parse `:definition` without title
+- Parse `!theorem Name` with indented body
+- Parse `!definition` without title
 - Body contains inline math
 - Compile to `\begin{theorem}[Name]` with `\newtheorem` in preamble
 - Multiple environment types in one document

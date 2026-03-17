@@ -80,7 +80,7 @@
     },
 
     "directive-claim": {
-      "begin": "^(:claim)\\s+(\\S+)\\s*$",
+      "begin": "^(!claim)\\s+(\\S+)\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.claim.verso" },
@@ -102,7 +102,7 @@
     },
 
     "directive-proof": {
-      "begin": "^(:proof)\\s+(\\S+)\\s*$",
+      "begin": "^(!proof)\\s+(\\S+)\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.proof.verso" },
@@ -135,7 +135,7 @@
     },
 
     "directive-var": {
-      "match": "^(:var)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+      "match": "^(!var)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
       "captures": {
         "1": { "name": "keyword.control.directive.var.verso" },
         "2": { "name": "variable.parameter.var.verso" },
@@ -144,7 +144,7 @@
     },
 
     "directive-const": {
-      "match": "^(:const)\\s+(\\S+)\\s*(=)\\s*(.+)$",
+      "match": "^(!const)\\s+(\\S+)\\s*(=)\\s*(.+)$",
       "captures": {
         "1": { "name": "keyword.control.directive.const.verso" },
         "2": { "name": "variable.parameter.const.verso" },
@@ -154,7 +154,7 @@
     },
 
     "directive-func": {
-      "match": "^(:func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(=)\\s*(.+)$",
+      "match": "^(!func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(=)\\s*(.+)$",
       "captures": {
         "1": { "name": "keyword.control.directive.func.verso" },
         "2": { "name": "entity.name.function.verso" },
@@ -165,7 +165,7 @@
     },
 
     "directive-bibliography": {
-      "match": "^(:bibliography)\\s+(.+)$",
+      "match": "^(!bibliography)\\s+(.+)$",
       "captures": {
         "1": { "name": "keyword.control.directive.bibliography.verso" },
         "2": { "name": "string.unquoted.path.verso" }
@@ -173,7 +173,7 @@
     },
 
     "directive-figure": {
-      "begin": "^(:figure)\\s+(.+)$",
+      "begin": "^(!figure)\\s+(.+)$",
       "end": "^(?!\\s)|^\\s*$",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.figure.verso" },
@@ -193,7 +193,7 @@
     },
 
     "directive-table": {
-      "begin": "^(:table)(?:\\s+(.+))?\\s*$",
+      "begin": "^(!table)(?:\\s+(.+))?\\s*$",
       "end": "^(?!\\s)|^\\s*$",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.table.verso" },
@@ -217,28 +217,28 @@
     },
 
     "directive-toc": {
-      "match": "^(:toc)\\s*$",
+      "match": "^(!toc)\\s*$",
       "captures": {
         "1": { "name": "keyword.control.directive.toc.verso" }
       }
     },
 
     "directive-center": {
-      "match": "^(:center)\\s*$",
+      "match": "^(!center)\\s*$",
       "captures": {
         "1": { "name": "keyword.control.directive.center.verso" }
       }
     },
 
     "directive-pagebreak": {
-      "match": "^(:pagebreak)\\s*$",
+      "match": "^(!pagebreak)\\s*$",
       "captures": {
         "1": { "name": "keyword.control.directive.pagebreak.verso" }
       }
     },
 
     "directive-include": {
-      "match": "^(:include)\\s+(.+)$",
+      "match": "^(!include)\\s+(.+)$",
       "captures": {
         "1": { "name": "keyword.control.directive.include.verso" },
         "2": { "name": "string.unquoted.path.verso" }
@@ -248,14 +248,14 @@
     "directive-metadata": {
       "patterns": [
         {
-          "match": "^(:title)\\s+(.+)$",
+          "match": "^(!title)\\s+(.+)$",
           "captures": {
             "1": { "name": "keyword.control.directive.title.verso" },
             "2": { "name": "entity.name.section.title.verso" }
           }
         },
         {
-          "begin": "^(:title)\\s*$",
+          "begin": "^(!title)\\s*$",
           "end": "^(?!\\s|$)",
           "beginCaptures": {
             "1": { "name": "keyword.control.directive.title.verso" }
@@ -271,21 +271,21 @@
           ]
         },
         {
-          "match": "^(:author)\\s+(.+)$",
+          "match": "^(!author)\\s+(.+)$",
           "captures": {
             "1": { "name": "keyword.control.directive.author.verso" },
             "2": { "name": "string.other.author.verso" }
           }
         },
         {
-          "match": "^(:date)\\s*(.*)$",
+          "match": "^(!date)\\s*(.*)$",
           "captures": {
             "1": { "name": "keyword.control.directive.date.verso" },
             "2": { "name": "constant.other.date.verso" }
           }
         },
         {
-          "begin": "^(:abstract)\\s*$",
+          "begin": "^(!abstract)\\s*$",
           "end": "^(?!\\s)|^\\s*$",
           "beginCaptures": {
             "1": { "name": "keyword.control.directive.abstract.verso" }
@@ -299,7 +299,7 @@
     },
 
     "directive-environment": {
-      "begin": "^(:(?:theorem|lemma|definition|corollary|remark|example))(?:\\s+(.+))?\\s*$",
+      "begin": "^(!(?:theorem|lemma|definition|corollary|remark|example))(?:\\s+(.+))?\\s*$",
       "end": "^(?!\\s)|^\\s*$",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.environment.verso" },

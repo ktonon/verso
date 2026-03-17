@@ -29,25 +29,25 @@ impl Session {
     /// Returns `None` for quit commands and empty input.
     pub fn eval(&mut self, input: &str) -> Option<String> {
         let input = input.trim();
-        if input.is_empty() || input == ":q" || input == ":quit" || input == ":exit" {
+        if input.is_empty() || input == "!q" || input == "!quit" || input == "!exit" {
             return None;
         }
-        if input == ":trace" {
+        if input == "!trace" {
             self.show_trace = !self.show_trace;
             return Some(format!(
                 "trace: {}",
                 if self.show_trace { "on" } else { "off" }
             ));
         }
-        if input == ":reset" {
+        if input == "!reset" {
             self.ctx = Context::new();
             self.claim_counter = 0;
             return Some("context reset".to_string());
         }
 
-        // :var declaration
-        if input.starts_with(":var") {
-            let rest = input[":var".len()..].trim();
+        // !var declaration
+        if input.starts_with("!var") {
+            let rest = input["!var".len()..].trim();
             return Some(match parse_var_decl(rest) {
                 Ok((name, dim)) => {
                     self.ctx.declare_var(&name, Some(dim.clone()));
@@ -57,9 +57,9 @@ impl Session {
             });
         }
 
-        // :const declaration
-        if input.starts_with(":const") {
-            let rest = input[":const".len()..].trim();
+        // !const declaration
+        if input.starts_with("!const") {
+            let rest = input["!const".len()..].trim();
             return Some(match parse_const_decl(rest) {
                 Ok((name, value)) => {
                     let (stripped, inline_dims) = match self.ctx.push_inline_dims(&value) {
@@ -91,9 +91,9 @@ impl Session {
             });
         }
 
-        // :func declaration
-        if input.starts_with(":func") {
-            let rest = input[":func".len()..].trim();
+        // !func declaration
+        if input.starts_with("!func") {
+            let rest = input["!func".len()..].trim();
             return Some(match parse_func_decl(rest) {
                 Ok((name, params, body)) => {
                     let out = format!(
@@ -275,10 +275,10 @@ pub fn run() -> Result<(), ReadlineError> {
                 if input.is_empty() {
                     continue;
                 }
-                if input == ":q" || input == ":quit" || input == ":exit" {
+                if input == "!q" || input == "!quit" || input == "!exit" {
                     break;
                 }
-                if input == ":history" || input == ":hist" {
+                if input == "!history" || input == "!hist" {
                     history_mode = match history_mode {
                         HistoryMode::Results => HistoryMode::Inputs,
                         HistoryMode::Inputs => HistoryMode::Results,
@@ -297,7 +297,7 @@ pub fn run() -> Result<(), ReadlineError> {
                 }
 
                 // Track input history for non-command lines
-                if !input.starts_with(':') {
+                if !input.starts_with('!') {
                     record_input(&mut input_history, &mut rl, history_mode, input);
                 }
 
@@ -305,7 +305,7 @@ pub fn run() -> Result<(), ReadlineError> {
                     Some(output) => {
                         println!("{}\n", output);
                         // Record simplified result for result history (expression lines only)
-                        if !input.starts_with(':') && !input.contains('=') {
+                        if !input.starts_with('!') && !input.contains('=') {
                             if let Ok(expr) = parse_expr(input) {
                                 if let Ok((expr, inline_dims)) = session.ctx.push_inline_dims(&expr)
                                 {
@@ -339,10 +339,10 @@ pub fn run() -> Result<(), ReadlineError> {
 fn parse_var_decl(rest: &str) -> Result<(String, Dimension), String> {
     let bracket_pos = rest
         .find('[')
-        .ok_or(":var requires name [dims], e.g. :var v [L T^-1]")?;
+        .ok_or("!var requires name [dims], e.g. !var v [L T^-1]")?;
     let name = rest[..bracket_pos].trim().to_string();
     if name.is_empty() {
-        return Err(":var requires a variable name".into());
+        return Err("!var requires a variable name".into());
     }
     let dim_str = rest[bracket_pos..].trim();
     let dimension = Dimension::parse(dim_str).map_err(|e| format!("{}", e))?;
@@ -352,10 +352,10 @@ fn parse_var_decl(rest: &str) -> Result<(String, Dimension), String> {
 fn parse_const_decl(rest: &str) -> Result<(String, Expr), String> {
     let eq_pos = rest
         .find('=')
-        .ok_or(":const requires name = expr, e.g. :const c = 3*10^8")?;
+        .ok_or("!const requires name = expr, e.g. !const c = 3*10^8")?;
     let name = rest[..eq_pos].trim().to_string();
     if name.is_empty() {
-        return Err(":const requires a name".into());
+        return Err("!const requires a name".into());
     }
     let value_str = rest[eq_pos + 1..].trim();
     let value = parse_expr(value_str).map_err(|e| format!("{:?}", e))?;
@@ -363,24 +363,24 @@ fn parse_const_decl(rest: &str) -> Result<(String, Expr), String> {
 }
 
 fn parse_func_decl(rest: &str) -> Result<(String, Vec<String>, Expr), String> {
-    let lparen = rest.find('(').ok_or(":func requires name(params) = expr")?;
+    let lparen = rest.find('(').ok_or("!func requires name(params) = expr")?;
     let name = rest[..lparen].trim().to_string();
     if name.is_empty() {
-        return Err(":func requires a name".into());
+        return Err("!func requires a name".into());
     }
-    let rparen = rest.find(')').ok_or(":func missing closing parenthesis")?;
+    let rparen = rest.find(')').ok_or("!func missing closing parenthesis")?;
     let params: Vec<String> = rest[lparen + 1..rparen]
         .split(',')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect();
     if params.is_empty() {
-        return Err(":func requires at least one parameter".into());
+        return Err("!func requires at least one parameter".into());
     }
     let after = rest[rparen + 1..].trim();
     let body_str = after
         .strip_prefix('=')
-        .ok_or(":func requires = after parameters")?
+        .ok_or("!func requires = after parameters")?
         .trim();
     let body = parse_expr(body_str).map_err(|e| format!("{:?}", e))?;
     Ok((name, params, body))
@@ -650,7 +650,7 @@ x [1]
     fn session_var_declaration_persists() {
         session!(
             r#"
-> :var v [L T^-1]
+> !var v [L T^-1]
 v: [L T^-1]
 
 > v
@@ -663,7 +663,7 @@ v [L T^-1]
     fn session_const_substitution() {
         session!(
             r#"
-> :const c = 3
+> !const c = 3
 c = 3 [1]
 
 > c + 1
@@ -676,7 +676,7 @@ c = 3 [1]
     fn session_const_with_units() {
         session!(
             r#"
-> :const g = 3*10^8 [m/s]
+> !const g = 3*10^8 [m/s]
 g = 300000000 [m/s]
 "#
         );
@@ -722,7 +722,7 @@ a [1]
     fn session_var_dims_persist() {
         session!(
             r#"
-> :var a [L]
+> !var a [L]
 a: [L]
 
 > a
@@ -738,7 +738,7 @@ a [L]
     fn session_var_dims_prevents_inline_override() {
         session!(
             r#"
-> :var a [L]
+> !var a [L]
 a: [L]
 
 > a [T]
@@ -764,10 +764,10 @@ false  residual: 2b
     fn session_reset_clears_context() {
         session!(
             r#"
-> :var v [L T^-1]
+> !var v [L T^-1]
 v: [L T^-1]
 
-> :reset
+> !reset
 context reset
 
 > v
@@ -780,7 +780,7 @@ v [1]
     fn session_func_declaration_and_use() {
         session!(
             r#"
-> :func sq(x) = x^2 + 1
+> !func sq(x) = x^2 + 1
 sq(x) = x^2 + 1
 
 > sq(3)
@@ -806,7 +806,7 @@ true
     fn session_inline_dim_cannot_override_declared() {
         session!(
             r#"
-> :var a [T]
+> !var a [T]
 a: [T]
 
 > a [L]
@@ -841,14 +841,14 @@ x [1]
     fn parse_transcript_no_output_skips_assertion() {
         let pairs = parse_transcript(
             r#"
-> :var v [L]
+> !var v [L]
 > v
 v [L]
 "#,
         );
         assert_eq!(
             pairs,
-            vec![(":var v [L]", String::new()), ("v", "v [L]".to_string()),]
+            vec![("!var v [L]", String::new()), ("v", "v [L]".to_string()),]
         );
     }
 }

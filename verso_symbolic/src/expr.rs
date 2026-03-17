@@ -297,7 +297,7 @@ pub enum FnKind {
     Clamp,
     Exp,
     Ln,
-    /// User-defined function (from `:func` declarations).
+    /// User-defined function (from `!func` declarations).
     Custom(String),
 }
 

@@ -1,7 +1,7 @@
 # Dimension Mismatch
 
-:var x [L]
-:var t [T]
+!var x [L]
+!var t [T]
 
-:claim wrong_units
+!claim wrong_units
   x = t

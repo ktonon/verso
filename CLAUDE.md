@@ -89,12 +89,12 @@ npm run repl
 ```
 
 Commands:
-- `:trace` - Toggle step-by-step simplification trace
-- `:ml` - ML only mode (no beam search fallback)
-- `:beam` - Beam search only mode
-- `:hybrid` - ML with beam search fallback (default)
-- `:history` - Toggle between input/result history
-- `:q` - Quit
+- `!trace` - Toggle step-by-step simplification trace
+- `!ml` - ML only mode (no beam search fallback)
+- `!beam` - Beam search only mode
+- `!hybrid` - ML with beam search fallback (default)
+- `!history` - Toggle between input/result history
+- `!q` - Quit
 
 ### Beam Search REPL (no ML)
 

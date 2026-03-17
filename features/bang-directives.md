@@ -6,7 +6,7 @@ Change the directive/command prefix from `:` to `!` across verso documents and t
 
 ## Motivation
 
-The `:` character currently serves as the prefix for document directives (`:claim`, `:var`, `:theorem`) and REPL commands (`:var`, `:reset`, `:trace`). Adding unicode completions with the `:name:` trigger creates ambiguity. Switching to `!` resolves this cleanly:
+The `:` character previously served as the prefix for document directives and REPL commands. Switching to `!` frees `:` for unicode completions (`:name:` trigger) and is visually cleaner:
 
 - `!` is visually distinct and easy to spot in prose
 - Rare at the start of a sentence in natural language
@@ -54,7 +54,16 @@ The rename is mechanical (find-replace) but touches many files. Best done in a s
 
 ## Implementation Notes
 
-Not yet started.
+Mechanical find-replace across the entire codebase. Key changes:
+
+- `verso_doc/src/parse.rs`: `starts_with('!')` for directive detection (lines 620, 633, 862). Line 322 `starts_with(':')` preserved — it's table alignment detection, not a directive.
+- `verso_symbolic/src/repl.rs`: All REPL commands (`!q`, `!trace`, `!var`, etc.)
+- `verso_doc/src/ast.rs`, `verify.rs`, `compile_tex.rs`: Doc comments and test strings
+- `verso_symbolic/src/context.rs`, `expr.rs`: Doc comments
+- `verso_doc/src/bin/verso.rs`, `verso_training/src/bin/ml_repl.rs`: CLI help text
+- All `.verso` test fixtures (11 files in `verso_doc/tests/fixtures/`, 2 in `editors/vscode/tests/`)
+- VSCode extension: `tmLanguage.json` regex patterns, `snippets/verso.json` prefixes/bodies, `language-configuration.json` folding markers
+- `CLAUDE.md` and all feature files updated
 
 ## Verification
 

@@ -27,11 +27,11 @@ Add directives for front matter that compile to standard LaTeX title block.
 
 **Syntax:**
 ```
-:title Quantum Corrections to the Classical Limit
-:author Alice Smith
-:author Bob Jones
-:date 2026-03-13
-:abstract
+!title Quantum Corrections to the Classical Limit
+!author Alice Smith
+!author Bob Jones
+!date 2026-03-13
+!abstract
   We present a novel approach to computing quantum corrections
   in the semiclassical regime. Our method yields exact results
   for the harmonic oscillator and perturbative results for
@@ -40,13 +40,13 @@ Add directives for front matter that compile to standard LaTeX title block.
 
 **Key files:**
 - `verso_doc/src/ast.rs` — add `Block::Title`, `Block::Author`, `Block::Date`, `Block::Abstract`
-- `verso_doc/src/parse.rs` — detect `:title`, `:author`, `:date`, `:abstract` directives
+- `verso_doc/src/parse.rs` — detect `!title`, `!author`, `!date`, `!abstract` directives
 - `verso_doc/src/compile_tex.rs` — emit `\title{}`, `\author{}`, `\date{}`, `\begin{abstract}...\end{abstract}`, `\maketitle`
 
 **Design decisions:**
-- Multiple `:author` directives are joined with `\and`
-- `:date` is optional; omitted → `\date{}` (no date)
-- `:abstract` body is indented continuation lines, parsed for inline fragments
+- Multiple `!author` directives are joined with `\and`
+- `!date` is optional; omitted → `\date{}` (no date)
+- `!abstract` body is indented continuation lines, parsed for inline fragments
 - `\maketitle` emitted after `\begin{document}` when any metadata is present
 - Metadata directives can appear anywhere but always compile to the preamble/front matter
 
@@ -65,7 +65,7 @@ Add a figure directive for including images with captions and labels.
 
 **Syntax:**
 ```
-:figure plots/energy-levels.pdf
+!figure plots/energy-levels.pdf
   caption: Energy levels of the hydrogen atom as a function of principal quantum number.
   label: fig-energy-levels
   width: 0.8
@@ -73,7 +73,7 @@ Add a figure directive for including images with captions and labels.
 
 **Key files:**
 - `verso_doc/src/ast.rs` — add `Block::Figure { path, caption, label, width }`
-- `verso_doc/src/parse.rs` — detect `:figure` directive, parse key-value body
+- `verso_doc/src/parse.rs` — detect `!figure` directive, parse key-value body
 - `verso_doc/src/compile_tex.rs` — emit `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
 
 **Design decisions:**
@@ -91,7 +91,7 @@ Add markdown-style table syntax.
 
 **Syntax:**
 ```
-:table Experimental Results
+!table Experimental Results
   | Parameter | Value | Unit |
   |-----------|-------|------|
   | Mass      | 1.67  | kg   |
@@ -101,7 +101,7 @@ Add markdown-style table syntax.
 
 **Key files:**
 - `verso_doc/src/ast.rs` — add `Block::Table { title, rows, label }`
-- `verso_doc/src/parse.rs` — detect `:table` directive, parse `|`-delimited rows
+- `verso_doc/src/parse.rs` — detect `!table` directive, parse `|`-delimited rows
 - `verso_doc/src/compile_tex.rs` — emit `\begin{table}[htbp]` with `tabular`
 
 **Design decisions:**
@@ -126,8 +126,8 @@ Allow splitting a document across multiple `.verso` files.
 
 **Syntax:**
 ```
-:include chapters/introduction.verso
-:include chapters/methods.verso
+!include chapters/introduction.verso
+!include chapters/methods.verso
 ```
 
 **Design decisions:**
@@ -150,11 +150,11 @@ Add warnings when `ref`label`` doesn't match any section or labeled block.
 
 ### M7: Page breaks
 
-Add a simple `:pagebreak` directive.
+Add a simple `!pagebreak` directive.
 
 **Syntax:**
 ```
-:pagebreak
+!pagebreak
 ```
 
 Compiles to `\newpage`.
@@ -166,7 +166,7 @@ Compiles to `\newpage`.
 ### M1: Document metadata (completed)
 
 - Added `Block::Title`, `Block::Author`, `Block::Date`, `Block::Abstract` to AST
-- Parser handles `:title`, `:author`, `:date` as single-line directives; `:abstract` collects indented continuation lines and parses inline fragments
+- Parser handles `!title`, `!author`, `!date` as single-line directives; `!abstract` collects indented continuation lines and parses inline fragments
 - Compiler collects all metadata blocks in a first pass, emits `\title{}`, `\author{}` (joined with `\and`), `\date{}` in preamble
 - `\maketitle` emitted after `\begin{document}` when any metadata present
 - `\begin{abstract}...\end{abstract}` emitted with full inline formatting support
@@ -178,7 +178,7 @@ Compiles to `\newpage`.
 ### M2: Figures (completed)
 
 - Added `Block::Figure(Figure)` with `path`, `caption`, `label`, `width` fields to AST
-- Parser detects `:figure path` directive, collects key-value body lines (`caption:`, `label:`, `width:`)
+- Parser detects `!figure path` directive, collects key-value body lines (`caption:`, `label:`, `width:`)
 - Caption parsed for inline fragments (supports math, bold, etc.)
 - Width defaults to 1.0 (full `\textwidth`)
 - Compiler emits `\begin{figure}[htbp]` with `\centering`, `\includegraphics`, optional `\caption` and `\label{fig:...}`
@@ -190,7 +190,7 @@ Compiles to `\newpage`.
 ### M7: Page breaks (completed)
 
 - Added `Block::PageBreak` to AST
-- Parser detects `:pagebreak` directive
+- Parser detects `!pagebreak` directive
 - Compiler emits `\newpage`
 - VSCode grammar: `directive-pagebreak` rule
 - Tests: 1 parse test + 1 compile test
@@ -205,7 +205,7 @@ Compiles to `\newpage`.
 
 ### M5: Multi-file include (completed)
 
-- Added `resolve_includes()` function: recursively expands `:include path` lines, resolving paths relative to including file
+- Added `resolve_includes()` function: recursively expands `!include path` lines, resolving paths relative to including file
 - Added `parse_document_from_file()` entry point that resolves includes then parses
 - Circular include detection via `seen` path set
 - Updated `verso_compile`, `verso_check`, `verso_watch` binaries to use `parse_document_from_file`
@@ -224,7 +224,7 @@ Compiles to `\newpage`.
 ### M3: Tables (completed)
 
 - Added `Block::Table(Table)` with `title`, `columns`, `header`, `rows`, `label` fields and `ColumnAlign` enum to AST
-- Parser detects `:table` directive, parses pipe-delimited rows with header + separator + data rows
+- Parser detects `!table` directive, parses pipe-delimited rows with header + separator + data rows
 - Separator row determines column alignment (`:---` left, `:---:` center, `---:` right)
 - Cells parsed for inline fragments (supports math, bold, etc.)
 - Optional `label:` key-value line

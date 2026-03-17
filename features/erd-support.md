@@ -29,7 +29,7 @@ Confinement and stability conditions are expressed as inequalities:
 
 - **Inequality claims**: `lhs > rhs`, `lhs >= rhs`, `lhs < rhs`
 - **Verification strategy**: numerical sampling (similar to current equality fallback) — verify the inequality holds across random variable samples in a specified domain
-- **Domain annotations**: ability to constrain variable ranges (e.g., `:var x > 0` or `:var x [0, inf)`)
+- **Domain annotations**: ability to constrain variable ranges (e.g., `!var x > 0` or `!var x [0, inf)`)
 
 ### Priority 3: Vector and tensor operators
 

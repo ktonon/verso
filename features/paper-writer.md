@@ -15,7 +15,7 @@ Six milestones:
 | 1 | Red/green loop: `verso check file.verso` verifies claims | **completed** |
 | 2 | Proof chains + LaTeX compilation | **completed** |
 | 3 | Numerical spot-checks (random-point evaluation) | **completed** |
-| 4 | Dimensional analysis (`:var` declarations, unit checking) | **completed** |
+| 4 | Dimensional analysis (`!var` declarations, unit checking) | **completed** |
 | 5 | Watch mode (`verso watch` re-verifies on save) | **completed** |
 | 6 | VSCode integration (inline diagnostics via LSP) | **completed** |
 
@@ -27,15 +27,15 @@ Six milestones:
 Prose with inline math`sin(x)` and claim references claim`name`.
 Raw LaTeX via tex`\vec{v}`.
 
-:claim name
+!claim name
   lhs = rhs
 
-:proof name
+!proof name
   expr0
   = expr1   ; rule_name
   = expr2   ; rule_name
 
-:var velocity [L T^-1]
+!var velocity [L T^-1]
 ```
 
 ### Key design decisions
@@ -51,13 +51,13 @@ Raw LaTeX via tex`\vec{v}`.
 
 - Created `verso_doc` crate with: `ast.rs`, `parse.rs`, `verify.rs`, `report.rs`
 - CLI binary `verso_check` accepts `.verso` files, reports pass/fail per claim with colored output
-- Line-oriented parser: `#` headings, `:claim name` blocks with indented `lhs = rhs` body, prose
+- Line-oriented parser: `#` headings, `!claim name` blocks with indented `lhs = rhs` body, prose
 - Integration tests with fixtures: `basic_algebra.verso`, `trig_identities.verso`, `should_fail.verso`
 - npm scripts: `npm run check -- file.verso`, `npm test` (full workspace tests + lint)
 
 ### M2 (completed)
 
-- **Proof chains**: `:proof name` blocks with `= expr ; justification` steps. Each adjacent pair verified via `simplify(from - to) == 0`. Named rules tried first via `RuleSet::find_rule`.
+- **Proof chains**: `!proof name` blocks with `= expr ; justification` steps. Each adjacent pair verified via `simplify(from - to) == 0`. Named rules tried first via `RuleSet::find_rule`.
 - **Tagged inline expressions**: `math`expr`` (parsed + ToTex), `tex`raw`` (passthrough), `claim`name`` (eqref).
 - **LaTeX compiler**: `compile_tex.rs` generates full `\documentclass{article}` with `amsmath`, sections, equations with `\label`, proofs as `align*`, inline math, and `\eqref` for claim references.
 - **CLI binary**: `verso_compile` outputs LaTeX to stdout or `-o file.tex`.
@@ -76,8 +76,8 @@ Raw LaTeX via tex`\vec{v}`.
 - **Dimension types**: `dim.rs` with `BaseDim` enum (L, M, T, Θ, I, N, J), `Dimension` type (BTreeMap of exponents), parsing from bracket notation `[M L T^-2]`.
 - **Dimension inference**: `check_dim(expr, env)` propagates dimensions through all Expr variants — multiplication adds exponents, division subtracts, power multiplies, functions require dimensionless args.
 - **Claim checking**: `check_claim_dim(lhs, rhs, env)` with four outcomes: Pass, Skipped (undeclared vars), LhsRhsMismatch, ExprError (e.g., adding length to time).
-- **Integration into verifier**: `VerificationResult.dim_outcome` is `Some` when document has `:var` blocks, `None` otherwise. A claim must pass both symbolic and dimensional checks.
-- **Parser**: `:var varname [dim spec]` blocks parsed as `Block::Var(VarDecl)`.
+- **Integration into verifier**: `VerificationResult.dim_outcome` is `Some` when document has `!var` blocks, `None` otherwise. A claim must pass both symbolic and dimensional checks.
+- **Parser**: `!var varname [dim spec]` blocks parsed as `Block::Var(VarDecl)`.
 - **Report**: dim errors shown in red, skipped in gray.
 - New fixtures: `dimensional.verso` (3 passing claims with dims), `dim_fail.verso` (dimension mismatch).
 

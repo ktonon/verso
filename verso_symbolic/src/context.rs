@@ -171,9 +171,9 @@ impl Context {
     /// Check dimensional consistency of a single expression.
     /// Constants and functions are expanded before checking.
     /// Always attempts inference so that explicit units and constants with
-    /// units are checked even without :var declarations. Suppresses
+    /// units are checked even without !var declarations. Suppresses
     /// UndeclaredVar errors only when the expression has no type information
-    /// at all (no units, no inline dimensions, no :var declarations).
+    /// at all (no units, no inline dimensions, no !var declarations).
     pub fn check_expr_dim(&self, expr: &Expr) -> Option<Result<Dimension, DimError>> {
         let expr = self.apply_consts(expr);
         match check_dim(&expr, &self.dims) {
@@ -185,7 +185,7 @@ impl Context {
 
     /// Infer the explicit type state of an expression for display/consumer use.
     /// Always attempts inference — works with explicit units even without
-    /// :var declarations. Returns None only when elaboration fails.
+    /// !var declarations. Returns None only when elaboration fails.
     pub fn infer_ty(&self, expr: &Expr) -> Option<Ty> {
         let expr = self.elaborate_expr(expr).ok()?;
         Some(expr.ty)
@@ -1074,7 +1074,7 @@ mod tests {
 
     #[test]
     fn infer_type_with_units_no_vars() {
-        // No :var declarations — should still infer type from explicit units
+        // No !var declarations — should still infer type from explicit units
         let ctx = Context::new();
         let expr = parse_expr("3 [m]").unwrap();
         assert_eq!(
@@ -1174,12 +1174,12 @@ mod tests {
 
     #[test]
     fn check_expr_dim_const_with_units_no_vars() {
-        // No :var declarations, but const has units — should still catch mismatch
+        // No !var declarations, but const has units — should still catch mismatch
         let mut ctx = Context::new();
         ctx.declare_const("c", parse_expr("3 [m/s]").unwrap());
         let expr = parse_expr("c + 1").unwrap();
         let result = ctx.check_expr_dim(&expr);
-        assert!(result.is_some(), "should check dims even without :var");
+        assert!(result.is_some(), "should check dims even without !var");
         assert!(
             result.unwrap().is_err(),
             "adding [m/s] to dimensionless should fail"
@@ -1209,7 +1209,7 @@ mod tests {
 
     #[test]
     fn check_expr_dim_undeclared_var_with_units_is_error() {
-        // No :var declarations, but expression mixes units with an implicit [1] var → error
+        // No !var declarations, but expression mixes units with an implicit [1] var → error
         let ctx = Context::new();
         let expr = parse_expr("1 [m] + 2 [km] + x").unwrap();
         let result = ctx.check_expr_dim(&expr);

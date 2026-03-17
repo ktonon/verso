@@ -40,7 +40,7 @@ pub struct Expr {
 Type-related state is currently stored in three places:
 - **Inline on Var**: `dim: Option<Dimension>` — set by parser when `[L T^-1]` follows a variable
 - **In Quantity nodes**: `Unit` carries `dimension: Dimension` and `scale: f64`
-- **In Context.dims**: `DimEnv = HashMap<String, Dimension>` — populated by `:var` declarations
+- **In Context.dims**: `DimEnv = HashMap<String, Dimension>` — populated by `!var` declarations
 
 `check_dim` (context.rs) walks the expression tree bottom-up, checking Var inline dims first, then falling back to `DimEnv` lookups. It returns `DimError` with `Span` for error reporting.
 
@@ -246,7 +246,7 @@ Editor hover/type display is still deferred; the current editor integration only
 ### Open questions
 
 - Should `Ty` use `Unresolved` (simple) or `Symbol(TypeVarId)` (supports unification)? Start with `Unresolved`; add type variables only if unification is needed later.
-- Should user-defined functions (`:func`) carry typed signatures? Not initially — elaborate the body at call sites.
+- Should user-defined functions (`!func`) carry typed signatures? Not initially — elaborate the body at call sites.
 - Should the ML subsystem remain intentionally untyped? Yes initially — use an explicit untyped projection with `strip_types`.
 
 ### Recommended decisions

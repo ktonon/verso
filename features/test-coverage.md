@@ -43,7 +43,7 @@ Overall: **77.9% line coverage** (16,071 lines, 3,549 missed)
 
 | File | Baseline | After | Key Gaps |
 |------|----------|-------|----------|
-| parse.rs | 87% | 88% | ~~Table parsing, URL fragments, error paths, `:include`~~ |
+| parse.rs | 87% | 88% | ~~Table parsing, URL fragments, error paths, `!include`~~ |
 | config.rs | 87% | 93% | ~~File I/O paths, `ConfigError` display~~ |
 
 ## Implementation Notes

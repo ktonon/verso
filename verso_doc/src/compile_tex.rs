@@ -56,7 +56,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
     // Collect metadata
     let mut title_lines: Option<&Vec<String>> = None;
     let mut authors: Vec<&str> = Vec::new();
-    let mut date: Option<Option<&str>> = None; // None = no :date, Some(None) = :date with no value, Some(Some(d)) = :date d
+    let mut date: Option<Option<&str>> = None; // None = no !date, Some(None) = !date with no value, Some(Some(d)) = !date d
     let mut abstract_fragments: Option<&Vec<ProseFragment>> = None;
     for block in &doc.blocks {
         match block {
@@ -118,7 +118,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
     match date {
         Some(Some(d)) => writeln!(out, "\\date{{{}}}", format_date(d)).unwrap(),
         Some(None) => writeln!(out, "\\date{{\\today}}").unwrap(),
-        None => {} // no :date directive — LaTeX defaults to \today
+        None => {} // no !date directive — LaTeX defaults to \today
     }
 
     // Collect used environment kinds for \newtheorem declarations
@@ -724,7 +724,7 @@ mod tests {
 
     #[test]
     fn compile_claim() {
-        let doc = parse_document(":claim foo\n  x + 1 = y").unwrap();
+        let doc = parse_document("!claim foo\n  x + 1 = y").unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\begin{equation} \\label{eq:foo}"));
         assert!(tex.contains("\\end{equation}"));
@@ -733,7 +733,7 @@ mod tests {
     #[test]
     fn compile_proof() {
         let src = "\
-:proof expand
+!proof expand
   x + 0
   = x             ; add_identity
 ";
@@ -750,7 +750,7 @@ mod tests {
         let src = "\
 # Algebra
 
-:claim add_zero
+!claim add_zero
   x + 0 = x
 ";
         let doc = parse_document(src).unwrap();
@@ -804,7 +804,7 @@ mod tests {
 
     #[test]
     fn compile_bibliography() {
-        let doc = parse_document(":bibliography refs.bib").unwrap();
+        let doc = parse_document("!bibliography refs.bib").unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\bibliographystyle{plain}"));
         assert!(tex.contains("\\bibliography{refs}"));
@@ -816,7 +816,7 @@ mod tests {
 
     #[test]
     fn compile_theorem_with_title() {
-        let src = ":theorem Pythagorean\n  For right triangles.";
+        let src = "!theorem Pythagorean\n  For right triangles.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\newtheorem{theorem}{Theorem}"));
@@ -827,7 +827,7 @@ mod tests {
 
     #[test]
     fn compile_definition_no_title() {
-        let src = ":definition\n  A group is a set.";
+        let src = "!definition\n  A group is a set.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\newtheorem{definition}{Definition}"));
@@ -839,7 +839,7 @@ mod tests {
 
     #[test]
     fn compile_newtheorem_only_for_used_kinds() {
-        let src = ":lemma\n  Body A.\n\n:lemma Another\n  Body B.";
+        let src = "!lemma\n  Body A.\n\n!lemma Another\n  Body B.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         // Only one \newtheorem for lemma even though two lemmas exist
@@ -850,7 +850,7 @@ mod tests {
 
     #[test]
     fn compile_amsthm_included() {
-        let src = ":theorem\n  Body.";
+        let src = "!theorem\n  Body.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\usepackage{amsthm}"));
@@ -858,7 +858,7 @@ mod tests {
 
     #[test]
     fn compile_env_with_inline_math() {
-        let src = ":theorem\n  If math`x` is positive then result holds.";
+        let src = "!theorem\n  If math`x` is positive then result holds.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("$x$"));
@@ -868,7 +868,7 @@ mod tests {
 
     #[test]
     fn compile_center() {
-        let doc = parse_document(":center\n\tSome centered text.").unwrap();
+        let doc = parse_document("!center\n\tSome centered text.").unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\begin{center}"));
         assert!(tex.contains("Some centered text."));
@@ -976,7 +976,7 @@ mod tests {
 
     #[test]
     fn compile_table_full() {
-        let src = ":table Results\n  | A | B |\n  |:--|--:|\n  | 1 | 2 |";
+        let src = "!table Results\n  | A | B |\n  |:--|--:|\n  | 1 | 2 |";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\begin{table}[htbp]"));
@@ -989,7 +989,7 @@ mod tests {
 
     #[test]
     fn compile_table_with_label() {
-        let src = ":table T\n  | X |\n  |---|\n  | 1 |\n  label: tab-x";
+        let src = "!table T\n  | X |\n  |---|\n  | 1 |\n  label: tab-x";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\label{tab:tab-x}"));
@@ -997,7 +997,7 @@ mod tests {
 
     #[test]
     fn compile_table_no_title() {
-        let src = ":table\n  | X |\n  |---|\n  | 1 |";
+        let src = "!table\n  | X |\n  |---|\n  | 1 |";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(!tex.contains("\\caption"));
@@ -1007,7 +1007,7 @@ mod tests {
 
     #[test]
     fn compile_figure_full() {
-        let src = ":figure plots/energy.pdf\n  caption: Energy levels.\n  label: fig-energy\n  width: 0.8";
+        let src = "!figure plots/energy.pdf\n  caption: Energy levels.\n  label: fig-energy\n  width: 0.8";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\usepackage{graphicx}"));
@@ -1021,7 +1021,7 @@ mod tests {
 
     #[test]
     fn compile_figure_path_only() {
-        let src = ":figure img.png";
+        let src = "!figure img.png";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\includegraphics[width=1\\textwidth]{img.png}"));
@@ -1033,7 +1033,7 @@ mod tests {
 
     #[test]
     fn compile_full_metadata() {
-        let src = ":title My Paper\n:author Alice\n:author Bob\n:date 2026\n:abstract\n  Some abstract text.\n\nBody here.";
+        let src = "!title My Paper\n!author Alice\n!author Bob\n!date 2026\n!abstract\n  Some abstract text.\n\nBody here.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\title{My Paper}"));
@@ -1047,7 +1047,7 @@ mod tests {
 
     #[test]
     fn compile_multiline_title() {
-        let src = ":title\n\tLine One\n\tLine Two";
+        let src = "!title\n\tLine One\n\tLine Two";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\title{Line One \\\\\nLine Two}"));
@@ -1055,7 +1055,7 @@ mod tests {
 
     #[test]
     fn compile_date_iso_format() {
-        let src = ":title T\n:date 2026-03-14";
+        let src = "!title T\n!date 2026-03-14";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\date{March 14, 2026}"));
@@ -1063,7 +1063,7 @@ mod tests {
 
     #[test]
     fn compile_date_no_value_uses_today() {
-        let src = ":title T\n:date";
+        let src = "!title T\n!date";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\date{\\today}"));
@@ -1071,7 +1071,7 @@ mod tests {
 
     #[test]
     fn compile_no_date_directive_omits_date() {
-        let src = ":title T";
+        let src = "!title T";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(!tex.contains("\\date"));
@@ -1087,7 +1087,7 @@ mod tests {
 
     #[test]
     fn compile_abstract_with_math() {
-        let src = ":title T\n:abstract\n  We study math`x^2`.";
+        let src = "!title T\n!abstract\n  We study math`x^2`.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\begin{abstract}"));
@@ -1097,7 +1097,7 @@ mod tests {
 
     #[test]
     fn compile_abstract_paragraph_break() {
-        let src = ":title T\n:abstract\n  First paragraph.\n\n  Second paragraph.";
+        let src = "!title T\n!abstract\n  First paragraph.\n\n  Second paragraph.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("First paragraph.\n\\par\nSecond paragraph."));
@@ -1147,7 +1147,7 @@ mod tests {
 
     #[test]
     fn compile_toc() {
-        let src = ":toc";
+        let src = "!toc";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\tableofcontents"));
@@ -1178,7 +1178,7 @@ mod tests {
 
     #[test]
     fn compile_pagebreak() {
-        let src = "Text.\n\n:pagebreak\n\nMore.";
+        let src = "Text.\n\n!pagebreak\n\nMore.";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\newpage"));
@@ -1204,7 +1204,7 @@ mod tests {
 
     #[test]
     fn unresolved_ref_figure_label_resolved() {
-        let src = ":figure img.png\n  label: my-fig\n\nSee ref`my-fig`.";
+        let src = "!figure img.png\n  label: my-fig\n\nSee ref`my-fig`.";
         let doc = parse_document(src).unwrap();
         let unresolved = find_unresolved_refs(&doc);
         assert!(unresolved.is_empty());
@@ -1212,7 +1212,7 @@ mod tests {
 
     #[test]
     fn unresolved_ref_table_label_resolved() {
-        let src = ":table T\n  | A |\n  |---|\n  | 1 |\n  label: my-tab\n\nSee ref`my-tab`.";
+        let src = "!table T\n  | A |\n  |---|\n  | 1 |\n  label: my-tab\n\nSee ref`my-tab`.";
         let doc = parse_document(src).unwrap();
         let unresolved = find_unresolved_refs(&doc);
         assert!(unresolved.is_empty());

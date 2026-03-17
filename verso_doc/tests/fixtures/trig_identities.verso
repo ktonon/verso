@@ -1,13 +1,13 @@
 # Trigonometric Identities
 
-:claim pythagorean
+!claim pythagorean
   sin(x)^2 + cos(x)^2 = 1
 
-:claim sin_zero
+!claim sin_zero
   sin(0) = 0
 
-:claim cos_zero
+!claim cos_zero
   cos(0) = 1
 
-:claim sin_pi
+!claim sin_pi
   sin(pi) = 0

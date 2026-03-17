@@ -1,4 +1,4 @@
->:claim inline_dim
+>!claim inline_dim
 #^^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
 #      ^ source.verso meta.block.claim.verso
 #       ^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso
@@ -26,7 +26,7 @@
 #                       ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso constant.numeric.decimal.verso
 #                        ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 >
->:claim compound_unit
+>!claim compound_unit
 #^^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
 #      ^ source.verso meta.block.claim.verso
 #       ^^^^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso
@@ -58,7 +58,7 @@
 #                           ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #                            ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 >
->:claim si_prefix
+>!claim si_prefix
 #^^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
 #      ^ source.verso meta.block.claim.verso
 #       ^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso
@@ -78,7 +78,7 @@
 #                 ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #                  ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 >
->:claim derived_unit
+>!claim derived_unit
 #^^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
 #      ^ source.verso meta.block.claim.verso
 #       ^^^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso

@@ -2,7 +2,7 @@
   "Claim": {
     "prefix": "claim",
     "body": [
-      ":claim ${1:name}",
+      "!claim ${1:name}",
       "  ${2:lhs} = ${3:rhs}",
       ""
     ],
@@ -11,7 +11,7 @@
   "Proof": {
     "prefix": "proof",
     "body": [
-      ":proof ${1:name}",
+      "!proof ${1:name}",
       "  ${2:expr}",
       "  = ${3:step}",
       ""
@@ -21,28 +21,28 @@
   "Variable": {
     "prefix": "var",
     "body": [
-      ":var ${1:name} [${2:dims}]"
+      "!var ${1:name} [${2:dims}]"
     ],
     "description": "Variable declaration with dimensions"
   },
   "Constant": {
     "prefix": "const",
     "body": [
-      ":const ${1:name} = ${2:value}"
+      "!const ${1:name} = ${2:value}"
     ],
     "description": "Constant declaration"
   },
   "Function": {
     "prefix": "func",
     "body": [
-      ":func ${1:name}(${2:params}) = ${3:body}"
+      "!func ${1:name}(${2:params}) = ${3:body}"
     ],
     "description": "Function declaration"
   },
   "Theorem": {
     "prefix": "thm",
     "body": [
-      ":theorem ${1:Title}",
+      "!theorem ${1:Title}",
       "  ${2:body}",
       ""
     ],
@@ -51,7 +51,7 @@
   "Lemma": {
     "prefix": "lem",
     "body": [
-      ":lemma ${1:Title}",
+      "!lemma ${1:Title}",
       "  ${2:body}",
       ""
     ],
@@ -60,7 +60,7 @@
   "Definition": {
     "prefix": "def",
     "body": [
-      ":definition ${1:Title}",
+      "!definition ${1:Title}",
       "  ${2:body}",
       ""
     ],
@@ -135,7 +135,7 @@
   "Bibliography": {
     "prefix": "bib",
     "body": [
-      ":bibliography ${1:refs.bib}"
+      "!bibliography ${1:refs.bib}"
     ],
     "description": "Bibliography declaration"
   }

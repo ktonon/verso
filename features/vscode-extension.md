@@ -44,7 +44,7 @@ Fix incorrect settings and add missing features to `language-configuration.json`
 - Add `{ }` to brackets and auto-closing pairs
 - Add `"` `"` and `'` `'` auto-closing pairs
 - Add folding markers for block-level constructs:
-  - Start: `:claim`, `:proof`, `:theorem`, `:lemma`, `:definition`, `:corollary`, `:remark`, `:example`, ` ```math `
+  - Start: `!claim`, `!proof`, `!theorem`, `!lemma`, `!definition`, `!corollary`, `!remark`, `!example`, ` ```math `
   - End: blank line or closing ` ``` `
 - Add `surroundingPairs` for brackets, parens, braces, backticks, quotes
 - Add `wordPattern` for Verso identifiers
@@ -72,14 +72,14 @@ Create a TextMate grammar for block-level syntax highlighting.
 |--------------|----------------|
 | `# Heading` | `markup.heading.N.verso` (N=1-4) |
 | `% comment` | `comment.line.percentage.verso` |
-| `:claim name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
-| `:proof name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
-| `:var name [dims]` | `keyword.control.directive.var.verso` + `variable.parameter.var.verso` + `storage.type.dimension.verso` |
-| `:const name = expr` | `keyword.control.directive.const.verso` + `variable.parameter.const.verso` + `keyword.operator.assignment.verso` |
-| `:func name(params) = expr` | `keyword.control.directive.func.verso` + `entity.name.function.verso` + `variable.parameter.func.verso` |
-| `:bibliography path` | `keyword.control.directive.verso` + `string.unquoted.verso` |
-| `:theorem Title` | `keyword.control.directive.verso` + `entity.name.section.verso` |
-| (same for `:lemma`, `:definition`, `:corollary`, `:remark`, `:example`) | same pattern |
+| `!claim name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
+| `!proof name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
+| `!var name [dims]` | `keyword.control.directive.var.verso` + `variable.parameter.var.verso` + `storage.type.dimension.verso` |
+| `!const name = expr` | `keyword.control.directive.const.verso` + `variable.parameter.const.verso` + `keyword.operator.assignment.verso` |
+| `!func name(params) = expr` | `keyword.control.directive.func.verso` + `entity.name.function.verso` + `variable.parameter.func.verso` |
+| `!bibliography path` | `keyword.control.directive.verso` + `string.unquoted.verso` |
+| `!theorem Title` | `keyword.control.directive.verso` + `entity.name.section.verso` |
+| (same for `!lemma`, `!definition`, `!corollary`, `!remark`, `!example`) | same pattern |
 | ` ```math ` | `punctuation.definition.fenced.verso` |
 | `> block quote` | `markup.quote.verso` |
 | `- list item` | `markup.list.unnumbered.verso` |
@@ -155,16 +155,16 @@ Add code snippets for common Verso constructs.
 
 | Prefix | Description | Body |
 |--------|-------------|------|
-| `claim` | New claim block | `:claim ${1:name}\n  ${2:lhs} = ${3:rhs}` |
-| `proof` | New proof block | `:proof ${1:name}\n  ${2:expr}\n  = ${3:step}` |
-| `var` | Variable declaration | `:var ${1:name} [${2:dims}]` |
-| `const` | Constant declaration | `:const ${1:name} = ${2:value}` |
-| `func` | Function declaration | `:func ${1:name}(${2:params}) = ${3:body}` |
-| `thm` | Theorem environment | `:theorem ${1:Title}\n  ${2:body}` |
-| `lem` | Lemma environment | `:lemma ${1:Title}\n  ${2:body}` |
-| `def` | Definition environment | `:definition ${1:Title}\n  ${2:body}` |
+| `claim` | New claim block | `!claim ${1:name}\n  ${2:lhs} = ${3:rhs}` |
+| `proof` | New proof block | `!proof ${1:name}\n  ${2:expr}\n  = ${3:step}` |
+| `var` | Variable declaration | `!var ${1:name} [${2:dims}]` |
+| `const` | Constant declaration | `!const ${1:name} = ${2:value}` |
+| `func` | Function declaration | `!func ${1:name}(${2:params}) = ${3:body}` |
+| `thm` | Theorem environment | `!theorem ${1:Title}\n  ${2:body}` |
+| `lem` | Lemma environment | `!lemma ${1:Title}\n  ${2:body}` |
+| `def` | Definition environment | `!definition ${1:Title}\n  ${2:body}` |
 | `mathb` | Math block | `\`\`\`math\n${1:expr}\n\`\`\`` |
-| `bib` | Bibliography | `:bibliography ${1:refs.bib}` |
+| `bib` | Bibliography | `!bibliography ${1:refs.bib}` |
 
 **Tests:**
 - Manual: type `claim` + Tab, verify snippet expands with cursor at name

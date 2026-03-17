@@ -19,7 +19,7 @@ impl fmt::Display for ParseDocError {
 
 impl std::error::Error for ParseDocError {}
 
-/// Resolve `:include` directives by reading and inlining included files.
+/// Resolve `!include` directives by reading and inlining included files.
 /// Detects circular includes. Paths are relative to `base_dir`.
 pub fn resolve_includes(
     src: &str,
@@ -29,29 +29,29 @@ pub fn resolve_includes(
     let mut out = String::new();
     for (i, line) in src.lines().enumerate() {
         let trimmed = line.trim();
-        if trimmed.starts_with(":include") {
-            let path_str = trimmed[":include".len()..].trim();
+        if trimmed.starts_with("!include") {
+            let path_str = trimmed["!include".len()..].trim();
             if path_str.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":include requires a file path".into(),
+                    message: "!include requires a file path".into(),
                 });
             }
             let path = base_dir.join(path_str);
             let canonical = path.canonicalize().map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!(":include '{}': {}", path_str, e),
+                message: format!("!include '{}': {}", path_str, e),
             })?;
             if seen.contains(&canonical) {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: format!(":include '{}': circular include detected", path_str),
+                    message: format!("!include '{}': circular include detected", path_str),
                 });
             }
             seen.push(canonical.clone());
             let content = std::fs::read_to_string(&canonical).map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!(":include '{}': {}", path_str, e),
+                message: format!("!include '{}': {}", path_str, e),
             })?;
             let child_dir = canonical.parent().unwrap_or(base_dir);
             let resolved = resolve_includes(&content, child_dir, seen)?;
@@ -82,7 +82,7 @@ pub fn collect_dependencies(
     Ok(seen)
 }
 
-/// Parse an `.verso` file, resolving `:include` directives.
+/// Parse an `.verso` file, resolving `!include` directives.
 pub fn parse_document_from_file(path: &std::path::Path) -> Result<Document, ParseDocError> {
     let src = std::fs::read_to_string(path).map_err(|e| ParseDocError {
         line: 0,
@@ -141,22 +141,22 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Table of contents
-        if trimmed == ":toc" {
+        if trimmed == "!toc" {
             blocks.push(Block::Toc);
             i += 1;
             continue;
         }
 
         // Page break
-        if trimmed == ":pagebreak" {
+        if trimmed == "!pagebreak" {
             blocks.push(Block::PageBreak);
             i += 1;
             continue;
         }
 
         // Document metadata
-        if trimmed.starts_with(":title") {
-            let text = trimmed[":title".len()..].trim().to_string();
+        if trimmed.starts_with("!title") {
+            let text = trimmed["!title".len()..].trim().to_string();
             if text.is_empty() {
                 // Multiline title: collect indented lines
                 i += 1;
@@ -175,7 +175,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 if title_lines.is_empty() {
                     return Err(ParseDocError {
                         line: i,
-                        message: ":title requires text".into(),
+                        message: "!title requires text".into(),
                     });
                 }
                 blocks.push(Block::Title(title_lines));
@@ -185,25 +185,25 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             }
             continue;
         }
-        if trimmed.starts_with(":author") {
-            let text = trimmed[":author".len()..].trim().to_string();
+        if trimmed.starts_with("!author") {
+            let text = trimmed["!author".len()..].trim().to_string();
             if text.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":author requires a name".into(),
+                    message: "!author requires a name".into(),
                 });
             }
             blocks.push(Block::Author(text));
             i += 1;
             continue;
         }
-        if trimmed.starts_with(":date") {
-            let text = trimmed[":date".len()..].trim().to_string();
+        if trimmed.starts_with("!date") {
+            let text = trimmed["!date".len()..].trim().to_string();
             blocks.push(Block::Date(if text.is_empty() { None } else { Some(text) }));
             i += 1;
             continue;
         }
-        if trimmed.starts_with(":abstract") {
+        if trimmed.starts_with("!abstract") {
             let abs_line = i + 1;
             i += 1;
             let fragments = collect_indented_body(&lines, &mut i, abs_line)?;
@@ -211,7 +211,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        if trimmed.starts_with(":center") {
+        if trimmed.starts_with("!center") {
             let center_line = i + 1;
             i += 1;
             let fragments = collect_indented_body(&lines, &mut i, center_line)?;
@@ -220,12 +220,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Figure block
-        if trimmed.starts_with(":figure") {
-            let path = trimmed[":figure".len()..].trim().to_string();
+        if trimmed.starts_with("!figure") {
+            let path = trimmed["!figure".len()..].trim().to_string();
             if path.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":figure requires a file path".into(),
+                    message: "!figure requires a file path".into(),
                 });
             }
             let fig_line = i + 1;
@@ -264,8 +264,8 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Table block
-        if trimmed.starts_with(":table") {
-            let title_text = trimmed[":table".len()..].trim();
+        if trimmed.starts_with("!table") {
+            let title_text = trimmed["!table".len()..].trim();
             let title = if title_text.is_empty() {
                 None
             } else {
@@ -291,7 +291,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if body_lines.len() < 2 {
                 return Err(ParseDocError {
                     line: table_line,
-                    message: ":table requires header row and separator row".into(),
+                    message: "!table requires header row and separator row".into(),
                 });
             }
 
@@ -313,7 +313,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             {
                 return Err(ParseDocError {
                     line: table_line + 1,
-                    message: ":table second row must be a separator (e.g. |---|---|)".into(),
+                    message: "!table second row must be a separator (e.g. |---|---|)".into(),
                 });
             }
             let columns: Vec<ColumnAlign> = sep_cells
@@ -347,12 +347,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Claim block
-        if trimmed.starts_with(":claim") {
-            let name = trimmed[":claim".len()..].trim().to_string();
+        if trimmed.starts_with("!claim") {
+            let name = trimmed["!claim".len()..].trim().to_string();
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":claim requires a name".into(),
+                    message: "!claim requires a name".into(),
                 });
             }
             let claim_line = i + 1;
@@ -371,7 +371,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if body.is_empty() {
                 return Err(ParseDocError {
                     line: claim_line,
-                    message: ":claim body is empty".into(),
+                    message: "!claim body is empty".into(),
                 });
             }
 
@@ -381,12 +381,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Proof block
-        if trimmed.starts_with(":proof") {
-            let claim_name = trimmed[":proof".len()..].trim().to_string();
+        if trimmed.starts_with("!proof") {
+            let claim_name = trimmed["!proof".len()..].trim().to_string();
             if claim_name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":proof requires a claim name".into(),
+                    message: "!proof requires a claim name".into(),
                 });
             }
             let proof_line = i + 1;
@@ -421,7 +421,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if steps.len() < 2 {
                 return Err(ParseDocError {
                     line: proof_line,
-                    message: ":proof requires at least two steps".into(),
+                    message: "!proof requires at least two steps".into(),
                 });
             }
 
@@ -434,24 +434,24 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Variable declaration
-        if trimmed.starts_with(":var") {
-            let rest = trimmed[":var".len()..].trim();
+        if trimmed.starts_with("!var") {
+            let rest = trimmed["!var".len()..].trim();
             // Parse: varname [dim spec]
             let bracket_pos = rest.find('[').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: ":var requires a variable name and dimension, e.g. :var x [L T^-1]".into(),
+                message: "!var requires a variable name and dimension, e.g. !var x [L T^-1]".into(),
             })?;
             let var_name = rest[..bracket_pos].trim().to_string();
             if var_name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":var requires a variable name".into(),
+                    message: "!var requires a variable name".into(),
                 });
             }
             let dim_str = rest[bracket_pos..].trim();
             let dimension = Dimension::parse(dim_str).map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!(":var '{}': {}", var_name, e),
+                message: format!("!var '{}': {}", var_name, e),
             })?;
             blocks.push(Block::Var(VarDecl {
                 var_name,
@@ -463,23 +463,23 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Constant declaration
-        if trimmed.starts_with(":const") {
-            let rest = trimmed[":const".len()..].trim();
+        if trimmed.starts_with("!const") {
+            let rest = trimmed["!const".len()..].trim();
             let eq_pos = rest.find('=').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: ":const requires name = expr, e.g. :const c = 3*10^8".into(),
+                message: "!const requires name = expr, e.g. !const c = 3*10^8".into(),
             })?;
             let name = rest[..eq_pos].trim().to_string();
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":const requires a name".into(),
+                    message: "!const requires a name".into(),
                 });
             }
             let value_str = rest[eq_pos + 1..].trim();
             let value = parse_expr(value_str).map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!(":const '{}': {:?}", name, e),
+                message: format!("!const '{}': {:?}", name, e),
             })?;
             blocks.push(Block::Const(ConstDecl {
                 name,
@@ -491,23 +491,23 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Function declaration
-        if trimmed.starts_with(":func") {
-            let rest = trimmed[":func".len()..].trim();
+        if trimmed.starts_with("!func") {
+            let rest = trimmed["!func".len()..].trim();
             let lparen = rest.find('(').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: ":func requires name(params) = expr, e.g. :func KE(m, v) = (1/2)*m*v^2"
+                message: "!func requires name(params) = expr, e.g. !func KE(m, v) = (1/2)*m*v^2"
                     .into(),
             })?;
             let name = rest[..lparen].trim().to_string();
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":func requires a name".into(),
+                    message: "!func requires a name".into(),
                 });
             }
             let rparen = rest.find(')').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: ":func missing closing parenthesis".into(),
+                message: "!func missing closing parenthesis".into(),
             })?;
             let params_str = &rest[lparen + 1..rparen];
             let params: Vec<String> = params_str
@@ -518,7 +518,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if params.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":func requires at least one parameter".into(),
+                    message: "!func requires at least one parameter".into(),
                 });
             }
             let after_rparen = rest[rparen + 1..].trim();
@@ -526,12 +526,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 .strip_prefix('=')
                 .ok_or_else(|| ParseDocError {
                     line: i + 1,
-                    message: ":func requires = after parameters".into(),
+                    message: "!func requires = after parameters".into(),
                 })?
                 .trim();
             let body = parse_expr(body_str).map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!(":func '{}': {:?}", name, e),
+                message: format!("!func '{}': {:?}", name, e),
             })?;
             blocks.push(Block::Func(FuncDecl {
                 name,
@@ -544,12 +544,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Bibliography declaration
-        if trimmed.starts_with(":bibliography") {
-            let path = trimmed[":bibliography".len()..].trim().to_string();
+        if trimmed.starts_with("!bibliography") {
+            let path = trimmed["!bibliography".len()..].trim().to_string();
             if path.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: ":bibliography requires a file path".into(),
+                    message: "!bibliography requires a file path".into(),
                 });
             }
             blocks.push(Block::Bibliography {
@@ -610,14 +610,14 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Skip :include lines (resolved before parsing in parse_document_from_file)
-        if trimmed.starts_with(":include") {
+        // Skip !include lines (resolved before parsing in parse_document_from_file)
+        if trimmed.starts_with("!include") {
             i += 1;
             continue;
         }
 
         // Skip any other unrecognized directive to avoid infinite loop
-        if trimmed.starts_with(':') {
+        if trimmed.starts_with('!') {
             i += 1;
             continue;
         }
@@ -630,7 +630,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             let l = lines[i].trim();
             if l.is_empty()
                 || l.starts_with('#')
-                || l.starts_with(':')
+                || l.starts_with('!')
                 || l.starts_with('%')
                 || l.starts_with("> ")
                 || l == ">"
@@ -859,7 +859,7 @@ fn parse_list(lines: &[&str], i: &mut usize) -> Result<List, ParseDocError> {
         let trimmed = line.trim();
 
         // Stop on blank line, heading, directive, or outdented line
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with(':') {
+        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
             break;
         }
 
@@ -935,12 +935,12 @@ fn parse_math_block(lines: &[&str], i: &mut usize) -> Result<MathBlock, ParseDoc
 /// Check if a trimmed line starts with a theorem-like directive.
 fn parse_env_kind(trimmed: &str) -> Option<EnvKind> {
     let directives = [
-        (":theorem", EnvKind::Theorem),
-        (":lemma", EnvKind::Lemma),
-        (":definition", EnvKind::Definition),
-        (":corollary", EnvKind::Corollary),
-        (":remark", EnvKind::Remark),
-        (":example", EnvKind::Example),
+        ("!theorem", EnvKind::Theorem),
+        ("!lemma", EnvKind::Lemma),
+        ("!definition", EnvKind::Definition),
+        ("!corollary", EnvKind::Corollary),
+        ("!remark", EnvKind::Remark),
+        ("!example", EnvKind::Example),
     ];
     for (prefix, kind) in &directives {
         if trimmed.starts_with(prefix) {
@@ -965,12 +965,12 @@ fn parse_environment(
 
     // Extract title (rest of directive line after the kind keyword)
     let prefix_len = match kind {
-        EnvKind::Theorem => ":theorem",
-        EnvKind::Lemma => ":lemma",
-        EnvKind::Definition => ":definition",
-        EnvKind::Corollary => ":corollary",
-        EnvKind::Remark => ":remark",
-        EnvKind::Example => ":example",
+        EnvKind::Theorem => "!theorem",
+        EnvKind::Lemma => "!lemma",
+        EnvKind::Definition => "!definition",
+        EnvKind::Corollary => "!corollary",
+        EnvKind::Remark => "!remark",
+        EnvKind::Example => "!example",
     }
     .len();
     let title_str = directive_line[prefix_len..].trim();
@@ -1489,7 +1489,7 @@ mod tests {
 
     #[test]
     fn parse_claim() {
-        let src = ":claim identity\n  x + 0 = x";
+        let src = "!claim identity\n  x + 0 = x";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1502,14 +1502,14 @@ mod tests {
 
     #[test]
     fn parse_claim_missing_equals() {
-        let src = ":claim bad\n  x + 0";
+        let src = "!claim bad\n  x + 0";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("expected 'lhs = rhs'"));
     }
 
     #[test]
     fn parse_claim_missing_name() {
-        let src = ":claim\n  x = x";
+        let src = "!claim\n  x = x";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
@@ -1517,7 +1517,7 @@ mod tests {
     #[test]
     fn parse_proof() {
         let src = "\
-:proof pythag
+!proof pythag
   sin(x)^2 + cos(x)^2
   = 1                        ; pythagorean_identity";
         let doc = parse_document(src).unwrap();
@@ -1538,21 +1538,21 @@ mod tests {
 
     #[test]
     fn parse_proof_requires_two_steps() {
-        let src = ":proof foo\n  x";
+        let src = "!proof foo\n  x";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("at least two steps"));
     }
 
     #[test]
     fn parse_proof_missing_name() {
-        let src = ":proof\n  x\n  = y";
+        let src = "!proof\n  x\n  = y";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("requires a claim name"));
     }
 
     #[test]
     fn parse_var_declaration() {
-        let src = ":var x [L]\n:var v [L T^-1]";
+        let src = "!var x [L]\n!var v [L T^-1]";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         match &doc.blocks[0] {
@@ -1573,10 +1573,10 @@ mod tests {
 
     #[test]
     fn parse_var_missing_brackets() {
-        let src = ":var x L";
+        let src = "!var x L";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains(":var requires"),
+            err.message.contains("!var requires"),
             "unexpected error: {}",
             err.message
         );
@@ -1584,7 +1584,7 @@ mod tests {
 
     #[test]
     fn parse_const_declaration() {
-        let src = ":const c = 3*10^8";
+        let src = "!const c = 3*10^8";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1604,10 +1604,10 @@ mod tests {
 
     #[test]
     fn parse_const_missing_equals() {
-        let src = ":const c 3";
+        let src = "!const c 3";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains(":const requires"),
+            err.message.contains("!const requires"),
             "unexpected error: {}",
             err.message
         );
@@ -1615,10 +1615,10 @@ mod tests {
 
     #[test]
     fn parse_const_missing_name() {
-        let src = ":const = 3";
+        let src = "!const = 3";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains(":const requires a name"),
+            err.message.contains("!const requires a name"),
             "unexpected error: {}",
             err.message
         );
@@ -1626,7 +1626,7 @@ mod tests {
 
     #[test]
     fn parse_func_declaration() {
-        let src = ":func KE(m, v) = (1/2) * m * v^2";
+        let src = "!func KE(m, v) = (1/2) * m * v^2";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1640,10 +1640,10 @@ mod tests {
 
     #[test]
     fn parse_func_missing_parens() {
-        let src = ":func f = x";
+        let src = "!func f = x";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains(":func requires"),
+            err.message.contains("!func requires"),
             "unexpected error: {}",
             err.message
         );
@@ -1651,7 +1651,7 @@ mod tests {
 
     #[test]
     fn parse_func_no_params() {
-        let src = ":func f() = x";
+        let src = "!func f() = x";
         let err = parse_document(src).unwrap_err();
         assert!(
             err.message.contains("at least one parameter"),
@@ -1667,7 +1667,7 @@ mod tests {
 
 Some introductory text.
 
-:claim add_zero
+!claim add_zero
   x + 0 = x
 
 More prose here.
@@ -1906,7 +1906,7 @@ More prose here.
 
     #[test]
     fn parse_list_terminated_by_directive() {
-        let src = "- Item one\n:claim foo\n  x = x";
+        let src = "- Item one\n!claim foo\n  x = x";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::List(_)));
@@ -1960,7 +1960,7 @@ More prose here.
     #[test]
     fn parse_math_block_not_verified() {
         // Math blocks should appear in the document but not in verification
-        let src = "```math\nx + 1\n```\n\n:claim foo\n  x + 0 = x";
+        let src = "```math\nx + 1\n```\n\n!claim foo\n  x + 0 = x";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::MathBlock(_)));
@@ -2000,7 +2000,7 @@ More prose here.
 
     #[test]
     fn parse_bibliography() {
-        let doc = parse_document(":bibliography refs.bib").unwrap();
+        let doc = parse_document("!bibliography refs.bib").unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
             Block::Bibliography { path, .. } => {
@@ -2012,13 +2012,13 @@ More prose here.
 
     #[test]
     fn parse_bibliography_missing_path() {
-        let err = parse_document(":bibliography").unwrap_err();
+        let err = parse_document("!bibliography").unwrap_err();
         assert!(err.message.contains("requires a file path"));
     }
 
     #[test]
     fn parse_theorem_with_title() {
-        let src = ":theorem Pythagorean\n  For any right triangle, math`a^2 + b^2` is important.";
+        let src = "!theorem Pythagorean\n  For any right triangle, math`a^2 + b^2` is important.";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -2033,7 +2033,7 @@ More prose here.
 
     #[test]
     fn parse_theorem_with_paragraph_break() {
-        let src = ":theorem Main Result\n  First paragraph.\n\n  Second paragraph.";
+        let src = "!theorem Main Result\n  First paragraph.\n\n  Second paragraph.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Environment(env) => {
@@ -2051,7 +2051,7 @@ More prose here.
 
     #[test]
     fn parse_definition_no_title() {
-        let src = ":definition\n  A group is a set with a binary operation.";
+        let src = "!definition\n  A group is a set with a binary operation.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Environment(env) => {
@@ -2069,12 +2069,12 @@ More prose here.
     #[test]
     fn parse_all_env_kinds() {
         for (directive, expected_kind) in &[
-            (":theorem", EnvKind::Theorem),
-            (":lemma", EnvKind::Lemma),
-            (":definition", EnvKind::Definition),
-            (":corollary", EnvKind::Corollary),
-            (":remark", EnvKind::Remark),
-            (":example", EnvKind::Example),
+            ("!theorem", EnvKind::Theorem),
+            ("!lemma", EnvKind::Lemma),
+            ("!definition", EnvKind::Definition),
+            ("!corollary", EnvKind::Corollary),
+            ("!remark", EnvKind::Remark),
+            ("!example", EnvKind::Example),
         ] {
             let src = format!("{}\n  Body text.", directive);
             let doc = parse_document(&src).unwrap();
@@ -2089,7 +2089,7 @@ More prose here.
 
     #[test]
     fn parse_env_body_with_inline_math() {
-        let src = ":lemma\n  If math`x` is positive then math`x^2` is positive.";
+        let src = "!lemma\n  If math`x` is positive then math`x^2` is positive.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Environment(env) => {
@@ -2105,7 +2105,7 @@ More prose here.
 
     #[test]
     fn parse_env_multiline_body() {
-        let src = ":remark Important\n  First line.\n  Second line.";
+        let src = "!remark Important\n  First line.\n  Second line.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Environment(env) => {
@@ -2119,7 +2119,7 @@ More prose here.
 
     #[test]
     fn parse_env_not_confused_with_claim() {
-        let src = ":theorem Test\n  Body.\n\n:claim foo\n  x = x";
+        let src = "!theorem Test\n  Body.\n\n!claim foo\n  x = x";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::Environment(_)));
@@ -2314,13 +2314,13 @@ More prose here.
 
     #[test]
     fn parse_title() {
-        let doc = parse_document(":title My Great Paper").unwrap();
+        let doc = parse_document("!title My Great Paper").unwrap();
         assert!(matches!(&doc.blocks[0], Block::Title(t) if t == &["My Great Paper"]));
     }
 
     #[test]
     fn parse_title_multiline() {
-        let src = ":title\n\tThe Two-Medium Model:\n\tA Narrative Framework";
+        let src = "!title\n\tThe Two-Medium Model:\n\tA Narrative Framework";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Title(lines) => {
@@ -2332,13 +2332,13 @@ More prose here.
 
     #[test]
     fn parse_author() {
-        let doc = parse_document(":author Alice Smith").unwrap();
+        let doc = parse_document("!author Alice Smith").unwrap();
         assert!(matches!(&doc.blocks[0], Block::Author(a) if a == "Alice Smith"));
     }
 
     #[test]
     fn parse_multiple_authors() {
-        let doc = parse_document(":author Alice Smith\n:author Bob Jones").unwrap();
+        let doc = parse_document("!author Alice Smith\n!author Bob Jones").unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::Author(a) if a == "Alice Smith"));
         assert!(matches!(&doc.blocks[1], Block::Author(a) if a == "Bob Jones"));
@@ -2346,19 +2346,19 @@ More prose here.
 
     #[test]
     fn parse_date() {
-        let doc = parse_document(":date 2026-03-13").unwrap();
+        let doc = parse_document("!date 2026-03-13").unwrap();
         assert!(matches!(&doc.blocks[0], Block::Date(Some(d)) if d == "2026-03-13"));
     }
 
     #[test]
     fn parse_date_no_value_defaults_to_none() {
-        let doc = parse_document(":date").unwrap();
+        let doc = parse_document("!date").unwrap();
         assert!(matches!(&doc.blocks[0], Block::Date(None)));
     }
 
     #[test]
     fn parse_abstract() {
-        let src = ":abstract\n  We present a novel approach\n  to computing corrections.";
+        let src = "!abstract\n  We present a novel approach\n  to computing corrections.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Abstract(fragments) => {
@@ -2373,7 +2373,7 @@ More prose here.
 
     #[test]
     fn parse_abstract_with_paragraph_break() {
-        let src = ":abstract\n  First paragraph.\n\n  Second paragraph.";
+        let src = "!abstract\n  First paragraph.\n\n  Second paragraph.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Abstract(fragments) => {
@@ -2391,7 +2391,7 @@ More prose here.
 
     #[test]
     fn parse_abstract_ends_on_outdent() {
-        let src = ":abstract\n  First paragraph.\n\n  Second paragraph.\nNot abstract.";
+        let src = "!abstract\n  First paragraph.\n\n  Second paragraph.\nNot abstract.";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::Abstract(_)));
@@ -2400,7 +2400,7 @@ More prose here.
 
     #[test]
     fn parse_abstract_with_inline_math() {
-        let src = ":abstract\n  We study math`x^2 + 1` in detail.";
+        let src = "!abstract\n  We study math`x^2 + 1` in detail.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Abstract(fragments) => {
@@ -2416,7 +2416,7 @@ More prose here.
 
     #[test]
     fn parse_center() {
-        let src = ":center\n\tSome centered text.";
+        let src = "!center\n\tSome centered text.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Center(fragments) => {
@@ -2430,7 +2430,7 @@ More prose here.
 
     #[test]
     fn parse_center_with_paragraph_break() {
-        let src = ":center\n\tFirst line.\n\n\tSecond line.";
+        let src = "!center\n\tFirst line.\n\n\tSecond line.";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -2449,7 +2449,7 @@ More prose here.
 
     #[test]
     fn parse_center_ends_on_outdent() {
-        let src = ":center\n\tCentered.\nNot centered.";
+        let src = "!center\n\tCentered.\nNot centered.";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::Center(_)));
@@ -2458,15 +2458,15 @@ More prose here.
 
     #[test]
     fn parse_title_empty_error() {
-        let err = parse_document(":title\n\nSome body.").unwrap_err();
-        assert!(err.message.contains(":title requires"));
+        let err = parse_document("!title\n\nSome body.").unwrap_err();
+        assert!(err.message.contains("!title requires"));
     }
 
     // Figures
 
     #[test]
     fn parse_figure_basic() {
-        let src = ":figure plots/energy.pdf\n  caption: Energy levels.\n  label: fig-energy\n  width: 0.8";
+        let src = "!figure plots/energy.pdf\n  caption: Energy levels.\n  label: fig-energy\n  width: 0.8";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Figure(fig) => {
@@ -2484,7 +2484,7 @@ More prose here.
 
     #[test]
     fn parse_figure_path_only() {
-        let doc = parse_document(":figure img.png").unwrap();
+        let doc = parse_document("!figure img.png").unwrap();
         match &doc.blocks[0] {
             Block::Figure(fig) => {
                 assert_eq!(fig.path, "img.png");
@@ -2498,13 +2498,13 @@ More prose here.
 
     #[test]
     fn parse_figure_empty_path_error() {
-        let err = parse_document(":figure").unwrap_err();
-        assert!(err.message.contains(":figure requires"));
+        let err = parse_document("!figure").unwrap_err();
+        assert!(err.message.contains("!figure requires"));
     }
 
     #[test]
     fn parse_figure_caption_with_math() {
-        let src = ":figure plot.pdf\n  caption: Energy math`mc^2` shown.";
+        let src = "!figure plot.pdf\n  caption: Energy math`mc^2` shown.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Figure(fig) => {
@@ -2519,7 +2519,7 @@ More prose here.
 
     #[test]
     fn parse_toc() {
-        let doc = parse_document(":toc").unwrap();
+        let doc = parse_document("!toc").unwrap();
         assert!(matches!(&doc.blocks[0], Block::Toc));
     }
 
@@ -2559,7 +2559,7 @@ More prose here.
 
     #[test]
     fn parse_pagebreak() {
-        let doc = parse_document("Text.\n\n:pagebreak\n\nMore text.").unwrap();
+        let doc = parse_document("Text.\n\n!pagebreak\n\nMore text.").unwrap();
         assert_eq!(doc.blocks.len(), 3);
         assert!(matches!(&doc.blocks[1], Block::PageBreak));
     }
@@ -2572,7 +2572,7 @@ More prose here.
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(
             dir.join("main.verso"),
-            "# Main\n\n:include sub.verso\n\nEnd.",
+            "# Main\n\n!include sub.verso\n\nEnd.",
         )
         .unwrap();
         std::fs::write(dir.join("sub.verso"), "Sub content.").unwrap();
@@ -2587,8 +2587,8 @@ More prose here.
     fn parse_include_circular_error() {
         let dir = std::env::temp_dir().join("erd_test_include_circular");
         let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("a.verso"), ":include b.verso").unwrap();
-        std::fs::write(dir.join("b.verso"), ":include a.verso").unwrap();
+        std::fs::write(dir.join("a.verso"), "!include b.verso").unwrap();
+        std::fs::write(dir.join("b.verso"), "!include a.verso").unwrap();
         let err = parse_document_from_file(&dir.join("a.verso")).unwrap_err();
         assert!(err.message.contains("circular"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -2598,7 +2598,7 @@ More prose here.
     fn parse_include_missing_file_error() {
         let dir = std::env::temp_dir().join("erd_test_include_missing");
         let _ = std::fs::create_dir_all(&dir);
-        std::fs::write(dir.join("main.verso"), ":include nonexistent.verso").unwrap();
+        std::fs::write(dir.join("main.verso"), "!include nonexistent.verso").unwrap();
         let err = parse_document_from_file(&dir.join("main.verso")).unwrap_err();
         assert!(err.message.contains("nonexistent.verso"));
         let _ = std::fs::remove_dir_all(&dir);
@@ -2608,8 +2608,8 @@ More prose here.
     fn parse_include_nested() {
         let dir = std::env::temp_dir().join("erd_test_include_nested");
         let _ = std::fs::create_dir_all(dir.join("sub"));
-        std::fs::write(dir.join("main.verso"), ":include sub/a.verso").unwrap();
-        std::fs::write(dir.join("sub/a.verso"), ":include b.verso").unwrap();
+        std::fs::write(dir.join("main.verso"), "!include sub/a.verso").unwrap();
+        std::fs::write(dir.join("sub/a.verso"), "!include b.verso").unwrap();
         std::fs::write(dir.join("sub/b.verso"), "Nested content.").unwrap();
         let doc = parse_document_from_file(&dir.join("main.verso")).unwrap();
         match &doc.blocks[0] {
@@ -2625,7 +2625,7 @@ More prose here.
 
     #[test]
     fn parse_table_basic() {
-        let src = ":table Results\n  | A | B |\n  |---|---|\n  | 1 | 2 |";
+        let src = "!table Results\n  | A | B |\n  |---|---|\n  | 1 | 2 |";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Table(table) => {
@@ -2641,7 +2641,7 @@ More prose here.
 
     #[test]
     fn parse_table_alignment() {
-        let src = ":table\n  | L | C | R |\n  |:--|:--:|--:|\n  | a | b | c |";
+        let src = "!table\n  | L | C | R |\n  |:--|:--:|--:|\n  | a | b | c |";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Table(table) => {
@@ -2656,7 +2656,7 @@ More prose here.
 
     #[test]
     fn parse_table_with_label() {
-        let src = ":table T\n  | X |\n  |---|\n  | 1 |\n  label: tab-x";
+        let src = "!table T\n  | X |\n  |---|\n  | 1 |\n  label: tab-x";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Table(table) => {
@@ -2668,7 +2668,7 @@ More prose here.
 
     #[test]
     fn parse_table_cell_with_math() {
-        let src = ":table\n  | Expr |\n  |------|\n  | math`x^2` |";
+        let src = "!table\n  | Expr |\n  |------|\n  | math`x^2` |";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Table(table) => {
@@ -2682,7 +2682,7 @@ More prose here.
 
     #[test]
     fn parse_table_missing_separator_error() {
-        let err = parse_document(":table T\n  | A |\n  | 1 |").unwrap_err();
+        let err = parse_document("!table T\n  | A |\n  | 1 |").unwrap_err();
         assert!(err.message.contains("separator"));
     }
 
@@ -2806,7 +2806,7 @@ More prose here.
     #[test]
     fn parse_claim_with_inline_dim() {
         // Claim using inline dimension annotations on variables
-        let src = ":var F [M L T^-2]\n:claim newton\n  F = m [M] * a [L T^-2]";
+        let src = "!var F [M L T^-2]\n!claim newton\n  F = m [M] * a [L T^-2]";
         let doc = parse_document(src).unwrap();
         // Should parse without error — the claim body has inline dimensions
         assert_eq!(doc.blocks.len(), 2); // Var + Claim
@@ -2815,71 +2815,71 @@ More prose here.
     #[test]
     fn parse_claim_with_quantity() {
         // Claim using a quantity (numeric with unit)
-        let src = ":claim speed_of_light\n  c [L T^-1] = 3*10^8 [m/s]";
+        let src = "!claim speed_of_light\n  c [L T^-1] = 3*10^8 [m/s]";
         let doc = parse_document(src).unwrap();
-        assert_eq!(doc.blocks.len(), 1); // just the Claim (no :var needed)
+        assert_eq!(doc.blocks.len(), 1); // just the Claim (no !var needed)
     }
 
     // --- Error paths ---
 
     #[test]
     fn parse_author_missing_name() {
-        let err = parse_document(":author").unwrap_err();
+        let err = parse_document("!author").unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
 
     #[test]
     fn parse_claim_empty_body() {
-        let err = parse_document(":claim foo\n\nSome prose").unwrap_err();
+        let err = parse_document("!claim foo\n\nSome prose").unwrap_err();
         assert!(err.message.contains("body is empty"));
     }
 
     #[test]
     fn parse_proof_requires_name() {
-        let err = parse_document(":proof\n  x\n  x").unwrap_err();
+        let err = parse_document("!proof\n  x\n  x").unwrap_err();
         assert!(err.message.contains("requires a claim name"));
     }
 
     #[test]
     fn parse_var_missing_name() {
-        let err = parse_document(":var [L]").unwrap_err();
+        let err = parse_document("!var [L]").unwrap_err();
         assert!(err.message.contains("requires a variable name"));
     }
 
     #[test]
     fn parse_const_empty_name() {
-        let err = parse_document(":const = 5").unwrap_err();
+        let err = parse_document("!const = 5").unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
 
     #[test]
     fn parse_func_missing_closing_paren() {
-        let err = parse_document(":func f(x = x + 1").unwrap_err();
+        let err = parse_document("!func f(x = x + 1").unwrap_err();
         assert!(err.message.contains("closing parenthesis"));
     }
 
     #[test]
     fn parse_func_missing_eq() {
-        let err = parse_document(":func f(x) x + 1").unwrap_err();
+        let err = parse_document("!func f(x) x + 1").unwrap_err();
         assert!(err.message.contains("="));
     }
 
     #[test]
     fn parse_func_empty_name() {
-        let err = parse_document(":func (x) = x").unwrap_err();
+        let err = parse_document("!func (x) = x").unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
 
     #[test]
     fn parse_table_bad_separator() {
-        let src = ":table Test\n  | A | B |\n  | x | y |";
+        let src = "!table Test\n  | A | B |\n  | x | y |";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("separator"));
     }
 
     #[test]
     fn parse_table_too_few_rows() {
-        let src = ":table Test\n  | A | B |";
+        let src = "!table Test\n  | A | B |";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("header row and separator"));
     }
@@ -2931,7 +2931,7 @@ More prose here.
 
     #[test]
     fn parse_table_center_and_right_alignment() {
-        let src = ":table\n  | A | B | C |\n  | :---: | ---: | --- |\n  | 1 | 2 | 3 |";
+        let src = "!table\n  | A | B | C |\n  | :---: | ---: | --- |\n  | 1 | 2 | 3 |";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Table(table) => {
@@ -2945,16 +2945,16 @@ More prose here.
 
     #[test]
     fn parse_include_empty_path_error() {
-        // resolve_includes handles :include, not parse_document.
+        // resolve_includes handles !include, not parse_document.
         // Test via resolve_includes directly.
         let err =
-            resolve_includes(":include", std::path::Path::new("."), &mut Vec::new()).unwrap_err();
+            resolve_includes("!include", std::path::Path::new("."), &mut Vec::new()).unwrap_err();
         assert!(err.message.contains("requires a file path"));
     }
 
     #[test]
     fn parse_date_with_value() {
-        let doc = parse_document(":date 2026-03-15").unwrap();
+        let doc = parse_document("!date 2026-03-15").unwrap();
         match &doc.blocks[0] {
             Block::Date(Some(d)) => assert_eq!(d, "2026-03-15"),
             other => panic!("expected Date(Some), got {:?}", other),
@@ -2963,7 +2963,7 @@ More prose here.
 
     #[test]
     fn parse_func_empty_params_error() {
-        let err = parse_document(":func f() = x").unwrap_err();
+        let err = parse_document("!func f() = x").unwrap_err();
         assert!(err.message.contains("requires at least one parameter"));
     }
 }
