@@ -13,6 +13,7 @@ mod search;
 mod to_tex;
 pub mod token;
 pub mod training_data;
+pub mod unicode;
 pub mod unit;
 pub mod validate;
 
