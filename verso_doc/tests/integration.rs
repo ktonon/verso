@@ -202,3 +202,20 @@ fn no_dim_declarations_skips_dim_check() {
         );
     }
 }
+
+#[test]
+fn syntax_guide_parses_and_verifies() {
+    let src = load_fixture("syntax_guide.verso");
+    let doc = parse_document(&src).unwrap();
+    let report = verify_document(&doc);
+    for r in &report.results {
+        assert!(
+            r.passed(),
+            "'{}' should pass but failed: {:?}",
+            r.name,
+            r.outcome
+        );
+    }
+    // Also verify it compiles to LaTeX without error
+    let _tex = compile_to_tex(&doc);
+}

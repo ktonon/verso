@@ -1,0 +1,375 @@
+% Verso Syntax Guide
+% ===================
+% This file documents the complete Verso markup syntax. It is also a test:
+% the parser and verifier must process this file without errors.
+
+!title Verso Syntax Guide
+!author The Verso Project
+!date 2026-03-16
+
+!abstract
+  A complete reference for the Verso markup language. Verso is a document
+  format for writing physics and mathematics papers with machine-verified
+  equations. It borrows from markdown where conventions align, but is its
+  own language, not a superset.
+
+!toc
+
+# Document Structure label`structure`
+
+A Verso document is a sequence of **blocks** separated by blank lines. Blocks
+are either structural (headings, directives) or content (prose, math, claims,
+proofs). Indented lines are continuations of the preceding block.
+
+Lines starting with a percent sign are comments and produce no output.
+
+# Document Metadata
+
+Front matter directives define the document's title, authors, date, and
+abstract. These can appear anywhere in the source but always compile to
+the LaTeX preamble and front matter.
+
+| Directive | Purpose |
+|-----------|---------|
+| !title | Document title (single-line or multiline with indented body) |
+| !author | Author name (use multiple directives for multiple authors) |
+| !date | Date in ISO format, or empty for today's date |
+| !abstract | Abstract section with indented body |
+
+When any of !title, !author, or !date is present, the LaTeX output includes
+a title block. If !date is omitted entirely, no date is shown.
+
+# Headings
+
+Headings use the hash symbol, identical to markdown:
+
+- Level 1: one hash for a section
+- Level 2: two hashes for a subsection
+- Level 3: three hashes for a sub-subsection
+- Level 4: four hashes for a paragraph heading
+
+Headings automatically generate labels from the slugified title (lowercase,
+hyphens for spaces, special characters stripped). For explicit labels, use
+the label backtick syntax after the title text.
+
+See ref`structure` for an example of an explicit label.
+
+## Prose
+
+Consecutive non-blank lines that do not start with a hash or a directive
+form a prose paragraph. Lines are joined with spaces.
+
+### Inline Tags
+
+Within prose, the following inline constructs are recognized:
+
+- math backticks: parsed expression rendered as inline math
+- tex backticks: raw LaTeX passed through verbatim
+- claim backticks: equation reference producing a numbered reference
+- ref backticks: section cross-reference with optional display text
+- url backticks: hyperlinks with optional display text
+
+#### Inline Math
+
+Use math backticks for expressions that Verso can parse, verify, and render.
+For example, math`sin(x)^2 + cos(x)^2` equals one. The expression uses
+Verso's expression syntax, not LaTeX.
+
+For inline equations, math backticks can contain an equals sign:
+math`a^2 + b^2 = c^2`.
+
+#### Raw LaTeX
+
+Use tex backticks for LaTeX that Verso does not need to parse. The content
+is passed through verbatim inside math delimiters. For instance,
+tex`\vec{v}` renders a vector.
+
+### Text Formatting
+
+- **Bold text** uses double asterisks
+- *Italic text* uses single asterisks
+- ***Bold italic*** uses triple asterisks
+
+Certain characters in prose are automatically converted for correct LaTeX
+output. Paired "quotation marks" become smart quotes. The tilde character
+~ produces a literal tilde.
+
+Footnotes use the caret-bracket syntax^[Like this footnote, which supports
+inline formatting including **bold** and *italic*.].
+
+# Mathematical Content
+
+## Variable Declarations
+
+Variables are declared with the !var directive, specifying a name and its
+physical dimensions in brackets. When variables are declared, Verso checks
+that both sides of every claim have matching dimensions.
+
+!var v [L T^-1]
+!var a [L T^-2]
+!var t [T]
+!var m [M]
+!var F [M L T^-2]
+
+Base dimensions are: L (length), M (mass), T (time), Theta or the Greek
+theta symbol (temperature), I (current), N (amount), J (luminosity).
+Exponents are written with the caret: math`v` has dimension L T to the
+minus one. Dimensionless quantities use the bracket notation with 1.
+
+### Subscript Semantics label`subscripts`
+
+Variable names may include subscripts using underscore-brace notation.
+In physics notation, subscripts serve different roles:
+
+1. **Family indexing.** A subscript ranges over an index set (typically
+   integers). Declaring math`x_{n}` as a variable means math`x_{n-1}`,
+   math`x_{n+1}`, and so on all share the same dimension. This is the
+   most common usage in physics: sequences, series, and discretized
+   fields.
+
+2. **Component labels.** Tensor indices like math`T_{ij}` denote
+   components. The type is the same regardless of which specific
+   indices appear.
+
+3. **Distinguishing labels.** Names like math`v_{0}` (initial velocity)
+   or math`v_{f}` (final velocity) are specific named quantities, not
+   members of a parametric family. In Verso, each such quantity is
+   declared separately.
+
+4. **Partial derivative shorthand.** The notation math`f_{x}` sometimes
+   means the partial derivative of f with respect to x. This convention
+   is **not supported** by Verso. Use explicit derivative notation
+   instead.
+
+Verso treats subscripts as part of the variable name. A declaration of
+math`v_{0}` creates a variable named "v_{0}" and does not imply any
+relationship with math`v_{f}` or plain math`v`.
+
+## Constant Declarations
+
+Constants bind a name to a fixed value. The value is substituted wherever
+the name appears in subsequent claims and proofs.
+
+!const g = 10
+
+## Function Declarations
+
+Functions define parameterized expressions that expand at use sites.
+
+!func KE(m, v) = (1/2)*m*v^2
+
+Parameters are positional. The body can reference previously declared
+constants and variables. Multi-character names followed by an opening
+parenthesis are parsed as function calls.
+
+## Claims label`claims`
+
+A claim is a named equation that Verso verifies. Verification checks that
+the left-hand side minus the right-hand side simplifies to zero, falling
+back to numerical spot-checking if symbolic simplification is insufficient.
+
+!claim add_zero_identity
+  x + 0 = x
+
+!claim mul_one_identity
+  x * 1 = x
+
+!claim square_expansion
+  (x + y)^2 = x^2 + 2*x*y + y^2
+
+The body must be indented. Exactly one equals sign separates the left-hand
+side from the right-hand side. Both sides use Verso expression syntax.
+Claims compile to numbered LaTeX equations with an equation label.
+
+See claim`add_zero_identity` for the simplest example.
+
+## Definitions
+
+A definition is an unverified claim that also becomes a rewrite rule. This
+is useful for introducing new notation or equalities that the verification
+engine should accept without proof.
+
+!definition kinetic_energy
+  KE(m, v) = (1/2)*m*v^2
+
+Unlike claims, definitions are not checked by the simplification engine.
+They are registered as bidirectional rewrite rules that subsequent claims
+and proofs can use.
+
+## Proofs label`proofs`
+
+A proof is a step-by-step derivation that references a claim. Each adjacent
+pair of steps is verified independently.
+
+!claim quadratic_diff
+  (x + 1)^2 - x^2 = 2*x + 1
+
+!proof quadratic_diff
+  (x + 1)^2 - x^2
+  = x^2 + 2*x + 1 - x^2
+  = 2*x + 1
+
+The first step has no leading equals sign. Subsequent steps begin with
+equals. Proofs compile to a LaTeX align environment. See ref`proofs` for
+this section.
+
+## Dimensional Analysis
+
+When variable declarations include dimensions, Verso checks that both sides
+of every claim have matching dimensions.
+
+!definition newtons_second_law
+  F = m * a
+
+Definitions are not symbolically verified, but when variable declarations
+are present, Verso still checks dimensional consistency. Both sides of
+this definition have dimension M L T to the minus two.
+
+!definition velocity_from_acceleration
+  v = a * t
+
+## Math Blocks
+
+For displayed math that is not a claim or proof, use fenced math blocks.
+These are display-only and are not verified.
+
+```math
+x^2 + y^2 + z^2
+a^2 + b^2
+```
+
+A math block with alignment markers compiles to a LaTeX align environment.
+Multi-line blocks without alignment compile to a gather environment.
+
+# Document Elements
+
+## Lists
+
+### Bullet Lists
+
+Bullet lists use the dash marker:
+
+- First item
+- Second item with **bold** text
+- Third item with math`x^2` inline
+
+### Numbered Lists
+
+Numbered lists use digit-dot markers:
+
+1. First step
+2. Second step
+3. Third step
+
+Inline formatting (bold, italic, math) works inside list items.
+
+## Block Quotes
+
+> Block quotes use the greater-than marker. Multiple consecutive quoted
+> lines form a single block quote. These are useful for stating results
+> from other sources.
+
+## Tables
+
+Tables use pipe-delimited rows with a separator line:
+
+!table Fundamental Forces
+  | Force | Mediator | Range |
+  |-------|----------|-------|
+  | Gravity | Graviton | Infinite |
+  | Electromagnetic | Photon | Infinite |
+  | Strong | Gluon | Short |
+  | Weak | W and Z | Short |
+
+The second row marks the header boundary. Column alignment can be specified
+with colons in the separator: left-aligned by default, centered with colons
+on both sides, right-aligned with a colon on the right.
+
+## Theorem-like Environments
+
+Verso supports theorem, lemma, corollary, remark, and example environments.
+These are prose containers with optional titles.
+
+!theorem Pythagorean Theorem
+  For a right triangle with legs math`a` and math`b` and hypotenuse
+  math`c`, the identity math`a^2 + b^2 = c^2` holds.
+
+!lemma
+  Every positive real number has a unique positive square root.
+
+!remark
+  The converse of the Pythagorean theorem also holds: if
+  math`a^2 + b^2 = c^2`, then the triangle is a right triangle.
+
+Theorem-like environments are not verified. If a theorem contains a
+verifiable statement, the author should also write a claim.
+
+## Centered Blocks
+
+!center
+  url`https://github.com/example/verso`
+
+Centered blocks compile to a LaTeX center environment. The indented body
+supports inline formatting.
+
+## Comments
+
+Lines starting with a percent sign are comments. They are ignored by the
+parser and produce no output. This is consistent with LaTeX convention.
+
+## Page Breaks
+
+The !pagebreak directive inserts a page break in the compiled output.
+
+# Multi-file Documents
+
+The !include directive inlines another Verso file at the include point.
+Paths are relative to the including file's directory. Nested includes
+are supported; circular includes are detected and produce an error.
+Labels and cross-references work across included files.
+
+# Expression Syntax label`expressions`
+
+Expressions inside math backticks, claims, and proofs use Verso's symbolic
+syntax, not LaTeX. Key elements:
+
+- **Exponents:** x^2 or x^(a+b) for compound exponents
+- **Subscripts:** T_{mu} for tensor lower indices
+- **Superscripts:** T^{mu} for tensor upper indices (curly braces distinguish from exponent)
+- **Functions:** sin(x), cos(x), sqrt(x), exp(x), ln(x)
+- **Multiplication:** implicit (xy) or explicit (x * y)
+- **Fractions:** 1/2 renders as a fraction
+- **Constants:** pi or the Greek letter, e for Euler's number
+- **Visual separators:** 1_000_000 (underscores ignored in numbers)
+
+# Dimensions and Units label`dimensions`
+
+## Base Dimensions
+
+Variable dimensions use uppercase symbols in brackets:
+
+| Symbol | Dimension |
+|--------|-----------|
+| L | Length |
+| M | Mass |
+| T | Time |
+| Theta | Temperature |
+| I | Current |
+| N | Amount |
+| J | Luminosity |
+
+Exponents and products: a velocity has dimension L T^-1, a force has
+dimension M L T^-2. Dimensionless quantities use 1.
+
+## SI Units
+
+Numeric quantities use SI units in brackets. Base units include m (meter),
+g (gram), s (second), K (kelvin), A (ampere), mol (mole), cd (candela).
+Derived units include N (newton), J (joule), W (watt), Pa (pascal),
+Hz (hertz), C (coulomb), V (volt), and Ohm.
+
+SI prefixes: p (pico), n (nano), the Greek mu (micro), m (milli),
+c (centi), k (kilo), M (mega), G (giga), T (tera).
+
+Quantities are evaluated by converting to base SI. Dimensional analysis
+uses the unit's implied dimension.
