@@ -3,6 +3,21 @@ use crate::expr::{
     NamedConst,
 };
 use crate::rational::Rational;
+use crate::unicode;
+
+/// Convert a name that may contain unicode characters to LaTeX.
+/// Single unicode chars are looked up in the unicode table; ASCII names pass through.
+fn name_to_latex(name: &str) -> String {
+    let mut result = String::new();
+    for ch in name.chars() {
+        if let Some(latex) = unicode::to_latex(ch) {
+            result.push_str(latex);
+        } else {
+            result.push(ch);
+        }
+    }
+    result
+}
 
 fn frac_pi_to_tex(r: &Rational) -> String {
     let n = r.num();
@@ -82,8 +97,9 @@ impl ToTex for Expr {
             ExprKind::Named(nc) => nc.to_tex(),
             ExprKind::FracPi(r) => frac_pi_to_tex(r),
             ExprKind::Var { name, indices, .. } => {
+                let tex_name = name_to_latex(name);
                 if indices.is_empty() {
-                    name.clone()
+                    tex_name
                 } else {
                     let upper: Vec<_> = indices
                         .iter()
@@ -96,7 +112,7 @@ impl ToTex for Expr {
                         .map(|i| i.to_tex())
                         .collect();
 
-                    let mut result = name.clone();
+                    let mut result = tex_name;
                     if !upper.is_empty() {
                         result.push_str(&format!("^{{{}}}", upper.join("")));
                     }
@@ -427,6 +443,22 @@ mod tests {
         };
         let e = quantity(constant(5.0), unit);
         assert_eq!(e.to_tex(), "5 \\; \\mathrm{m}");
+    }
+
+    #[test]
+    fn to_tex_unicode_var() {
+        assert_eq!(scalar("μ").to_tex(), "\\mu");
+    }
+
+    #[test]
+    fn to_tex_unicode_var_with_indices() {
+        let t = tensor("μ", vec![lower("i")]);
+        assert_eq!(t.to_tex(), "\\mu_{i}");
+    }
+
+    #[test]
+    fn to_tex_ascii_var_unchanged() {
+        assert_eq!(scalar("x").to_tex(), "x");
     }
 
     #[test]
