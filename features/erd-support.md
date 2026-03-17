@@ -10,10 +10,6 @@ This feature tracks the verso extensions needed to author and verify ERD's mathe
 
 - **[unicode-completions](unicode-completions.md)**: Landed. ERD now uses `math` tags for simple Greek letter variables (`σ`, `μ`, `K`, `ρ_{0}`).
 
-## Known Limitations
-
-- **Subscript expressions in `math` tags**: `math`R_{n-1}`` produces `InvalidIndexList`. The parser rejects subscripts containing operators (`-`, `+`) or bare variables (`n`). Rung labels like `R_{n-1}`, `R_{-1}`, `R_{+1}` must use `tex` fallback. This may warrant a parser enhancement to support arbitrary subscript content.
-
 ## Needed Capabilities
 
 ### Priority 1: Derivatives and differential equations

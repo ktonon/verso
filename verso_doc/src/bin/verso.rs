@@ -806,14 +806,18 @@ async fn cmd_lsp() {
 
     fn find_root_document(file_path: &Path) -> Option<PathBuf> {
         let mut dir = file_path.parent()?;
+        let mut best: Option<PathBuf> = None;
         loop {
             for name in &["paper.verso", "index.verso"] {
                 let candidate = dir.join(name);
                 if candidate.exists() && candidate != file_path {
-                    return Some(candidate);
+                    best = Some(candidate);
                 }
             }
-            dir = dir.parent()?;
+            match dir.parent() {
+                Some(parent) => dir = parent,
+                None => return best,
+            }
         }
     }
 
