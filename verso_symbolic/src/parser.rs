@@ -832,6 +832,7 @@ impl Parser {
         loop {
             let ident = match self.next() {
                 Some(Token::Ident(name)) => name,
+                Some(Token::Number(name)) => name,
                 _ => return Err(ParseError::InvalidIndexList),
             };
             indices.push(Index {
@@ -1428,6 +1429,20 @@ mod tests {
     fn parse_underscore_in_expression() {
         let e = parse_expr("2 * 1_000").unwrap();
         assert_eq!(e, mul(constant(2.0), constant(1_000.0)));
+    }
+
+    #[test]
+    fn parse_numeric_subscript() {
+        use crate::expr::{lower, tensor};
+        let e = parse_expr("x_{0}").unwrap();
+        assert_eq!(e, tensor("x", vec![lower("0")]));
+    }
+
+    #[test]
+    fn parse_numeric_superscript() {
+        use crate::expr::{upper, tensor};
+        let e = parse_expr("A^{0,1}").unwrap();
+        assert_eq!(e, tensor("A", vec![upper("0"), upper("1")]));
     }
 
     // --- Span tests ---
