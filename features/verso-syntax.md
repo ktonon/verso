@@ -119,14 +119,14 @@ Within prose, the following inline constructs are recognized:
 
 | Syntax | Meaning | LaTeX output |
 |--------|---------|--------------|
-| `math`expr`` | Inline math (parsed) | `$\text{to\_tex(expr)}$` |
-| `tex`raw`` | Inline raw LaTeX | `$raw$` |
-| `claim`name`` | Equation reference | `\eqref{eq:name}` |
-| `cite`key`` | Bibliography citation | `\cite{key}` |
-| `ref`label`` | Section cross-reference | `\hyperref[label]{Title}` |
-| `ref`label\|text`` | Cross-reference with display text | `\hyperref[label]{text}` |
-| `url`https://...`` | URL link | `\url{https://...}` |
-| `url`https://...\|text`` | URL with display text | `\href{https://...}{text}` |
+| <pre>math\`expr\`</pre> | Inline math (parsed) | `$\text{to\_tex(expr)}$` |
+| <pre>tex\`raw\`</pre> | Inline raw LaTeX | `$raw$` |
+| <pre>claim\`name\`</pre> | Equation reference | `\eqref{eq:name}` |
+| <pre>cite\`key\`</pre> | Bibliography citation | `\cite{key}` |
+| <pre>ref\`label\`</pre> | Section cross-reference | `\hyperref[label]{Title}` |
+| <pre>ref\`label\|text\`</pre> | Cross-reference with display text | `\hyperref[label]{text}` |
+| <pre>url\`https://...\`</pre> | URL link | `\url{https://...}` |
+| <pre>url\`https://...\|text\`</pre> | URL with display text | `\href{https://...}{text}` |
 | `**text**` | Bold | `\textbf{text}` |
 | `*text*` | Italic | `\textit{text}` |
 
