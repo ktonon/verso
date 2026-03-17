@@ -511,6 +511,7 @@ async fn cmd_lsp() {
 
     struct VersoServer {
         client: Client,
+        documents: std::sync::RwLock<std::collections::HashMap<Url, String>>,
     }
 
     #[tower_lsp::async_trait]
@@ -549,6 +550,12 @@ async fn cmd_lsp() {
         }
 
         async fn did_open(&self, params: DidOpenTextDocumentParams) {
+            let uri = params.text_document.uri.clone();
+            let text = params.text_document.text.clone();
+            self.documents
+                .write()
+                .unwrap()
+                .insert(uri, text);
             let file_path = params.text_document.uri.to_file_path().ok();
             let diagnostics = compute_diagnostics(&params.text_document.text, file_path.as_deref());
             self.client
@@ -558,6 +565,10 @@ async fn cmd_lsp() {
 
         async fn did_change(&self, params: DidChangeTextDocumentParams) {
             if let Some(change) = params.content_changes.into_iter().last() {
+                self.documents
+                    .write()
+                    .unwrap()
+                    .insert(params.text_document.uri.clone(), change.text.clone());
                 let diagnostics = compute_diagnostics(&change.text, None);
                 self.client
                     .publish_diagnostics(params.text_document.uri, diagnostics, None)
@@ -569,7 +580,48 @@ async fn cmd_lsp() {
             &self,
             params: CompletionParams,
         ) -> Result<Option<CompletionResponse>> {
-            let items: Vec<CompletionItem> = verso_symbolic::unicode::completions("")
+            let pos = params.text_document_position.position;
+            let uri = &params.text_document_position.text_document.uri;
+
+            // Find the `:` that started this completion trigger by reading the document
+            let docs = self.documents.read().unwrap();
+            let Some(text) = docs.get(uri) else {
+                return Ok(None);
+            };
+
+            let line_text = text.lines().nth(pos.line as usize).unwrap_or("");
+            let col = pos.character as usize;
+            let before_cursor = &line_text[..col.min(line_text.len())];
+
+            // Scan backwards from cursor to find the opening `:`
+            let colon_col = match before_cursor.rfind(':') {
+                Some(idx) => idx,
+                None => return Ok(None),
+            };
+
+            // The prefix typed so far (between `:` and cursor)
+            let typed_prefix = &before_cursor[colon_col + 1..];
+
+            // Check if there's a closing `:` right at the cursor
+            let has_closing_colon = line_text.get(col..col + 1) == Some(":");
+            let end_character = if has_closing_colon {
+                pos.character + 1
+            } else {
+                pos.character
+            };
+
+            let replace_range = Range {
+                start: Position {
+                    line: pos.line,
+                    character: colon_col as u32,
+                },
+                end: Position {
+                    line: pos.line,
+                    character: end_character,
+                },
+            };
+
+            let items: Vec<CompletionItem> = verso_symbolic::unicode::completions(typed_prefix)
                 .into_iter()
                 .map(|(name, ch)| {
                     let label = format!(":{}:", name);
@@ -577,13 +629,15 @@ async fn cmd_lsp() {
                         label: label.clone(),
                         kind: Some(CompletionItemKind::TEXT),
                         detail: Some(format!("{} (U+{:04X})", ch, ch as u32)),
-                        insert_text: Some(format!("{}:", name)),
-                        filter_text: Some(label),
+                        filter_text: Some(format!(":{}:", name)),
+                        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                            range: replace_range,
+                            new_text: ch.to_string(),
+                        })),
                         ..Default::default()
                     }
                 })
                 .collect();
-            let _ = params;
             Ok(Some(CompletionResponse::Array(items)))
         }
 
@@ -744,6 +798,9 @@ async fn cmd_lsp() {
 
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
-    let (service, socket) = LspService::new(|client| VersoServer { client });
+    let (service, socket) = LspService::new(|client| VersoServer {
+        client,
+        documents: std::sync::RwLock::new(std::collections::HashMap::new()),
+    });
     Server::new(stdin, stdout, socket).serve(service).await;
 }
