@@ -6,6 +6,10 @@ Support the Emergent Rung Dynamics (ERD) paper — a mathematical physics paper 
 
 This feature tracks the verso extensions needed to author and verify ERD's mathematical content.
 
+## Dependencies
+
+- **[unicode-completions](unicode-completions.md)**: ERD currently falls back to `tex` inline tags for Greek letters (`μ`, `ρ`, `σ`) and math symbols because verso's `math` parser doesn't accept them. Once unicode-completions lands, ERD can use `math` tags for these expressions, enabling symbolic verification instead of LaTeX passthrough.
+
 ## Needed Capabilities
 
 ### Priority 1: Derivatives and differential equations
