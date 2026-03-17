@@ -15,7 +15,21 @@ The user types `:name:` (e.g., `:mu:`, `:partial:`, `:nabla:`) and the text is r
 
 ### No conflict with REPL commands
 
-REPL commands (`:var`, `:const`, `:func`, `:reset`, etc.) use a single colon at the start of the line. Unicode triggers use *paired* colons (`:name:`), so there is no ambiguity.
+REPL commands (`:var`, `:const`, `:func`, `:reset`, etc.) use a single colon at the start of the line. Unicode triggers use *paired* colons (`:name:`), so there is no ambiguity. (Once bang-directives lands, REPL commands will use `!` and even the theoretical conflict disappears.)
+
+### LaTeX transpilation
+
+Verso source files contain literal unicode characters (e.g., `μ`, `∂`, `∇`). When transpiling to LaTeX, these must be converted to the appropriate LaTeX commands:
+
+| Verso source | LaTeX output |
+|-------------|-------------|
+| `μ` | `\mu` |
+| `∂f/∂x` | `\partial f / \partial x` |
+| `∇ · F` | `\nabla \cdot F` |
+
+The unicode table stores a triple: `(name, char, latex)`. Most names match the LaTeX command directly (mu → `\mu`, alpha → `\alpha`), so the LaTeX string can default to `\{name}` with explicit overrides only where they diverge (e.g., `inf` → `\infty`, `cdot` → `\cdot`).
+
+The `to_tex` module currently renders `Var { name }` as the name verbatim. It needs to look up unicode characters and emit the LaTeX equivalent. This applies to variable names, function arguments, and any free text in math expressions.
 
 ### Character set
 
@@ -36,15 +50,22 @@ Extensible — new entries can be added to the table without code changes.
 ### Shared unicode table
 
 - New module `verso_symbolic/src/unicode.rs`
-- `pub fn lookup(name: &str) -> Option<char>` — exact match
+- Table entry: `(name: &str, char: char, latex: &str)`
+- `pub fn lookup(name: &str) -> Option<char>` — name → unicode char
+- `pub fn to_latex(c: char) -> Option<&str>` — unicode char → LaTeX command
 - `pub fn completions(prefix: &str) -> Vec<(&str, char)>` — prefix search for popup
 - `pub fn replace_all(input: &str) -> String` — scan for `:name:` patterns, replace matches
-- Table is a static `&[(&str, char)]` sorted by name
+- Table is a static `&[UnicodeEntry]` sorted by name
 
 ### REPL integration
 
 - In `Session::eval`, call `replace_all` on the input before any other processing
 - Also call it in the `run()` readline loop so the prompt echo shows the replaced text
+
+### LaTeX integration
+
+- In `to_tex.rs`, use `to_latex(c)` when rendering variable names, function names, and text containing unicode math symbols
+- Applies to `ExprKind::Var`, `ExprKind::Fn(Custom(...))`, and any string output in math mode
 
 ### VSCode / LSP integration
 
@@ -68,6 +89,7 @@ Not yet started.
 
 ## Verification
 
-- `cargo test --release -p verso_symbolic -- unicode` exercises the lookup/replace functions
+- `cargo test --release -p verso_symbolic -- unicode` exercises the lookup/replace/to_latex functions
 - REPL e2e tests verify `:mu:` → `μ` replacement in expressions
+- LaTeX output tests verify `μ` → `\mu` in generated `.tex` files
 - Manual verification of VSCode completion popup behavior
