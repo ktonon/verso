@@ -413,6 +413,27 @@ mod tests {
     }
 
     #[test]
+    fn verify_claim_rhs_only_var_no_panic() {
+        // Regression: a claim where σ appears only in the RHS must not panic
+        // when the claim is later used as a rule (σ stays concrete, not a wildcard)
+        let src = "\
+!definition recurrence
+  a = b / σ
+
+!claim trivial
+  x = x
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        // The definition is accepted without verification; trivial claim should pass
+        assert!(
+            report.all_passed(),
+            "rhs-only var should not panic: {:?}",
+            report.results
+        );
+    }
+
+    #[test]
     fn verify_const_wrong_value_fails() {
         let src = "\
 !const k = 2

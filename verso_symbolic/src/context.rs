@@ -90,12 +90,12 @@ impl Context {
         }
     }
 
-    /// Register a verified claim as a bidirectional rewrite rule.
-    /// Free variables in the claim become pattern wildcards.
+    /// Register a verified claim as a rewrite rule.
+    /// Only free variables present in the LHS become pattern wildcards;
+    /// variables appearing only in the RHS stay concrete so that
+    /// `substitute` never encounters an unbound wildcard.
     pub fn add_claim_as_rule(&mut self, name: &str, lhs: &Expr, rhs: &Expr) {
-        let mut vars = free_vars(lhs);
-        vars.extend(free_vars(rhs));
-        let wildcards: HashSet<String> = vars.into_iter().collect();
+        let wildcards: HashSet<String> = free_vars(lhs).into_iter().collect();
         let lhs_pat = expr_to_pattern(lhs, &wildcards);
         let rhs_pat = expr_to_pattern(rhs, &wildcards);
         self.rules.add(Rule {
