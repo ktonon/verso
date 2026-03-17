@@ -101,7 +101,6 @@ pub struct Environment {
 pub enum EnvKind {
     Theorem,
     Lemma,
-    Definition,
     Corollary,
     Remark,
     Example,
@@ -136,6 +135,8 @@ pub enum ProseFragment {
     Text(String),
     /// Tagged inline math: math`expr` — parsed via verso_symbolic, rendered via ToTex.
     Math(Expr),
+    /// Tagged inline math equality: math`lhs = rhs` — rendered as $lhs = rhs$.
+    MathEquality(Expr, Expr),
     /// Tagged inline raw LaTeX: tex`\vec{v}` — passed through as-is.
     Tex(String),
     /// Tagged claim reference: claim`name` — rendered as \eqref{eq:name}.
@@ -168,6 +169,8 @@ pub struct Claim {
     pub name: String,
     pub lhs: Expr,
     pub rhs: Expr,
+    /// If true, this is a definition (unverified, always registered as a rule).
+    pub is_definition: bool,
     pub span: Span,
 }
 

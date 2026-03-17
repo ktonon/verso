@@ -80,7 +80,7 @@
     },
 
     "directive-claim": {
-      "begin": "^(!claim)\\s+(\\S+)\\s*$",
+      "begin": "^(!(?:claim|definition))\\s+(\\S+)\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.claim.verso" },
@@ -299,7 +299,7 @@
     },
 
     "directive-environment": {
-      "begin": "^(!(?:theorem|lemma|definition|corollary|remark|example))(?:\\s+(.+))?\\s*$",
+      "begin": "^(!(?:theorem|lemma|corollary|remark|example))(?:\\s+(.+))?\\s*$",
       "end": "^(?!\\s)|^\\s*$",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.environment.verso" },

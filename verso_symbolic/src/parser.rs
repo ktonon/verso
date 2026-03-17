@@ -610,6 +610,19 @@ impl Parser {
                 self.next(); // consume {
                 let indices = self.parse_brace_index_list(IndexPosition::Lower)?;
                 lowers.extend(indices);
+            } else if matches!(self.peek(), Some(Token::Underscore))
+                && matches!(self.peek_at(1), Some(Token::Ident(_)) | Some(Token::Number(_)))
+            {
+                // Bare subscript without braces: x_n, x_0
+                self.next(); // consume _
+                let name = match self.next() {
+                    Some(Token::Ident(s)) | Some(Token::Number(s)) => s,
+                    _ => unreachable!(),
+                };
+                lowers.push(Index {
+                    name,
+                    position: IndexPosition::Lower,
+                });
             } else if matches!(self.peek(), Some(Token::Caret))
                 && matches!(self.peek_at(1), Some(Token::LBrace))
             {
@@ -830,13 +843,31 @@ impl Parser {
     ) -> Result<Vec<Index>, ParseError> {
         let mut indices = Vec::new();
         loop {
-            let ident = match self.next() {
-                Some(Token::Ident(name)) => name,
-                Some(Token::Number(name)) => name,
-                _ => return Err(ParseError::InvalidIndexList),
-            };
+            // Collect all tokens until `,` or `}` as the index name.
+            // This allows expressions like `n-1`, `n+1`, `2k` in subscripts.
+            let mut name = String::new();
+            loop {
+                match self.peek() {
+                    Some(Token::Comma) | Some(Token::RBrace) | None => break,
+                    _ => {}
+                }
+                let tok = self.next().unwrap();
+                match tok {
+                    Token::Ident(s) | Token::Number(s) => name.push_str(&s),
+                    Token::Plus => name.push('+'),
+                    Token::Minus => name.push('-'),
+                    Token::Star => name.push('*'),
+                    Token::Slash => name.push('/'),
+                    Token::Caret => name.push('^'),
+                    Token::Pi => name.push('π'),
+                    _ => return Err(ParseError::InvalidIndexList),
+                }
+            }
+            if name.is_empty() {
+                return Err(ParseError::InvalidIndexList);
+            }
             indices.push(Index {
-                name: ident,
+                name,
                 position: position.clone(),
             });
             match self.peek() {
@@ -1443,6 +1474,34 @@ mod tests {
         use crate::expr::{upper, tensor};
         let e = parse_expr("A^{0,1}").unwrap();
         assert_eq!(e, tensor("A", vec![upper("0"), upper("1")]));
+    }
+
+    #[test]
+    fn parse_bare_subscript() {
+        use crate::expr::{lower, tensor};
+        let e = parse_expr("x_n").unwrap();
+        assert_eq!(e, tensor("x", vec![lower("n")]));
+    }
+
+    #[test]
+    fn parse_bare_numeric_subscript() {
+        use crate::expr::{lower, tensor};
+        let e = parse_expr("ℓ_0").unwrap();
+        assert_eq!(e, tensor("ℓ", vec![lower("0")]));
+    }
+
+    #[test]
+    fn parse_expression_subscript() {
+        use crate::expr::{lower, tensor};
+        let e = parse_expr("τ_{n-1}").unwrap();
+        assert_eq!(e, tensor("τ", vec![lower("n-1")]));
+    }
+
+    #[test]
+    fn parse_expression_subscript_complex() {
+        use crate::expr::{lower, tensor};
+        let e = parse_expr("R_{n+1}").unwrap();
+        assert_eq!(e, tensor("R", vec![lower("n+1")]));
     }
 
     // --- Span tests ---

@@ -375,7 +375,40 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 });
             }
 
-            let claim = parse_claim_body(&name, &body, claim_line)?;
+            let claim = parse_claim_body(&name, &body, claim_line, false)?;
+            blocks.push(Block::Claim(claim));
+            continue;
+        }
+
+        // Definition block (unverified claim)
+        if trimmed.starts_with("!definition") {
+            let name = trimmed["!definition".len()..].trim().to_string();
+            if name.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: "!definition requires a name".into(),
+                });
+            }
+            let def_line = i + 1;
+
+            i += 1;
+            let mut body = String::new();
+            while i < lines.len() && is_continuation(&lines[i]) {
+                if !body.is_empty() {
+                    body.push(' ');
+                }
+                body.push_str(lines[i].trim());
+                i += 1;
+            }
+
+            if body.is_empty() {
+                return Err(ParseDocError {
+                    line: def_line,
+                    message: "!definition body is empty".into(),
+                });
+            }
+
+            let claim = parse_claim_body(&name, &body, def_line, true)?;
             blocks.push(Block::Claim(claim));
             continue;
         }
@@ -937,7 +970,6 @@ fn parse_env_kind(trimmed: &str) -> Option<EnvKind> {
     let directives = [
         ("!theorem", EnvKind::Theorem),
         ("!lemma", EnvKind::Lemma),
-        ("!definition", EnvKind::Definition),
         ("!corollary", EnvKind::Corollary),
         ("!remark", EnvKind::Remark),
         ("!example", EnvKind::Example),
@@ -967,7 +999,6 @@ fn parse_environment(
     let prefix_len = match kind {
         EnvKind::Theorem => "!theorem",
         EnvKind::Lemma => "!lemma",
-        EnvKind::Definition => "!definition",
         EnvKind::Corollary => "!corollary",
         EnvKind::Remark => "!remark",
         EnvKind::Example => "!example",
@@ -1002,10 +1033,16 @@ fn parse_table_row(line: &str) -> Result<Vec<Vec<ProseFragment>>, ParseDocError>
     cells.iter().map(|c| parse_prose_fragments(c)).collect()
 }
 
-fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseDocError> {
+fn parse_claim_body(
+    name: &str,
+    body: &str,
+    line: usize,
+    is_definition: bool,
+) -> Result<Claim, ParseDocError> {
+    let kind = if is_definition { "definition" } else { "claim" };
     let eq_pos = body.find('=').ok_or_else(|| ParseDocError {
         line,
-        message: format!("claim '{}': expected 'lhs = rhs'", name),
+        message: format!("{} '{}': expected 'lhs = rhs'", kind, name),
     })?;
 
     let lhs_str = body[..eq_pos].trim();
@@ -1013,18 +1050,19 @@ fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseD
 
     let lhs = parse_expr(lhs_str).map_err(|e| ParseDocError {
         line,
-        message: format!("claim '{}' lhs: {:?}", name, e),
+        message: format!("{} '{}' lhs: {:?}", kind, name, e),
     })?;
 
     let rhs = parse_expr(rhs_str).map_err(|e| ParseDocError {
         line,
-        message: format!("claim '{}' rhs: {:?}", name, e),
+        message: format!("{} '{}' rhs: {:?}", kind, name, e),
     })?;
 
     Ok(Claim {
         name: name.to_string(),
         lhs,
         rhs,
+        is_definition,
         span: Span { line },
     })
 }
@@ -1231,12 +1269,28 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                 InlineMatch::Tag(tag_match) => {
                     match tag_match.tag {
                         "math" => {
-                            let expr =
-                                parse_expr(tag_match.content).map_err(|e| ParseDocError {
-                                    line: 0,
-                                    message: format!("inline math`{}`: {:?}", tag_match.content, e),
-                                })?;
-                            fragments.push(ProseFragment::Math(expr));
+                            if let Some(eq_pos) = tag_match.content.find('=') {
+                                let lhs_str = tag_match.content[..eq_pos].trim();
+                                let rhs_str = tag_match.content[eq_pos + 1..].trim();
+                                let lhs =
+                                    parse_expr(lhs_str).map_err(|e| ParseDocError {
+                                        line: 0,
+                                        message: format!("inline math`{}`: lhs: {:?}", tag_match.content, e),
+                                    })?;
+                                let rhs =
+                                    parse_expr(rhs_str).map_err(|e| ParseDocError {
+                                        line: 0,
+                                        message: format!("inline math`{}`: rhs: {:?}", tag_match.content, e),
+                                    })?;
+                                fragments.push(ProseFragment::MathEquality(lhs, rhs));
+                            } else {
+                                let expr =
+                                    parse_expr(tag_match.content).map_err(|e| ParseDocError {
+                                        line: 0,
+                                        message: format!("inline math`{}`: {:?}", tag_match.content, e),
+                                    })?;
+                                fragments.push(ProseFragment::Math(expr));
+                            }
                         }
                         "tex" => {
                             fragments.push(ProseFragment::Tex(tag_match.content.to_string()));
@@ -1355,7 +1409,7 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
     for f in fragments {
         match f {
             ProseFragment::Text(t) => s.push_str(t),
-            ProseFragment::Math(_) => s.push_str("[math]"),
+            ProseFragment::Math(_) | ProseFragment::MathEquality(_, _) => s.push_str("[math]"),
             ProseFragment::Tex(t) => {
                 s.push_str("tex`");
                 s.push_str(t);
@@ -2050,20 +2104,22 @@ More prose here.
     }
 
     #[test]
-    fn parse_definition_no_title() {
-        let src = "!definition\n  A group is a set with a binary operation.";
+    fn parse_definition_as_unverified_claim() {
+        let src = "!definition char-length\n  a = b + c";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
-            Block::Environment(env) => {
-                assert_eq!(env.kind, EnvKind::Definition);
-                assert!(env.title.is_none());
-                assert_eq!(
-                    prose_to_string(&env.body),
-                    "A group is a set with a binary operation."
-                );
+            Block::Claim(claim) => {
+                assert_eq!(claim.name, "char-length");
+                assert!(claim.is_definition);
             }
-            other => panic!("expected Environment, got {:?}", other),
+            other => panic!("expected Claim, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn parse_definition_requires_name() {
+        let result = parse_document("!definition\n  a = b");
+        assert!(result.is_err());
     }
 
     #[test]
@@ -2071,7 +2127,6 @@ More prose here.
         for (directive, expected_kind) in &[
             ("!theorem", EnvKind::Theorem),
             ("!lemma", EnvKind::Lemma),
-            ("!definition", EnvKind::Definition),
             ("!corollary", EnvKind::Corollary),
             ("!remark", EnvKind::Remark),
             ("!example", EnvKind::Example),
@@ -2100,6 +2155,17 @@ More prose here.
                 assert!(matches!(&env.body[3], ProseFragment::Math(_)));
             }
             other => panic!("expected Environment, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_inline_math_equality() {
+        let doc = parse_document("We define math`a = b + c` here.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert!(matches!(&fragments[1], ProseFragment::MathEquality(_, _)));
+            }
+            other => panic!("expected Prose, got {:?}", other),
         }
     }
 

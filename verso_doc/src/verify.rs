@@ -83,11 +83,16 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
                 ctx.declare_func(&decl.name, decl.params.clone(), decl.body.clone());
             }
             Block::Claim(claim) => {
-                let result = verify_claim(claim, &ctx);
-                if result.passed() {
+                if claim.is_definition {
+                    // Definitions are accepted as given — no verification
                     ctx.add_claim_as_rule(&claim.name, &claim.lhs, &claim.rhs);
+                } else {
+                    let result = verify_claim(claim, &ctx);
+                    if result.passed() {
+                        ctx.add_claim_as_rule(&claim.name, &claim.lhs, &claim.rhs);
+                    }
+                    results.push(result);
                 }
-                results.push(result);
             }
             Block::Proof(proof) => {
                 results.push(verify_proof(proof, &ctx));

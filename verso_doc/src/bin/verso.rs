@@ -360,14 +360,35 @@ fn cmd_build(file: &str, output: Option<&str>) {
     }
 
     let run = |cmd: &str, args: &[&str]| -> bool {
-        let status = Command::new(cmd)
+        let output = Command::new(cmd)
             .args(args)
             .current_dir(&tmp)
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status();
-        match status {
-            Ok(s) => s.success(),
+            .output();
+        match output {
+            Ok(o) => {
+                if !o.status.success() {
+                    // Show the last portion of stdout which contains the error
+                    let stdout = String::from_utf8_lossy(&o.stdout);
+                    // pdflatex errors appear after lines starting with "!"
+                    let error_lines: Vec<&str> = stdout
+                        .lines()
+                        .filter(|l| l.starts_with('!') || l.starts_with("l."))
+                        .collect();
+                    if !error_lines.is_empty() {
+                        for line in &error_lines {
+                            eprintln!("  {}", line);
+                        }
+                    } else {
+                        // Fallback: show last 20 lines
+                        let lines: Vec<&str> = stdout.lines().collect();
+                        let start = lines.len().saturating_sub(20);
+                        for line in &lines[start..] {
+                            eprintln!("  {}", line);
+                        }
+                    }
+                }
+                o.status.success()
+            }
             Err(e) => {
                 eprintln!("error running {}: {}", cmd, e);
                 false

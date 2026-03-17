@@ -60,11 +60,11 @@
   "Definition": {
     "prefix": "def",
     "body": [
-      "!definition ${1:Title}",
-      "  ${2:body}",
+      "!definition ${1:name}",
+      "  ${2:lhs} = ${3:rhs}",
       ""
     ],
-    "description": "Definition environment"
+    "description": "Definition (unverified claim)"
   },
   "Math Block": {
     "prefix": "mathb",

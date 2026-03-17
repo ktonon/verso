@@ -124,19 +124,28 @@ pub fn compile_to_tex(doc: &Document) -> String {
     // Collect used environment kinds for \newtheorem declarations
     let mut env_kinds: Vec<EnvKind> = Vec::new();
     let mut seen: HashSet<EnvKind> = HashSet::new();
+    let mut has_definitions = false;
     for block in &doc.blocks {
         if let Block::Environment(env) = block {
             if seen.insert(env.kind) {
                 env_kinds.push(env.kind);
             }
         }
+        if let Block::Claim(claim) = block {
+            if claim.is_definition {
+                has_definitions = true;
+            }
+        }
     }
-    if !env_kinds.is_empty() {
+    if !env_kinds.is_empty() || has_definitions {
         writeln!(out).unwrap();
         for kind in &env_kinds {
             let name = env_kind_name(*kind);
             let display = env_kind_display(*kind);
             writeln!(out, "\\newtheorem{{{}}}{{{}}}", name, display).unwrap();
+        }
+        if has_definitions {
+            writeln!(out, "\\newtheorem{{definition}}{{Definition}}").unwrap();
         }
     }
 
@@ -327,6 +336,9 @@ fn write_prose_fragments(
             ProseFragment::Math(expr) => {
                 write!(out, "${}$", expr.to_tex()).unwrap();
             }
+            ProseFragment::MathEquality(lhs, rhs) => {
+                write!(out, "${} = {}$", lhs.to_tex(), rhs.to_tex()).unwrap();
+            }
             ProseFragment::Tex(raw) => {
                 write!(out, "${}$", raw).unwrap();
             }
@@ -373,9 +385,16 @@ fn write_prose_fragments(
 }
 
 fn write_claim(out: &mut String, claim: &Claim) {
+    if claim.is_definition {
+        let title = claim.name.replace('-', " ");
+        writeln!(out, "\\begin{{definition}}[{}]", title).unwrap();
+    }
     writeln!(out, "\\begin{{equation}} \\label{{eq:{}}}", claim.name).unwrap();
     writeln!(out, "  {} = {}", claim.lhs.to_tex(), claim.rhs.to_tex()).unwrap();
     writeln!(out, "\\end{{equation}}").unwrap();
+    if claim.is_definition {
+        writeln!(out, "\\end{{definition}}").unwrap();
+    }
 }
 
 fn write_proof(out: &mut String, proof: &Proof) {
@@ -576,7 +595,6 @@ fn env_kind_name(kind: EnvKind) -> &'static str {
     match kind {
         EnvKind::Theorem => "theorem",
         EnvKind::Lemma => "lemma",
-        EnvKind::Definition => "definition",
         EnvKind::Corollary => "corollary",
         EnvKind::Remark => "remark",
         EnvKind::Example => "example",
@@ -587,7 +605,6 @@ fn env_kind_display(kind: EnvKind) -> &'static str {
     match kind {
         EnvKind::Theorem => "Theorem",
         EnvKind::Lemma => "Lemma",
-        EnvKind::Definition => "Definition",
         EnvKind::Corollary => "Corollary",
         EnvKind::Remark => "Remark",
         EnvKind::Example => "Example",
@@ -716,6 +733,31 @@ mod tests {
     }
 
     #[test]
+    fn compile_inline_math_equality() {
+        let doc = parse_document("We define math`a = b + c` here.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("We define $a = b + c$ here."));
+    }
+
+    #[test]
+    fn compile_definition_unicode() {
+        let doc =
+            parse_document("!definition Characteristic-Length\n  ℓ_{n-1} = ℓ_n / σ")
+                .unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains("\\begin{definition}[Characteristic Length]"),
+            "got: {}",
+            tex
+        );
+        assert!(
+            tex.contains("\\ell_{n-1} = \\frac{\\ell_{n}}{\\sigma}"),
+            "got: {}",
+            tex
+        );
+    }
+
+    #[test]
     fn compile_prose_with_claim_ref() {
         let doc = parse_document("See claim`pythag` for details.").unwrap();
         let tex = compile_to_tex(&doc);
@@ -826,14 +868,15 @@ mod tests {
     }
 
     #[test]
-    fn compile_definition_no_title() {
-        let src = "!definition\n  A group is a set.";
+    fn compile_definition_as_equation() {
+        let src = "!definition char-length\n  a = b + c";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\newtheorem{definition}{Definition}"));
-        assert!(tex.contains("\\begin{definition}"));
-        assert!(!tex.contains("\\begin{definition}["));
-        assert!(tex.contains("A group is a set."));
+        assert!(tex.contains("\\begin{definition}[char length]"));
+        assert!(tex.contains("\\begin{equation} \\label{eq:char-length}"));
+        assert!(tex.contains("a = b + c"));
+        assert!(tex.contains("\\end{equation}"));
         assert!(tex.contains("\\end{definition}"));
     }
 
