@@ -825,27 +825,42 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
     for block in &doc.blocks {
         match block {
             Block::Var(decl) => {
+                let mut detail = format!("{}", decl.dimension);
+                if let Some(desc) = &decl.description {
+                    detail.push_str("\n\n");
+                    detail.push_str(desc);
+                }
                 symbols.push(SymbolInfo {
                     name: decl.var_name.clone(),
                     kind: "var".to_string(),
-                    detail: format!("{}", decl.dimension),
+                    detail,
                     line: decl.span.line,
                 });
             }
             Block::Const(decl) => {
+                let mut detail = format!("{}", decl.value);
+                if let Some(desc) = &decl.description {
+                    detail.push_str("\n\n");
+                    detail.push_str(desc);
+                }
                 symbols.push(SymbolInfo {
                     name: decl.name.clone(),
                     kind: "const".to_string(),
-                    detail: format!("{}", decl.value),
+                    detail,
                     line: decl.span.line,
                 });
             }
             Block::Func(decl) => {
                 let params = decl.params.join(", ");
+                let mut detail = format!("({}) = {}", params, decl.body);
+                if let Some(desc) = &decl.description {
+                    detail.push_str("\n\n");
+                    detail.push_str(desc);
+                }
                 symbols.push(SymbolInfo {
                     name: decl.name.clone(),
                     kind: "func".to_string(),
-                    detail: format!("({}) = {}", params, decl.body),
+                    detail,
                     line: decl.span.line,
                 });
             }

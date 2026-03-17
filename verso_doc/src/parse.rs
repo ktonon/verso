@@ -486,12 +486,15 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 line: i + 1,
                 message: format!("!var '{}': {}", var_name, e),
             })?;
+            let span = Span { line: i + 1 };
+            i += 1;
+            let description = collect_description(&lines, &mut i);
             blocks.push(Block::Var(VarDecl {
                 var_name,
                 dimension,
-                span: Span { line: i + 1 },
+                description,
+                span,
             }));
-            i += 1;
             continue;
         }
 
@@ -514,12 +517,15 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 line: i + 1,
                 message: format!("!const '{}': {:?}", name, e),
             })?;
+            let span = Span { line: i + 1 };
+            i += 1;
+            let description = collect_description(&lines, &mut i);
             blocks.push(Block::Const(ConstDecl {
                 name,
                 value,
-                span: Span { line: i + 1 },
+                description,
+                span,
             }));
-            i += 1;
             continue;
         }
 
@@ -566,13 +572,16 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 line: i + 1,
                 message: format!("!func '{}': {:?}", name, e),
             })?;
+            let span = Span { line: i + 1 };
+            i += 1;
+            let description = collect_description(&lines, &mut i);
             blocks.push(Block::Func(FuncDecl {
                 name,
                 params,
                 body,
-                span: Span { line: i + 1 },
+                description,
+                span,
             }));
-            i += 1;
             continue;
         }
 
@@ -758,6 +767,21 @@ fn extract_section_label(title: &str) -> (String, Option<String>) {
 }
 
 /// A continuation line is indented (starts with whitespace).
+/// Collect optional indented description lines following a declaration.
+/// Returns `None` if there are no continuation lines.
+fn collect_description(lines: &[&str], i: &mut usize) -> Option<String> {
+    let mut parts = Vec::new();
+    while *i < lines.len() && is_continuation(lines[*i]) {
+        parts.push(lines[*i].trim());
+        *i += 1;
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(" "))
+    }
+}
+
 fn is_continuation(line: &str) -> bool {
     if line.trim().is_empty() {
         return false;
@@ -1622,6 +1646,59 @@ mod tests {
                 assert_eq!(d.dimension.to_string(), "[L T^-1]");
             }
             _ => panic!("expected Var"),
+        }
+    }
+
+    #[test]
+    fn parse_var_with_description() {
+        let src = "!var σ [1]\n  Rung scaling factor.\n  Dimensionless ratio.";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Var(d) => {
+                assert_eq!(d.var_name, "σ");
+                assert_eq!(
+                    d.description.as_deref(),
+                    Some("Rung scaling factor. Dimensionless ratio.")
+                );
+            }
+            _ => panic!("expected Var"),
+        }
+    }
+
+    #[test]
+    fn parse_var_no_description() {
+        let src = "!var x [L]\n\nSome prose.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Var(d) => {
+                assert!(d.description.is_none());
+            }
+            _ => panic!("expected Var"),
+        }
+    }
+
+    #[test]
+    fn parse_const_with_description() {
+        let src = "!const N = 3\n  Number of rungs.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Const(c) => {
+                assert_eq!(c.description.as_deref(), Some("Number of rungs."));
+            }
+            _ => panic!("expected Const"),
+        }
+    }
+
+    #[test]
+    fn parse_func_with_description() {
+        let src = "!func sq(x) = x^2\n  Square function.";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Func(f) => {
+                assert_eq!(f.description.as_deref(), Some("Square function."));
+            }
+            _ => panic!("expected Func"),
         }
     }
 

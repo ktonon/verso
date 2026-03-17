@@ -196,6 +196,7 @@ pub struct ProofStep {
 pub struct VarDecl {
     pub var_name: String,
     pub dimension: Dimension,
+    pub description: Option<String>,
     pub span: Span,
 }
 
@@ -204,6 +205,7 @@ pub struct VarDecl {
 pub struct ConstDecl {
     pub name: String,
     pub value: Expr,
+    pub description: Option<String>,
     pub span: Span,
 }
 
@@ -213,6 +215,7 @@ pub struct FuncDecl {
     pub name: String,
     pub params: Vec<String>,
     pub body: Expr,
+    pub description: Option<String>,
     pub span: Span,
 }
 

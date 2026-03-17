@@ -106,10 +106,19 @@ physical dimensions in brackets. When variables are declared, Verso checks
 that both sides of every claim have matching dimensions.
 
 !var v [L T^-1]
+  Velocity.
 !var a [L T^-2]
+  Acceleration.
 !var t [T]
 !var m [M]
 !var F [M L T^-2]
+  Force.
+
+An optional indented description may follow the declaration line.
+Continuation lines (indented by two or more spaces) are joined into a
+single paragraph. The description is displayed in LSP hover boxes
+alongside the variable's dimension. Descriptions are optional; the
+bare form (as shown for math`t` and math`m` above) still works.
 
 Base dimensions are: L (length), M (mass), T (time), Theta or the Greek
 theta symbol (temperature), I (current), N (amount), J (luminosity).
@@ -151,16 +160,21 @@ Constants bind a name to a fixed value. The value is substituted wherever
 the name appears in subsequent claims and proofs.
 
 !const g = 10
+  Gravitational acceleration (simplified).
+
+Like variables, constants accept an optional indented description.
 
 ## Function Declarations
 
 Functions define parameterized expressions that expand at use sites.
 
 !func KE(m, v) = (1/2)*m*v^2
+  Kinetic energy.
 
 Parameters are positional. The body can reference previously declared
 constants and variables. Multi-character names followed by an opening
-parenthesis are parsed as function calls.
+parenthesis are parsed as function calls. Functions also accept an
+optional description.
 
 ## Claims label`claims`
 
