@@ -85,7 +85,15 @@ Extensible — new entries can be added to the table without code changes.
 
 ## Implementation Notes
 
-Not yet started.
+Implemented in 4 phases:
+
+1. **Shared unicode table** (`verso_symbolic/src/unicode.rs`): 64 entries covering Greek letters (lowercase + uppercase), math operators, and arrows. Each entry is a `(name, char, latex)` triple. Functions: `lookup`, `to_latex`, `completions`, `replace_all`.
+
+2. **REPL integration** (`verso_symbolic/src/repl.rs`): `replace_all` is called at the top of `Session::eval` before any other processing. The expression tokenizer (`parser.rs`) was extended to recognize non-ASCII alphabetic characters as single-char identifiers (e.g., `μ` → `Token::Ident("μ")`). `π` remains special-cased as `Token::Pi`.
+
+3. **LaTeX integration** (`verso_symbolic/src/to_tex.rs`): Added `name_to_latex` helper that converts unicode chars in variable names to LaTeX commands via the shared table. Applied to `ExprKind::Var` rendering.
+
+4. **VSCode/LSP integration** (`verso_doc/src/bin/verso.rs`): Added `CompletionProvider` with `:` trigger character. Returns all unicode entries as `CompletionItem`s with character preview in `detail` field.
 
 ## Verification
 
