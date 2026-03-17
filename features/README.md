@@ -11,5 +11,7 @@
 | [test-coverage.md](test-coverage.md) | Test Coverage Improvement | 2026-03-15 | 2026-03-15 | completed |
 | [span-errors.md](span-errors.md) | Span-Based Error Reporting | 2026-03-15 | 2026-03-15 | completed |
 | [strict-typed-symbolic-core.md](strict-typed-symbolic-core.md) | Strictly Typed Symbolic Core | 2026-03-15 | 2026-03-16 | completed |
-| [repl-ux.md](repl-ux.md) | REPL UX | 2026-03-16 | 2026-03-16 | completed |
+| [repl-ux.md](repl-ux.md) | REPL UX | 2026-03-16 | 2026-03-16 | wip |
 | [erd-support.md](erd-support.md) | ERD Paper Support | 2026-03-16 | 2026-03-16 | planned |
+| [unicode-completions.md](unicode-completions.md) | Unicode Completions | 2026-03-16 | 2026-03-16 | planned |
+| [bang-directives.md](bang-directives.md) | Bang Directives | 2026-03-16 | 2026-03-16 | planned |
