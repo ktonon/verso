@@ -525,9 +525,11 @@ async fn cmd_lsp() {
     use tower_lsp::jsonrpc::Result;
     use tower_lsp::lsp_types::*;
     use tower_lsp::{Client, LanguageServer, LspService, Server};
-    use verso_doc::compile_tex::find_unresolved_refs_against;
+    use verso_doc::compile_tex::{
+        collect_symbols, find_claim_line, find_label_line, find_unresolved_refs_against,
+    };
     use verso_doc::dim::DimOutcome;
-    use verso_doc::parse::{parse_document, parse_document_from_file};
+    use verso_doc::parse::{collect_dependencies, parse_document, parse_document_from_file};
     use verso_doc::verify::{verify_document, Outcome};
 
     struct VersoServer {
@@ -554,6 +556,8 @@ async fn cmd_lsp() {
                         trigger_characters: Some(vec![":".to_string()]),
                         ..Default::default()
                     }),
+                    definition_provider: Some(OneOf::Left(true)),
+                    hover_provider: Some(HoverProviderCapability::Simple(true)),
                     ..Default::default()
                 },
                 ..Default::default()
@@ -671,6 +675,156 @@ async fn cmd_lsp() {
                     .await;
             }
         }
+
+        async fn goto_definition(
+            &self,
+            params: GotoDefinitionParams,
+        ) -> Result<Option<GotoDefinitionResponse>> {
+            let pos = params.text_document_position_params.position;
+            let uri = &params.text_document_position_params.text_document.uri;
+
+            let docs = self.documents.read().unwrap();
+            let Some(text) = docs.get(uri) else {
+                return Ok(None);
+            };
+
+            let line_text = text.lines().nth(pos.line as usize).unwrap_or("");
+            let col = utf16_offset_to_byte(line_text, pos.character as usize);
+
+            // Check if cursor is inside a ref`...` or claim`...` tag
+            let (tag, label) = match extract_tag_at_cursor(line_text, col) {
+                Some(t) => t,
+                None => return Ok(None),
+            };
+
+            let file_path = uri.to_file_path().ok();
+            let file_path = match file_path.as_deref() {
+                Some(p) => p,
+                None => return Ok(None),
+            };
+
+            // Search for the label across all files in the document tree
+            let root = find_root_document(file_path);
+            let search_root = root.as_deref().unwrap_or(file_path);
+            let deps = collect_dependencies(search_root).unwrap_or_default();
+
+            let finder: fn(&str, &str) -> Option<usize> = match tag {
+                "claim" => find_claim_line,
+                _ => find_label_line,
+            };
+
+            for dep in &deps {
+                if let Ok(dep_text) = std::fs::read_to_string(dep) {
+                    if let Some(line) = finder(&label, &dep_text) {
+                        let target_uri = Url::from_file_path(dep).ok();
+                        if let Some(target_uri) = target_uri {
+                            return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                                uri: target_uri,
+                                range: line_range(line),
+                            })));
+                        }
+                    }
+                }
+            }
+
+            // Also check the current file (might not be in deps if no root found)
+            if let Some(line) = finder(&label, text) {
+                return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                    uri: uri.clone(),
+                    range: line_range(line),
+                })));
+            }
+
+            Ok(None)
+        }
+
+        async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+            let pos = params.text_document_position_params.position;
+            let uri = &params.text_document_position_params.text_document.uri;
+
+            let docs = self.documents.read().unwrap();
+            let Some(text) = docs.get(uri) else {
+                return Ok(None);
+            };
+
+            let line_text = text.lines().nth(pos.line as usize).unwrap_or("");
+            let col = utf16_offset_to_byte(line_text, pos.character as usize);
+
+            // Check if cursor is on a ref`...` or claim`...` tag
+            if let Some((tag, label)) = extract_tag_at_cursor(line_text, col) {
+                let file_path = uri.to_file_path().ok();
+
+                // Parse the root document to get full symbol table
+                let root_doc = file_path
+                    .as_deref()
+                    .and_then(|p| find_root_document(p))
+                    .and_then(|root| parse_document_from_file(&root).ok());
+                let local_doc = parse_document(text).ok();
+                let doc = root_doc.as_ref().or(local_doc.as_ref());
+
+                if let Some(doc) = doc {
+                    let symbols = collect_symbols(doc);
+                    for sym in &symbols {
+                        if sym.name == label
+                            || (tag == "ref"
+                                && (sym.kind == "claim" || sym.kind == "definition")
+                                && format!("eq:{}", sym.name) == label)
+                        {
+                            let markdown = format!("**{}** `{}`\n\n{}", sym.kind, sym.name, sym.detail);
+                            return Ok(Some(Hover {
+                                contents: HoverContents::Markup(MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: markdown,
+                                }),
+                                range: None,
+                            }));
+                        }
+                    }
+                }
+                return Ok(None);
+            }
+
+            // Try to extract a math symbol: first from math`...` tags, then from
+            // indented body lines (claims, definitions, proofs contain raw math).
+            let symbol = extract_math_symbol_at_cursor(line_text, col)
+                .or_else(|| {
+                    if line_text.starts_with("  ") {
+                        extract_identifier_at(line_text, col)
+                    } else {
+                        None
+                    }
+                });
+
+            if let Some(symbol) = symbol {
+                // Parse the root document to get full symbol table
+                let file_path = uri.to_file_path().ok();
+                let root_doc = file_path
+                    .as_deref()
+                    .and_then(|p| find_root_document(p))
+                    .and_then(|root| parse_document_from_file(&root).ok());
+                let local_doc = parse_document(text).ok();
+                let doc = root_doc.as_ref().or(local_doc.as_ref());
+
+                if let Some(doc) = doc {
+                    let symbols = collect_symbols(doc);
+                    for sym in &symbols {
+                        if sym.name == symbol {
+                            let markdown =
+                                format!("**{}** `{}`\n\n{}", sym.kind, sym.name, sym.detail);
+                            return Ok(Some(Hover {
+                                contents: HoverContents::Markup(MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: markdown,
+                                }),
+                                range: None,
+                            }));
+                        }
+                    }
+                }
+            }
+
+            Ok(None)
+        }
     }
 
     fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> {
@@ -690,7 +844,26 @@ async fn cmd_lsp() {
             }
         };
 
-        let report = verify_document(&doc);
+        let report = match std::panic::catch_unwind(|| verify_document(&doc)) {
+            Ok(r) => r,
+            Err(e) => {
+                let msg = if let Some(s) = e.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = e.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "internal error during verification".to_string()
+                };
+                diagnostics.push(Diagnostic {
+                    range: line_range(1),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    message: format!("verification panic: {}", msg),
+                    source: Some("verso".to_string()),
+                    ..Default::default()
+                });
+                return diagnostics;
+            }
+        };
 
         for result in &report.results {
             match &result.outcome {
@@ -793,6 +966,19 @@ async fn cmd_lsp() {
         diagnostics
     }
 
+    /// Convert a UTF-16 character offset (as sent by the LSP client) to a
+    /// UTF-8 byte offset into the given string.
+    fn utf16_offset_to_byte(text: &str, utf16_col: usize) -> usize {
+        let mut utf16_count = 0;
+        for (byte_idx, ch) in text.char_indices() {
+            if utf16_count >= utf16_col {
+                return byte_idx;
+            }
+            utf16_count += ch.len_utf16();
+        }
+        text.len()
+    }
+
     fn line_range(line: usize) -> Range {
         let line = (line.saturating_sub(1)) as u32;
         Range {
@@ -802,6 +988,107 @@ async fn cmd_lsp() {
                 character: u32::MAX,
             },
         }
+    }
+
+    /// Extract a `tag`content`` at the given cursor column, returning (tag, label).
+    /// Supports ref`...`, claim`...`, and similar tagged backtick syntax.
+    fn extract_tag_at_cursor(line: &str, col: usize) -> Option<(&str, String)> {
+        let tags = ["ref", "claim"];
+        for tag in &tags {
+            let pattern = format!("{}`", tag);
+            let mut search_start = 0;
+            while let Some(start) = line[search_start..].find(&pattern) {
+                let abs_start = search_start + start;
+                let content_start = abs_start + pattern.len();
+                if let Some(end) = line[content_start..].find('`') {
+                    let abs_end = content_start + end;
+                    // Check if cursor is within the tag span (from tag name to closing backtick)
+                    if col >= abs_start && col <= abs_end {
+                        let content = &line[content_start..abs_end];
+                        // For ref`label|display`, extract just the label
+                        let label = if *tag == "ref" {
+                            content.split('|').next().unwrap_or(content)
+                        } else {
+                            content
+                        };
+                        return Some((tag, label.to_string()));
+                    }
+                    search_start = abs_end + 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        None
+    }
+
+    /// Extract the identifier at the cursor position inside a `math`...`` region.
+    fn extract_math_symbol_at_cursor(line: &str, col: usize) -> Option<String> {
+        let pattern = "math`";
+        let mut search_start = 0;
+        while let Some(start) = line[search_start..].find(pattern) {
+            let abs_start = search_start + start;
+            let content_start = abs_start + pattern.len();
+            if let Some(end) = line[content_start..].find('`') {
+                let abs_end = content_start + end;
+                if col >= content_start && col <= abs_end {
+                    // Cursor is inside math content — extract identifier at col
+                    let content = &line[content_start..abs_end];
+                    let offset = col - content_start;
+                    return extract_identifier_at(content, offset);
+                }
+                search_start = abs_end + 1;
+            } else {
+                break;
+            }
+        }
+        None
+    }
+
+    /// Check whether a character can appear in an identifier (letter, digit, or underscore).
+    fn is_ident_char(c: char) -> bool {
+        c.is_alphanumeric() || c == '_'
+    }
+
+    /// Extract the identifier surrounding the given byte offset.
+    /// Handles unicode letters (ρ, μ, ℓ, σ, …) and subscript blocks like `_{0}`.
+    fn extract_identifier_at(text: &str, offset: usize) -> Option<String> {
+        if offset >= text.len() || !text.is_char_boundary(offset) {
+            return None;
+        }
+        let ch = text[offset..].chars().next()?;
+        // Must start on an ident char or on `{` / `}` inside a subscript
+        if !is_ident_char(ch) && ch != '{' && ch != '}' {
+            return None;
+        }
+        // Walk backward to find start of identifier
+        let mut start = offset;
+        loop {
+            if start == 0 {
+                break;
+            }
+            let prev = text[..start].chars().next_back()?;
+            if is_ident_char(prev) || prev == '{' || prev == '}' {
+                start -= prev.len_utf8();
+            } else {
+                break;
+            }
+        }
+        // Walk forward to find end of identifier
+        let mut end = offset;
+        for c in text[offset..].chars() {
+            if is_ident_char(c) || c == '{' || c == '}' {
+                end += c.len_utf8();
+            } else {
+                break;
+            }
+        }
+        let ident = &text[start..end];
+        // Filter out pure numbers and braces-only
+        if ident.chars().all(|c| c.is_ascii_digit() || c == '{' || c == '}' || c == '_') {
+            return None;
+        }
+        Some(ident.to_string())
     }
 
     fn find_root_document(file_path: &Path) -> Option<PathBuf> {

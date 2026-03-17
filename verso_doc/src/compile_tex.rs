@@ -713,6 +713,169 @@ pub fn find_unresolved_refs_against(label_doc: &Document, ref_doc: &Document) ->
     unresolved
 }
 
+/// Find the line number (1-indexed) where a `ref` label is defined in raw text.
+///
+/// Searches for section headings (explicit `label`...`` or slugified title),
+/// figure/table `label:` fields, and environment labels.
+pub fn find_label_line(label: &str, text: &str) -> Option<usize> {
+    let lines: Vec<&str> = text.lines().collect();
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+
+        // Section heading: # Title label`foo` or # Title (slugified)
+        if trimmed.starts_with('#') {
+            let level = trimmed.chars().take_while(|&c| c == '#').count();
+            let raw_title = trimmed[level..].trim();
+            // Check explicit label`...` syntax
+            if let Some(start) = raw_title.find("label`") {
+                let rest = &raw_title[start + 6..];
+                if let Some(end) = rest.find('`') {
+                    if &rest[..end] == label {
+                        return Some(i + 1);
+                    }
+                }
+            }
+            // Check legacy \label{...} syntax
+            if let Some(start) = raw_title.find("\\label{") {
+                let rest = &raw_title[start + 7..];
+                if let Some(end) = rest.find('}') {
+                    if &rest[..end] == label {
+                        return Some(i + 1);
+                    }
+                }
+            }
+            // Check slugified title (strip label tag first)
+            let clean_title = strip_label_tag(raw_title);
+            if slugify(&clean_title) == label {
+                return Some(i + 1);
+            }
+        }
+
+        // Figure/table label: field on a continuation line
+        if trimmed.starts_with("label:") {
+            let val = trimmed["label:".len()..].trim();
+            if val == label {
+                // Return the parent directive line (walk back to find !figure or !table)
+                for j in (0..i).rev() {
+                    let parent = lines[j].trim();
+                    if parent.starts_with("!figure") || parent.starts_with("!table") {
+                        return Some(j + 1);
+                    }
+                    if !parent.is_empty() && !lines[j].starts_with(char::is_whitespace) {
+                        break;
+                    }
+                }
+                return Some(i + 1);
+            }
+        }
+    }
+    None
+}
+
+/// Strip `label`...`` or `\label{...}` from a section title for slugification.
+fn strip_label_tag(title: &str) -> String {
+    if let Some(start) = title.find("label`") {
+        let rest = &title[start + 6..];
+        if let Some(end) = rest.find('`') {
+            let before = title[..start].trim_end();
+            let after = rest[end + 1..].trim_start();
+            return if after.is_empty() {
+                before.to_string()
+            } else {
+                format!("{} {}", before, after)
+            };
+        }
+    }
+    if let Some(start) = title.find("\\label{") {
+        let rest = &title[start + 7..];
+        if let Some(end) = rest.find('}') {
+            let before = title[..start].trim_end();
+            let after = rest[end + 1..].trim_start();
+            return if after.is_empty() {
+                before.to_string()
+            } else {
+                format!("{} {}", before, after)
+            };
+        }
+    }
+    title.to_string()
+}
+
+/// Find the line number (1-indexed) where a claim or definition is defined in raw text.
+pub fn find_claim_line(name: &str, text: &str) -> Option<usize> {
+    for (i, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("!claim") {
+            if rest.trim() == name {
+                return Some(i + 1);
+            }
+        }
+        if let Some(rest) = trimmed.strip_prefix("!definition") {
+            if rest.trim() == name {
+                return Some(i + 1);
+            }
+        }
+    }
+    None
+}
+
+/// Collect symbol information from a parsed document for hover display.
+pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
+    let mut symbols = Vec::new();
+    for block in &doc.blocks {
+        match block {
+            Block::Var(decl) => {
+                symbols.push(SymbolInfo {
+                    name: decl.var_name.clone(),
+                    kind: "var".to_string(),
+                    detail: format!("{}", decl.dimension),
+                    line: decl.span.line,
+                });
+            }
+            Block::Const(decl) => {
+                symbols.push(SymbolInfo {
+                    name: decl.name.clone(),
+                    kind: "const".to_string(),
+                    detail: format!("{}", decl.value),
+                    line: decl.span.line,
+                });
+            }
+            Block::Func(decl) => {
+                let params = decl.params.join(", ");
+                symbols.push(SymbolInfo {
+                    name: decl.name.clone(),
+                    kind: "func".to_string(),
+                    detail: format!("({}) = {}", params, decl.body),
+                    line: decl.span.line,
+                });
+            }
+            Block::Claim(claim) => {
+                let kind = if claim.is_definition {
+                    "definition"
+                } else {
+                    "claim"
+                };
+                symbols.push(SymbolInfo {
+                    name: claim.name.clone(),
+                    kind: kind.to_string(),
+                    detail: format!("{} = {}", claim.lhs, claim.rhs),
+                    line: claim.span.line,
+                });
+            }
+            _ => {}
+        }
+    }
+    symbols
+}
+
+/// Information about a declared symbol.
+pub struct SymbolInfo {
+    pub name: String,
+    pub kind: String,
+    pub detail: String,
+    pub line: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1298,5 +1461,119 @@ mod tests {
         assert!(tex.contains("\\label{absolute-time}"));
         // Title should not contain the label`...` tag
         assert!(!tex.contains("label`"));
+    }
+
+    // find_label_line tests
+
+    #[test]
+    fn find_label_line_section_slug() {
+        let text = "# Introduction\n\nSome text.";
+        assert_eq!(find_label_line("introduction", text), Some(1));
+    }
+
+    #[test]
+    fn find_label_line_section_explicit() {
+        let text = "# Long Title label`short`\n\nSome text.";
+        assert_eq!(find_label_line("short", text), Some(1));
+    }
+
+    #[test]
+    fn find_label_line_section_legacy_label() {
+        let text = "# Long Title \\label{short}\n\nSome text.";
+        assert_eq!(find_label_line("short", text), Some(1));
+    }
+
+    #[test]
+    fn find_label_line_figure_label() {
+        let text = "Some text.\n\n!figure img.png\n  caption: A figure\n  label: my-fig";
+        assert_eq!(find_label_line("my-fig", text), Some(3));
+    }
+
+    #[test]
+    fn find_label_line_table_label() {
+        let text = "!table My Table\n  | A |\n  |---|\n  | 1 |\n  label: my-tab";
+        assert_eq!(find_label_line("my-tab", text), Some(1));
+    }
+
+    #[test]
+    fn find_label_line_not_found() {
+        let text = "# Introduction\n\nSome text.";
+        assert_eq!(find_label_line("nonexistent", text), None);
+    }
+
+    #[test]
+    fn find_label_line_explicit_over_slug() {
+        // When a section has an explicit label, both the explicit and slug should work
+        let text = "# Newton's Laws label`laws`\n\ntext";
+        assert_eq!(find_label_line("laws", text), Some(1));
+        assert_eq!(find_label_line("newtons-laws", text), Some(1));
+    }
+
+    // find_claim_line tests
+
+    #[test]
+    fn find_claim_line_basic() {
+        let text = "!var x [L]\n\n!claim energy\n  x = x";
+        assert_eq!(find_claim_line("energy", text), Some(3));
+    }
+
+    #[test]
+    fn find_claim_line_definition() {
+        let text = "!definition KE\n  (1/2) * m * v^2 = KE";
+        assert_eq!(find_claim_line("KE", text), Some(1));
+    }
+
+    #[test]
+    fn find_claim_line_not_found() {
+        let text = "!claim energy\n  x = x";
+        assert_eq!(find_claim_line("missing", text), None);
+    }
+
+    // collect_symbols tests
+
+    #[test]
+    fn collect_symbols_var() {
+        let doc = parse_document("!var v [L T^-1]").unwrap();
+        let syms = collect_symbols(&doc);
+        assert_eq!(syms.len(), 1);
+        assert_eq!(syms[0].name, "v");
+        assert_eq!(syms[0].kind, "var");
+    }
+
+    #[test]
+    fn collect_symbols_const() {
+        let doc = parse_document("!const k = 2").unwrap();
+        let syms = collect_symbols(&doc);
+        assert_eq!(syms.len(), 1);
+        assert_eq!(syms[0].name, "k");
+        assert_eq!(syms[0].kind, "const");
+        assert_eq!(syms[0].detail, "2");
+    }
+
+    #[test]
+    fn collect_symbols_func() {
+        let doc = parse_document("!func sq(x) = x^2").unwrap();
+        let syms = collect_symbols(&doc);
+        assert_eq!(syms.len(), 1);
+        assert_eq!(syms[0].name, "sq");
+        assert_eq!(syms[0].kind, "func");
+    }
+
+    #[test]
+    fn collect_symbols_claim() {
+        let doc = parse_document("!claim trivial\n  x = x").unwrap();
+        let syms = collect_symbols(&doc);
+        assert_eq!(syms.len(), 1);
+        assert_eq!(syms[0].name, "trivial");
+        assert_eq!(syms[0].kind, "claim");
+    }
+
+    #[test]
+    fn collect_symbols_definition() {
+        let doc = parse_document("!definition KE\n  (1/2) * m * v^2 = KE").unwrap();
+        let syms = collect_symbols(&doc);
+        assert_eq!(syms.len(), 1);
+        assert_eq!(syms[0].name, "KE");
+        assert_eq!(syms[0].kind, "definition");
     }
 }
