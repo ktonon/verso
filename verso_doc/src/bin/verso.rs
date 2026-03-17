@@ -526,8 +526,8 @@ async fn cmd_lsp() {
     use tower_lsp::lsp_types::*;
     use tower_lsp::{Client, LanguageServer, LspService, Server};
     use verso_doc::compile_tex::{
-        collect_symbols, find_claim_line, find_label_line, find_unresolved_refs_against,
-        SymbolInfo,
+        collect_symbols, find_claim_line, find_decl_line, find_label_line,
+        find_unresolved_refs_against, SymbolInfo,
     };
     use verso_doc::dim::DimOutcome;
     use verso_doc::parse::{collect_dependencies, parse_document, parse_document_from_file};
@@ -711,6 +711,7 @@ async fn cmd_lsp() {
 
             let finder: fn(&str, &str) -> Option<usize> = match tag {
                 "claim" => find_claim_line,
+                "sym" => find_decl_line,
                 _ => find_label_line,
             };
 
@@ -992,7 +993,7 @@ async fn cmd_lsp() {
     /// Extract a `tag`content`` at the given cursor column, returning (tag, label).
     /// Supports ref`...`, claim`...`, and similar tagged backtick syntax.
     fn extract_tag_at_cursor(line: &str, col: usize) -> Option<(&str, String)> {
-        let tags = ["ref", "claim"];
+        let tags = ["ref", "claim", "sym"];
         for tag in &tags {
             let pattern = format!("{}`", tag);
             let mut search_start = 0;

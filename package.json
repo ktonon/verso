@@ -19,6 +19,7 @@
 		"check": "cargo run --release -p verso_doc --bin verso -- check",
 		"build": "cargo run --release -p verso_doc --bin verso -- build",
 		"watch": "cargo run --release -p verso_doc --bin verso -- watch",
+		"install:local": "cargo install --path verso_doc && npm run vscode:install",
 		"vscode:install": "cargo build --release -p verso_doc --bin verso && cd editors/vscode && npx tsc -p ./ && npx @vscode/vsce package --allow-missing-repository && code --install-extension verso-lang-0.1.0.vsix --force",
 		"test": "cargo test --workspace && npm run lint",
 		"coverage": "cargo llvm-cov --workspace --html && echo 'Report: target/llvm-cov/html/index.html'",

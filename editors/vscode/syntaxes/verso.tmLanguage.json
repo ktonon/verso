@@ -345,6 +345,7 @@
         { "include": "#tag-cite" },
         { "include": "#tag-ref" },
         { "include": "#tag-url" },
+        { "include": "#tag-sym" },
         { "include": "#quoted-string" },
         { "include": "#footnote" },
         { "include": "#bold-italic" },
@@ -411,6 +412,18 @@
         "1": { "name": "keyword.other.tag.url.verso" },
         "2": { "name": "string.other.begin.verso" },
         "3": { "name": "markup.underline.link.verso" },
+        "4": { "name": "punctuation.separator.pipe.verso" },
+        "5": { "name": "string.other.display-text.verso" },
+        "6": { "name": "string.other.end.verso" }
+      }
+    },
+
+    "tag-sym": {
+      "match": "(sym)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
+      "captures": {
+        "1": { "name": "keyword.other.tag.sym.verso" },
+        "2": { "name": "string.other.begin.verso" },
+        "3": { "name": "entity.name.tag.symbol-ref.verso" },
         "4": { "name": "punctuation.separator.pipe.verso" },
         "5": { "name": "string.other.display-text.verso" },
         "6": { "name": "string.other.end.verso" }

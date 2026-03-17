@@ -159,6 +159,11 @@ pub enum ProseFragment {
         url: String,
         display: Option<String>,
     },
+    /// Symbol declaration display: sym`name` or sym`name|override description`.
+    Sym {
+        name: String,
+        display: Option<String>,
+    },
     /// Paragraph break within an indented block (blank line between indented lines).
     ParBreak,
 }

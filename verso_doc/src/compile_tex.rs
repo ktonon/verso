@@ -2,6 +2,7 @@ use crate::ast::{
     Block, Claim, ColumnAlign, Document, EnvKind, Environment, Figure, List, MathBlock, Proof,
     ProseFragment, Table,
 };
+use crate::parse::parse_prose_fragments;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use verso_symbolic::ToTex;
@@ -38,6 +39,12 @@ pub fn slugify(title: &str) -> String {
     result
 }
 
+/// Context passed through LaTeX compilation for resolving references and symbols.
+struct TexContext {
+    section_titles: HashMap<String, String>,
+    symbols: Vec<SymbolInfo>,
+}
+
 /// Compile a Document to a LaTeX string.
 pub fn compile_to_tex(doc: &Document) -> String {
     let mut out = String::new();
@@ -52,6 +59,11 @@ pub fn compile_to_tex(doc: &Document) -> String {
             section_titles.insert(slugify(title), title.clone());
         }
     }
+
+    let ctx = TexContext {
+        section_titles,
+        symbols: collect_symbols(doc),
+    };
 
     // Collect metadata
     let mut title_lines: Option<&Vec<String>> = None;
@@ -160,7 +172,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
     if let Some(frags) = abstract_fragments {
         writeln!(out).unwrap();
         writeln!(out, "\\begin{{abstract}}").unwrap();
-        write_prose_fragments(&mut out, frags, &section_titles);
+        write_prose_fragments(&mut out, frags, &ctx);
         writeln!(out).unwrap();
         writeln!(out, "\\end{{abstract}}").unwrap();
     }
@@ -177,7 +189,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
                 write_section(&mut out, *level, title, label.as_deref());
             }
             Block::Prose(fragments) => {
-                write_prose(&mut out, fragments, &section_titles);
+                write_prose(&mut out, fragments, &ctx);
             }
             Block::Claim(claim) => {
                 write_claim(&mut out, claim);
@@ -194,29 +206,29 @@ pub fn compile_to_tex(doc: &Document) -> String {
                 writeln!(out, "\\tableofcontents").unwrap();
             }
             Block::List(list) => {
-                write_list(&mut out, list, &section_titles);
+                write_list(&mut out, list, &ctx);
             }
             Block::MathBlock(mb) => {
                 write_math_block(&mut out, mb);
             }
             Block::Bibliography { .. } => {} // handled after loop
             Block::Environment(env) => {
-                write_environment(&mut out, env, &section_titles);
+                write_environment(&mut out, env, &ctx);
             }
             Block::BlockQuote(fragments) => {
-                write_block_quote(&mut out, fragments, &section_titles);
+                write_block_quote(&mut out, fragments, &ctx);
             }
             Block::Center(fragments) => {
                 writeln!(out, "\\begin{{center}}").unwrap();
-                write_prose_fragments(&mut out, fragments, &section_titles);
+                write_prose_fragments(&mut out, fragments, &ctx);
                 writeln!(out).unwrap();
                 writeln!(out, "\\end{{center}}").unwrap();
             }
             Block::Figure(fig) => {
-                write_figure(&mut out, fig, &section_titles);
+                write_figure(&mut out, fig, &ctx);
             }
             Block::Table(table) => {
-                write_table(&mut out, table, &section_titles);
+                write_table(&mut out, table, &ctx);
             }
         }
     }
@@ -256,9 +268,9 @@ fn write_section(out: &mut String, level: u8, title: &str, label: Option<&str>) 
 fn write_prose(
     out: &mut String,
     fragments: &[ProseFragment],
-    section_titles: &HashMap<String, String>,
+    ctx: &TexContext,
 ) {
-    write_prose_fragments(out, fragments, section_titles);
+    write_prose_fragments(out, fragments, ctx);
     writeln!(out).unwrap();
 }
 
@@ -292,6 +304,35 @@ fn format_date(s: &str) -> String {
         }
     }
     s.to_string()
+}
+
+/// Escape a dimension string for use in LaTeX math mode.
+/// Base dimension letters (L, M, T, etc.) are set in upright roman type
+/// per physics convention. Exponents are wrapped in braces and spaces
+/// become thin spaces.
+fn escape_tex_dim(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '^' {
+            out.push_str("^{");
+            while let Some(&next) = chars.peek() {
+                if next == '-' || next.is_ascii_digit() {
+                    out.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            out.push('}');
+        } else if ch == ' ' {
+            out.push_str("\\,");
+        } else if ch.is_ascii_alphabetic() {
+            write!(out, "\\mathrm{{{}}}", ch).unwrap();
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }
 
 /// Escape prose text for LaTeX: `~` → `\textasciitilde{}`, paired `"` → ``` `` ''' ```.
@@ -328,7 +369,7 @@ fn escape_prose(text: &str) -> String {
 fn write_prose_fragments(
     out: &mut String,
     fragments: &[ProseFragment],
-    section_titles: &HashMap<String, String>,
+    ctx: &TexContext,
 ) {
     for fragment in fragments {
         match fragment {
@@ -347,12 +388,12 @@ fn write_prose_fragments(
             }
             ProseFragment::Bold(inner) => {
                 out.push_str("\\textbf{");
-                write_prose_fragments(out, inner, section_titles);
+                write_prose_fragments(out, inner, ctx);
                 out.push('}');
             }
             ProseFragment::Italic(inner) => {
                 out.push_str("\\textit{");
-                write_prose_fragments(out, inner, section_titles);
+                write_prose_fragments(out, inner, ctx);
                 out.push('}');
             }
             ProseFragment::Cite(keys) => {
@@ -360,13 +401,13 @@ fn write_prose_fragments(
             }
             ProseFragment::Footnote(inner) => {
                 out.push_str("\\footnote{");
-                write_prose_fragments(out, inner, section_titles);
+                write_prose_fragments(out, inner, ctx);
                 out.push('}');
             }
             ProseFragment::Ref { label, display } => {
                 let text = display
                     .as_deref()
-                    .or_else(|| section_titles.get(label.as_str()).map(|s| s.as_str()))
+                    .or_else(|| ctx.section_titles.get(label.as_str()).map(|s| s.as_str()))
                     .unwrap_or(label.as_str());
                 write!(out, "\\hyperref[{}]{{{}}}", label, text).unwrap();
             }
@@ -375,6 +416,41 @@ fn write_prose_fragments(
                     write!(out, "\\href{{{}}}{{{}}}", url, text).unwrap();
                 } else {
                     write!(out, "\\url{{{}}}", url).unwrap();
+                }
+            }
+            ProseFragment::Sym { name, display } => {
+                let base = verso_symbolic::context::subscript_base(name);
+                let sym = ctx.symbols.iter().find(|s| {
+                    s.name == *name || verso_symbolic::context::subscript_base(&s.name) == base
+                });
+                // Render symbol name as math
+                let tex_name = verso_symbolic::parse_expr(name)
+                    .map(|e| e.to_tex())
+                    .unwrap_or_else(|_| name.clone());
+                write!(out, "${}$", tex_name).unwrap();
+                if let Some(sym) = sym {
+                    // Append dimension/value info (rendered as math to handle ^ and _)
+                    // Suppress [1] (dimensionless) as it adds no useful information
+                    let type_info = sym.detail.lines().next().unwrap_or("");
+                    if !type_info.is_empty() && type_info != "[1]" {
+                        write!(out, " ${}$", escape_tex_dim(type_info)).unwrap();
+                    }
+                    // Use override display if provided, otherwise the declared description
+                    let desc = display
+                        .as_deref()
+                        .or_else(|| {
+                            // Description is everything after the first line of detail
+                            let rest = sym.detail.find("\n\n").map(|i| sym.detail[i + 2..].trim());
+                            rest.filter(|s| !s.is_empty())
+                        });
+                    if let Some(desc) = desc {
+                        // Parse description as prose to handle inline tags like math`...`
+                        out.push_str(": ");
+                        match parse_prose_fragments(desc) {
+                            Ok(frags) => write_prose_fragments(out, &frags, ctx),
+                            Err(_) => out.push_str(&escape_prose(desc)),
+                        }
+                    }
                 }
             }
             ProseFragment::ParBreak => {
@@ -424,15 +500,15 @@ fn write_proof(out: &mut String, proof: &Proof) {
     writeln!(out, "\\end{{align*}}").unwrap();
 }
 
-fn write_list(out: &mut String, list: &List, section_titles: &HashMap<String, String>) {
+fn write_list(out: &mut String, list: &List, ctx: &TexContext) {
     let env = if list.ordered { "enumerate" } else { "itemize" };
     writeln!(out, "\\begin{{{}}}", env).unwrap();
     for item in &list.items {
         write!(out, "  \\item ").unwrap();
-        write_prose_fragments(out, &item.fragments, section_titles);
+        write_prose_fragments(out, &item.fragments, ctx);
         writeln!(out).unwrap();
         if let Some(ref children) = item.children {
-            write_list(out, children, section_titles);
+            write_list(out, children, ctx);
         }
     }
     writeln!(out, "\\end{{{}}}", env).unwrap();
@@ -459,15 +535,15 @@ fn write_math_block(out: &mut String, mb: &MathBlock) {
 fn write_block_quote(
     out: &mut String,
     fragments: &[ProseFragment],
-    section_titles: &HashMap<String, String>,
+    ctx: &TexContext,
 ) {
     writeln!(out, "\\begin{{quote}}").unwrap();
-    write_prose_fragments(out, fragments, section_titles);
+    write_prose_fragments(out, fragments, ctx);
     writeln!(out).unwrap();
     writeln!(out, "\\end{{quote}}").unwrap();
 }
 
-fn write_figure(out: &mut String, fig: &Figure, section_titles: &HashMap<String, String>) {
+fn write_figure(out: &mut String, fig: &Figure, ctx: &TexContext) {
     writeln!(out, "\\begin{{figure}}[htbp]").unwrap();
     writeln!(out, "\\centering").unwrap();
     writeln!(
@@ -478,7 +554,7 @@ fn write_figure(out: &mut String, fig: &Figure, section_titles: &HashMap<String,
     .unwrap();
     if let Some(cap) = &fig.caption {
         write!(out, "\\caption{{").unwrap();
-        write_prose_fragments(out, cap, section_titles);
+        write_prose_fragments(out, cap, ctx);
         writeln!(out, "}}").unwrap();
     }
     if let Some(label) = &fig.label {
@@ -487,7 +563,7 @@ fn write_figure(out: &mut String, fig: &Figure, section_titles: &HashMap<String,
     writeln!(out, "\\end{{figure}}").unwrap();
 }
 
-fn write_table(out: &mut String, table: &Table, section_titles: &HashMap<String, String>) {
+fn write_table(out: &mut String, table: &Table, ctx: &TexContext) {
     writeln!(out, "\\begin{{table}}[htbp]").unwrap();
     writeln!(out, "\\centering").unwrap();
     let col_spec: String = table
@@ -507,7 +583,7 @@ fn write_table(out: &mut String, table: &Table, section_titles: &HashMap<String,
             write!(out, " & ").unwrap();
         }
         write!(out, "\\textbf{{").unwrap();
-        write_prose_fragments(out, cell, section_titles);
+        write_prose_fragments(out, cell, ctx);
         write!(out, "}}").unwrap();
     }
     writeln!(out, " \\\\").unwrap();
@@ -518,7 +594,7 @@ fn write_table(out: &mut String, table: &Table, section_titles: &HashMap<String,
             if i > 0 {
                 write!(out, " & ").unwrap();
             }
-            write_prose_fragments(out, cell, section_titles);
+            write_prose_fragments(out, cell, ctx);
         }
         writeln!(out, " \\\\").unwrap();
     }
@@ -536,7 +612,7 @@ fn write_table(out: &mut String, table: &Table, section_titles: &HashMap<String,
 fn write_environment(
     out: &mut String,
     env: &Environment,
-    section_titles: &HashMap<String, String>,
+    ctx: &TexContext,
 ) {
     let name = env_kind_name(env.kind);
     if let Some(ref title) = env.title {
@@ -544,7 +620,7 @@ fn write_environment(
     } else {
         writeln!(out, "\\begin{{{}}}", name).unwrap();
     }
-    write_prose_fragments(out, &env.body, section_titles);
+    write_prose_fragments(out, &env.body, ctx);
     writeln!(out).unwrap();
     writeln!(out, "\\end{{{}}}", name).unwrap();
 }
@@ -802,6 +878,30 @@ fn strip_label_tag(title: &str) -> String {
 }
 
 /// Find the line number (1-indexed) where a claim or definition is defined in raw text.
+/// Find the line number of a `!var`, `!const`, or `!func` declaration by name.
+/// Uses subscript base matching (e.g. `ℓ` matches `!var ℓ_{n} [L]`).
+pub fn find_decl_line(name: &str, text: &str) -> Option<usize> {
+    let base = verso_symbolic::context::subscript_base(name);
+    for (i, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        for prefix in &["!var ", "!const ", "!func "] {
+            if let Some(rest) = trimmed.strip_prefix(prefix) {
+                // Extract the declared name (up to space, `[`, `=`, or `(`)
+                let decl_name = rest
+                    .split(|c: char| c == '[' || c == '=' || c == '(')
+                    .next()
+                    .unwrap_or("")
+                    .trim();
+                let decl_base = verso_symbolic::context::subscript_base(decl_name);
+                if decl_name == name || decl_base == base {
+                    return Some(i + 1);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn find_claim_line(name: &str, text: &str) -> Option<usize> {
     for (i, line) in text.lines().enumerate() {
         let trimmed = line.trim();
@@ -1590,5 +1690,51 @@ mod tests {
         assert_eq!(syms.len(), 1);
         assert_eq!(syms[0].name, "KE");
         assert_eq!(syms[0].kind, "definition");
+    }
+
+    #[test]
+    fn collect_symbols_var_with_description() {
+        let doc = parse_document("!var v [L T^-1]\n  Velocity.").unwrap();
+        let syms = collect_symbols(&doc);
+        assert_eq!(syms.len(), 1);
+        assert!(syms[0].detail.contains("Velocity."));
+    }
+
+    #[test]
+    fn compile_sym_var() {
+        let src = "!var v [L T^-1]\n  Velocity.\n\nHere: sym`v`";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(tex.contains("$v$"), "should render symbol as math: {}", tex);
+        assert!(tex.contains("Velocity."), "should include description: {}", tex);
+    }
+
+    #[test]
+    fn compile_sym_with_override() {
+        let src = "!var v [L T^-1]\n  Velocity.\n\nHere: sym`v|Speed of the particle.`";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains("Speed of the particle."),
+            "should use override: {}",
+            tex
+        );
+        assert!(
+            !tex.contains("Velocity."),
+            "should not use declared desc: {}",
+            tex
+        );
+    }
+
+    #[test]
+    fn compile_sym_unknown() {
+        let src = "Here: sym`unknown`";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains("$unknown$"),
+            "should still render name as math: {}",
+            tex
+        );
     }
 }

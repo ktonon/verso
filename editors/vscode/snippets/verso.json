@@ -138,5 +138,12 @@
       "!bibliography ${1:refs.bib}"
     ],
     "description": "Bibliography declaration"
+  },
+  "Symbol Display": {
+    "prefix": "sym",
+    "body": [
+      "sym`${1:name}`"
+    ],
+    "description": "Display a declared symbol with its type and description"
   }
 }

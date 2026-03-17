@@ -1278,7 +1278,7 @@ fn find_next_inline(text: &str) -> Option<InlineMatch<'_>> {
 
 /// Parse prose text into fragments, extracting tagged inline expressions.
 /// Supports: math`expr`, tex`raw latex`, claim`name`, **bold**, *italic*
-fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError> {
+pub fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError> {
     let mut fragments = Vec::new();
     let mut rest = text;
 
@@ -1352,6 +1352,17 @@ fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocError
                             };
                             fragments.push(ProseFragment::Url { url, display });
                         }
+                        "sym" => {
+                            let (name, display) = if let Some(pipe) = tag_match.content.find('|') {
+                                (
+                                    tag_match.content[..pipe].to_string(),
+                                    Some(tag_match.content[pipe + 1..].to_string()),
+                                )
+                            } else {
+                                (tag_match.content.to_string(), None)
+                            };
+                            fragments.push(ProseFragment::Sym { name, display });
+                        }
                         _ => {
                             fragments.push(ProseFragment::Text(
                                 rest[tag_match.start..tag_match.end].to_string(),
@@ -1400,7 +1411,7 @@ struct TagMatch<'a> {
 
 /// Find the next `tag\`content\`` pattern in the text.
 fn find_tagged_backtick(text: &str) -> Option<TagMatch<'_>> {
-    let tags = ["math", "tex", "claim", "cite", "ref", "url"];
+    let tags = ["math", "tex", "claim", "cite", "ref", "url", "sym"];
 
     let mut best: Option<TagMatch<'_>> = None;
 
@@ -1476,6 +1487,15 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
             ProseFragment::Url { url, display } => {
                 s.push_str("url`");
                 s.push_str(url);
+                if let Some(d) = display {
+                    s.push('|');
+                    s.push_str(d);
+                }
+                s.push('`');
+            }
+            ProseFragment::Sym { name, display } => {
+                s.push_str("sym`");
+                s.push_str(name);
                 if let Some(d) = display {
                     s.push('|');
                     s.push_str(d);

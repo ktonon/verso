@@ -68,6 +68,7 @@ Within prose, the following inline constructs are recognized:
 - claim backticks: equation reference producing a numbered reference
 - ref backticks: section cross-reference with optional display text
 - url backticks: hyperlinks with optional display text
+- sym backticks: renders a declared symbol with its type and description
 
 #### Inline Math
 
@@ -83,6 +84,14 @@ math`a^2 + b^2 = c^2`.
 Use tex backticks for LaTeX that Verso does not need to parse. The content
 is passed through verbatim inside math delimiters. For instance,
 tex`\vec{v}` renders a vector.
+
+#### Symbol Display
+
+Use sym backticks to render a declared symbol with its type information
+and description. The symbol must be declared earlier via a !var, !const,
+or !func directive. For example, sym`v` renders the variable along
+with its dimension and description. An override description can be
+provided after a pipe: sym`v|the speed of the particle`.
 
 ### Text Formatting
 
