@@ -119,6 +119,16 @@ fn tokenize(src: &str) -> Result<Vec<(Token, Span)>, ParseError> {
             continue;
         }
 
+        // Unicode alphabetic characters (Greek letters, etc.) as single-char identifiers.
+        // π is excluded since it's handled as Token::Pi below.
+        if ch.is_alphabetic() && !ch.is_ascii() && ch != 'π' {
+            let start = pos;
+            chars.next();
+            pos += 1;
+            tokens.push((Token::Ident(ch.to_string()), Span::new(start, pos)));
+            continue;
+        }
+
         let start = pos;
         let tok = match ch {
             'π' => {

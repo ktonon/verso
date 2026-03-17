@@ -28,6 +28,7 @@ impl Session {
     /// Evaluate a single REPL input line, returning the output text.
     /// Returns `None` for quit commands and empty input.
     pub fn eval(&mut self, input: &str) -> Option<String> {
+        let input = crate::unicode::replace_all(input.trim());
         let input = input.trim();
         if input.is_empty() || input == "!q" || input == "!quit" || input == "!exit" {
             return None;
@@ -834,6 +835,63 @@ x [1]
         assert_eq!(
             pairs,
             vec![("1 + 2", "3".to_string()), ("x", "x [1]".to_string())]
+        );
+    }
+
+    // ── unicode completion tests ──────────────────────────────────
+
+    #[test]
+    fn session_unicode_replacement_in_expression() {
+        session!(
+            r#"
+> :mu: + :nu:
+μ + ν [1]
+"#
+        );
+    }
+
+    #[test]
+    fn session_unicode_direct_input() {
+        session!(
+            r#"
+> μ + ν
+μ + ν [1]
+"#
+        );
+    }
+
+    #[test]
+    fn session_unicode_in_var_declaration() {
+        session!(
+            r#"
+> !var :mu: [M]
+μ: [M]
+
+> μ
+μ [M]
+"#
+        );
+    }
+
+    #[test]
+    fn session_unicode_in_const_declaration() {
+        session!(
+            r#"
+> !const :alpha: = 3
+α = 3 [1]
+
+> :alpha:
+3 [1]
+"#
+        );
+    }
+
+    #[test]
+    fn session_unicode_partial_replacement() {
+        // Only known names get replaced; unknown patterns pass through
+        assert_eq!(
+            crate::unicode::replace_all(":mu: + :unknown:"),
+            "μ + :unknown:"
         );
     }
 
