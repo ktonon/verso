@@ -16,3 +16,4 @@
 | [unicode-completions.md](unicode-completions.md) | Unicode Completions | 2026-03-16 | 2026-03-16 | completed |
 | [bang-directives.md](bang-directives.md) | Bang Directives | 2026-03-16 | 2026-03-16 | completed |
 | [statement-syntax.md](statement-syntax.md) | Statement Syntax Overhaul | 2026-03-17 | 2026-03-17 | completed |
+| [fix-training-build.md](fix-training-build.md) | Fix Training Build | 2026-03-18 | 2026-03-18 | planned |
