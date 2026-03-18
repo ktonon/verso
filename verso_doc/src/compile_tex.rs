@@ -136,28 +136,20 @@ pub fn compile_to_tex(doc: &Document) -> String {
     // Collect used environment kinds for \newtheorem declarations
     let mut env_kinds: Vec<EnvKind> = Vec::new();
     let mut seen: HashSet<EnvKind> = HashSet::new();
-    let mut has_definitions = false;
+
     for block in &doc.blocks {
         if let Block::Environment(env) = block {
             if seen.insert(env.kind) {
                 env_kinds.push(env.kind);
             }
         }
-        if let Block::Claim(claim) = block {
-            if claim.is_definition {
-                has_definitions = true;
-            }
-        }
     }
-    if !env_kinds.is_empty() || has_definitions {
+    if !env_kinds.is_empty() {
         writeln!(out).unwrap();
         for kind in &env_kinds {
             let name = env_kind_name(*kind);
             let display = env_kind_display(*kind);
             writeln!(out, "\\newtheorem{{{}}}{{{}}}", name, display).unwrap();
-        }
-        if has_definitions {
-            writeln!(out, "\\newtheorem{{definition}}{{Definition}}").unwrap();
         }
     }
 
@@ -197,7 +189,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Proof(proof) => {
                 write_proof(&mut out, proof);
             }
-            Block::Var(_) | Block::Const(_) | Block::Func(_) => {}
+            Block::Var(_) | Block::Def(_) | Block::Func(_) => {}
             Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_) => {}
             Block::PageBreak => {
                 writeln!(out, "\\newpage").unwrap();
@@ -461,16 +453,9 @@ fn write_prose_fragments(
 }
 
 fn write_claim(out: &mut String, claim: &Claim) {
-    if claim.is_definition {
-        let title = claim.name.replace('-', " ");
-        writeln!(out, "\\begin{{definition}}[{}]", title).unwrap();
-    }
     writeln!(out, "\\begin{{equation}} \\label{{eq:{}}}", claim.name).unwrap();
     writeln!(out, "  {} = {}", claim.lhs.to_tex(), claim.rhs.to_tex()).unwrap();
     writeln!(out, "\\end{{equation}}").unwrap();
-    if claim.is_definition {
-        writeln!(out, "\\end{{definition}}").unwrap();
-    }
 }
 
 fn write_proof(out: &mut String, proof: &Proof) {
@@ -877,18 +862,17 @@ fn strip_label_tag(title: &str) -> String {
     title.to_string()
 }
 
-/// Find the line number (1-indexed) where a claim or definition is defined in raw text.
-/// Find the line number of a `var`, `const`, or `func` declaration by name.
+/// Find the line number of a `var`, `def`, or `func` declaration by name.
 /// Uses subscript base matching (e.g. `ℓ` matches `var ℓ_{n} [L]`).
 pub fn find_decl_line(name: &str, text: &str) -> Option<usize> {
     let base = verso_symbolic::context::subscript_base(name);
     for (i, line) in text.lines().enumerate() {
         let trimmed = line.trim();
-        for prefix in &["var ", "const ", "func "] {
+        for prefix in &["var ", "def ", "func "] {
             if let Some(rest) = trimmed.strip_prefix(prefix) {
-                // Extract the declared name (up to space, `[`, `=`, or `(`)
+                // Extract the declared name (up to space, `[`, `:=`, or `(`)
                 let decl_name = rest
-                    .split(|c: char| c == '[' || c == '=' || c == '(')
+                    .split(|c: char| c == '[' || c == ':' || c == '=' || c == '(')
                     .next()
                     .unwrap_or("")
                     .trim();
@@ -906,11 +890,6 @@ pub fn find_claim_line(name: &str, text: &str) -> Option<usize> {
     for (i, line) in text.lines().enumerate() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("claim") {
-            if rest.trim() == name {
-                return Some(i + 1);
-            }
-        }
-        if let Some(rest) = trimmed.strip_prefix("definition") {
             if rest.trim() == name {
                 return Some(i + 1);
             }
@@ -937,7 +916,7 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
                     line: decl.span.line,
                 });
             }
-            Block::Const(decl) => {
+            Block::Def(decl) => {
                 let mut detail = format!("{}", decl.value);
                 if let Some(desc) = &decl.description {
                     detail.push_str("\n\n");
@@ -945,7 +924,7 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
                 }
                 symbols.push(SymbolInfo {
                     name: decl.name.clone(),
-                    kind: "const".to_string(),
+                    kind: "def".to_string(),
                     detail,
                     line: decl.span.line,
                 });
@@ -965,14 +944,9 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
                 });
             }
             Block::Claim(claim) => {
-                let kind = if claim.is_definition {
-                    "definition"
-                } else {
-                    "claim"
-                };
                 symbols.push(SymbolInfo {
                     name: claim.name.clone(),
-                    kind: kind.to_string(),
+                    kind: "claim".to_string(),
                     detail: format!("{} = {}", claim.lhs, claim.rhs),
                     line: claim.span.line,
                 });
@@ -1018,19 +992,13 @@ mod tests {
     }
 
     #[test]
-    fn compile_definition_unicode() {
-        let doc =
-            parse_document("definition Characteristic-Length\n  ℓ_{n-1} = ℓ_n / σ")
-                .unwrap();
+    fn compile_def_is_invisible() {
+        let doc = parse_document("def c := 3*10^8").unwrap();
         let tex = compile_to_tex(&doc);
+        // def blocks are invisible in LaTeX output (substitution only)
         assert!(
-            tex.contains("\\begin{definition}[Characteristic Length]"),
-            "got: {}",
-            tex
-        );
-        assert!(
-            tex.contains("\\ell_{n-1} = \\frac{\\ell_{n}}{\\sigma}"),
-            "got: {}",
+            !tex.contains("10^{8}"),
+            "def should not appear in output: {}",
             tex
         );
     }
@@ -1145,18 +1113,6 @@ claim add_zero
         assert!(tex.contains("\\end{theorem}"));
     }
 
-    #[test]
-    fn compile_definition_as_equation() {
-        let src = "definition char-length\n  a = b + c";
-        let doc = parse_document(src).unwrap();
-        let tex = compile_to_tex(&doc);
-        assert!(tex.contains("\\newtheorem{definition}{Definition}"));
-        assert!(tex.contains("\\begin{definition}[char length]"));
-        assert!(tex.contains("\\begin{equation} \\label{eq:char-length}"));
-        assert!(tex.contains("a = b + c"));
-        assert!(tex.contains("\\end{equation}"));
-        assert!(tex.contains("\\end{definition}"));
-    }
 
     #[test]
     fn compile_newtheorem_only_for_used_kinds() {
@@ -1632,11 +1588,6 @@ claim add_zero
         assert_eq!(find_claim_line("energy", text), Some(3));
     }
 
-    #[test]
-    fn find_claim_line_definition() {
-        let text = "definition KE\n  (1/2) * m * v^2 = KE";
-        assert_eq!(find_claim_line("KE", text), Some(1));
-    }
 
     #[test]
     fn find_claim_line_not_found() {
@@ -1656,12 +1607,12 @@ claim add_zero
     }
 
     #[test]
-    fn collect_symbols_const() {
-        let doc = parse_document("const k = 2").unwrap();
+    fn collect_symbols_def() {
+        let doc = parse_document("def k := 2").unwrap();
         let syms = collect_symbols(&doc);
         assert_eq!(syms.len(), 1);
         assert_eq!(syms[0].name, "k");
-        assert_eq!(syms[0].kind, "const");
+        assert_eq!(syms[0].kind, "def");
         assert_eq!(syms[0].detail, "2");
     }
 
@@ -1683,14 +1634,6 @@ claim add_zero
         assert_eq!(syms[0].kind, "claim");
     }
 
-    #[test]
-    fn collect_symbols_definition() {
-        let doc = parse_document("definition KE\n  (1/2) * m * v^2 = KE").unwrap();
-        let syms = collect_symbols(&doc);
-        assert_eq!(syms.len(), 1);
-        assert_eq!(syms[0].name, "KE");
-        assert_eq!(syms[0].kind, "definition");
-    }
 
     #[test]
     fn collect_symbols_var_with_description() {

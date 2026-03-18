@@ -76,23 +76,18 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
             Block::Var(decl) => {
                 ctx.declare_var(&decl.var_name, Some(decl.dimension.clone()));
             }
-            Block::Const(decl) => {
+            Block::Def(decl) => {
                 ctx.declare_const(&decl.name, decl.value.clone());
             }
             Block::Func(decl) => {
                 ctx.declare_func(&decl.name, decl.params.clone(), decl.body.clone());
             }
             Block::Claim(claim) => {
-                if claim.is_definition {
-                    // Definitions are accepted as given — no verification
+                let result = verify_claim(claim, &ctx);
+                if result.passed() {
                     ctx.add_claim_as_rule(&claim.name, &claim.lhs, &claim.rhs);
-                } else {
-                    let result = verify_claim(claim, &ctx);
-                    if result.passed() {
-                        ctx.add_claim_as_rule(&claim.name, &claim.lhs, &claim.rhs);
-                    }
-                    results.push(result);
                 }
+                results.push(result);
             }
             Block::Proof(proof) => {
                 results.push(verify_proof(proof, &ctx));
@@ -314,7 +309,7 @@ proof bad
     #[test]
     fn verify_const_substitution() {
         let src = "\
-const k = 2
+def k := 2
 claim double
   k * x = 2 * x
 ";
@@ -330,7 +325,7 @@ claim double
     #[test]
     fn verify_const_in_proof() {
         let src = "\
-const a = 3
+def a := 3
 proof expand
   a * (x + 1)
   = 3 * x + 3
@@ -379,7 +374,7 @@ claim energy
     #[test]
     fn verify_func_with_const() {
         let src = "\
-const g = 10
+def g := 10
 func PE(m, h) = m * g * h
 claim potential
   PE(2, 5) = 100
@@ -413,19 +408,16 @@ claim quadruple
     }
 
     #[test]
-    fn verify_claim_rhs_only_var_no_panic() {
-        // Regression: a claim where σ appears only in the RHS must not panic
-        // when the claim is later used as a rule (σ stays concrete, not a wildcard)
+    fn verify_def_rhs_only_var_no_panic() {
+        // Regression: a def where σ appears only in the RHS must not panic
         let src = "\
-definition recurrence
-  a = b / σ
+def a := b / σ
 
 claim trivial
   x = x
 ";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
-        // The definition is accepted without verification; trivial claim should pass
         assert!(
             report.all_passed(),
             "rhs-only var should not panic: {:?}",
@@ -436,7 +428,7 @@ claim trivial
     #[test]
     fn verify_const_wrong_value_fails() {
         let src = "\
-const k = 2
+def k := 2
 claim wrong
   k * x = 3 * x
 ";
@@ -449,7 +441,7 @@ claim wrong
     fn verify_claim_with_const_catches_dim_error() {
         let src = "\
 var v [L T^-1]
-const c = 5
+def c := 5
 claim bad
   v = c
 ";

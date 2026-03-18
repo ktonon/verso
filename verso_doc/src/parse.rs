@@ -1,5 +1,5 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, ConstDecl, Document, EnvKind, Environment, Figure, FuncDecl, List,
+    Block, Claim, ColumnAlign, DefDecl, Document, EnvKind, Environment, Figure, FuncDecl, List,
     ListItem, MathBlock, Proof, ProofStep, ProseFragment, Span, Table, VarDecl,
 };
 use std::fmt;
@@ -375,40 +375,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 });
             }
 
-            let claim = parse_claim_body(&name, &body, claim_line, false)?;
-            blocks.push(Block::Claim(claim));
-            continue;
-        }
-
-        // Definition block (unverified claim)
-        if trimmed == "definition" || trimmed.starts_with("definition ") {
-            let name = trimmed.strip_prefix("definition").unwrap().trim().to_string();
-            if name.is_empty() {
-                return Err(ParseDocError {
-                    line: i + 1,
-                    message: "definition requires a name".into(),
-                });
-            }
-            let def_line = i + 1;
-
-            i += 1;
-            let mut body = String::new();
-            while i < lines.len() && is_continuation(&lines[i]) {
-                if !body.is_empty() {
-                    body.push(' ');
-                }
-                body.push_str(lines[i].trim());
-                i += 1;
-            }
-
-            if body.is_empty() {
-                return Err(ParseDocError {
-                    line: def_line,
-                    message: "definition body is empty".into(),
-                });
-            }
-
-            let claim = parse_claim_body(&name, &body, def_line, true)?;
+            let claim = parse_claim_body(&name, &body, claim_line)?;
             blocks.push(Block::Claim(claim));
             continue;
         }
@@ -498,29 +465,29 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Constant declaration
-        if trimmed == "const" || trimmed.starts_with("const ") {
-            let rest = trimmed.strip_prefix("const").unwrap().trim();
-            let eq_pos = rest.find('=').ok_or_else(|| ParseDocError {
+        // Definition: def name := expr
+        if trimmed == "def" || trimmed.starts_with("def ") {
+            let rest = trimmed.strip_prefix("def").unwrap().trim();
+            let assign_pos = rest.find(":=").ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: "const requires name = expr, e.g. const c = 3*10^8".into(),
+                message: "def requires name := expr, e.g. def c := 3*10^8".into(),
             })?;
-            let name = rest[..eq_pos].trim().to_string();
+            let name = rest[..assign_pos].trim().to_string();
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "const requires a name".into(),
+                    message: "def requires a name".into(),
                 });
             }
-            let value_str = rest[eq_pos + 1..].trim();
+            let value_str = rest[assign_pos + 2..].trim();
             let value = parse_expr(value_str).map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!("const '{}': {:?}", name, e),
+                message: format!("def '{}': {:?}", name, e),
             })?;
             let span = Span { line: i + 1 };
             i += 1;
             let description = collect_description(&lines, &mut i);
-            blocks.push(Block::Const(ConstDecl {
+            blocks.push(Block::Def(DefDecl {
                 name,
                 value,
                 description,
@@ -1057,16 +1024,10 @@ fn parse_table_row(line: &str) -> Result<Vec<Vec<ProseFragment>>, ParseDocError>
     cells.iter().map(|c| parse_prose_fragments(c)).collect()
 }
 
-fn parse_claim_body(
-    name: &str,
-    body: &str,
-    line: usize,
-    is_definition: bool,
-) -> Result<Claim, ParseDocError> {
-    let kind = if is_definition { "definition" } else { "claim" };
+fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseDocError> {
     let eq_pos = body.find('=').ok_or_else(|| ParseDocError {
         line,
-        message: format!("{} '{}': expected 'lhs = rhs'", kind, name),
+        message: format!("claim '{}': expected 'lhs = rhs'", name),
     })?;
 
     let lhs_str = body[..eq_pos].trim();
@@ -1074,19 +1035,18 @@ fn parse_claim_body(
 
     let lhs = parse_expr(lhs_str).map_err(|e| ParseDocError {
         line,
-        message: format!("{} '{}' lhs: {:?}", kind, name, e),
+        message: format!("claim '{}' lhs: {:?}", name, e),
     })?;
 
     let rhs = parse_expr(rhs_str).map_err(|e| ParseDocError {
         line,
-        message: format!("{} '{}' rhs: {:?}", kind, name, e),
+        message: format!("claim '{}' rhs: {:?}", name, e),
     })?;
 
     Ok(Claim {
         name: name.to_string(),
         lhs,
         rhs,
-        is_definition,
         span: Span { line },
     })
 }
@@ -1699,14 +1659,14 @@ proof pythag
     }
 
     #[test]
-    fn parse_const_with_description() {
-        let src = "const N = 3\n  Number of rungs.";
+    fn parse_def_with_description() {
+        let src = "def N := 3\n  Number of rungs.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
-            Block::Const(c) => {
-                assert_eq!(c.description.as_deref(), Some("Number of rungs."));
+            Block::Def(d) => {
+                assert_eq!(d.description.as_deref(), Some("Number of rungs."));
             }
-            _ => panic!("expected Const"),
+            _ => panic!("expected Def"),
         }
     }
 
@@ -1734,42 +1694,41 @@ proof pythag
     }
 
     #[test]
-    fn parse_const_declaration() {
-        let src = "const c = 3*10^8";
+    fn parse_def_declaration() {
+        let src = "def c := 3*10^8";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
-            Block::Const(c) => {
-                assert_eq!(c.name, "c");
-                // 3*10^8 parses as implicit multiplication: "310^8"
-                let formatted = format!("{}", c.value);
+            Block::Def(d) => {
+                assert_eq!(d.name, "c");
+                let formatted = format!("{}", d.value);
                 assert!(
                     formatted.contains("10"),
                     "expected numeric expr, got: {}",
                     formatted
                 );
             }
-            _ => panic!("expected Const"),
+            _ => panic!("expected Def"),
         }
     }
 
     #[test]
-    fn parse_const_missing_equals() {
-        let src = "const c 3";
+    fn parse_def_missing_assign() {
+        let src = "def c 3";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains("const requires"),
+            err.message.contains("def requires"),
             "unexpected error: {}",
             err.message
         );
     }
 
     #[test]
-    fn parse_const_missing_name() {
-        let src = "const = 3";
+    fn parse_def_missing_name() {
+        let src = "def := 3";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains("const requires a name"),
+            err.message.contains("def requires a name"),
             "unexpected error: {}",
             err.message
         );
@@ -2198,25 +2157,6 @@ More prose here.
             }
             other => panic!("expected Environment, got {:?}", other),
         }
-    }
-
-    #[test]
-    fn parse_definition_as_unverified_claim() {
-        let src = "definition char-length\n  a = b + c";
-        let doc = parse_document(src).unwrap();
-        match &doc.blocks[0] {
-            Block::Claim(claim) => {
-                assert_eq!(claim.name, "char-length");
-                assert!(claim.is_definition);
-            }
-            other => panic!("expected Claim, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_definition_requires_name() {
-        let result = parse_document("definition\n  a = b");
-        assert!(result.is_err());
     }
 
     #[test]
@@ -3010,8 +2950,8 @@ More prose here.
     }
 
     #[test]
-    fn parse_const_empty_name() {
-        let err = parse_document("const = 5").unwrap_err();
+    fn parse_def_empty_name() {
+        let err = parse_document("def := 5").unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
 

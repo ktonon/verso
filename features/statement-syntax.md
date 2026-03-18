@@ -102,6 +102,18 @@ Changes needed:
 - REPL help now distinguishes "Statements" (no `!`) from "Commands" (`!`)
 - Updated all test fixtures (`.verso` files, inline test strings in parse.rs, compile_tex.rs, verify.rs, repl.rs)
 
+### Phase 2 (completed)
+- Renamed `ConstDecl` → `DefDecl`, `Block::Const` → `Block::Def` throughout AST
+- Parser now recognizes `def name := expr` with `:=` operator (not `=`)
+- Removed `definition` keyword — old `!definition` blocks (unverified claims) are now expressed as `def`
+- Removed `is_definition` field from `Claim` struct (always false now)
+- Removed LaTeX `\begin{definition}` environment rendering (def is invisible like old const)
+- REPL supports bare `:=` as implicit def shorthand (e.g. `c := 3*10^8`)
+- REPL help updated: `const` → `def`, examples show `:= `syntax
+- `collect_symbols` reports kind as `"def"` instead of `"const"`
+- `find_decl_line` now matches `def ` prefix (with `:` in split chars for `:=`)
+- Updated all fixture files and test strings
+
 ## Verification
 
 - `npm test` — all unit tests pass

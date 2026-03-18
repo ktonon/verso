@@ -163,15 +163,15 @@ Verso treats subscripts as part of the variable name. A declaration of
 math`v_{0}` creates a variable named "v_{0}" and does not imply any
 relationship with math`v_{f}` or plain math`v`.
 
-## Constant Declarations
+## Definitions
 
-Constants bind a name to a fixed value. The value is substituted wherever
-the name appears in subsequent claims and proofs.
+Definitions bind a name to an expression using the := operator. The name is
+substituted wherever it appears in subsequent claims and proofs.
 
-const g = 10
+def g := 10
   Gravitational acceleration (simplified).
 
-Like variables, constants accept an optional indented description.
+Like variables, definitions accept an optional indented description.
 
 ## Function Declarations
 
@@ -208,16 +208,14 @@ See claim`add_zero_identity` for the simplest example.
 
 ## Definitions
 
-A definition is an unverified claim that also becomes a rewrite rule. This
-is useful for introducing new notation or equalities that the verification
-engine should accept without proof.
+Definitions can also express physical laws by binding a symbol to an
+expression involving other declared symbols.
 
-definition kinetic_energy
-  KE(m, v) = (1/2)*m*v^2
+def KE_formula := (1/2)*m*v^2
+  Kinetic energy formula.
 
-Unlike claims, definitions are not checked by the simplification engine.
-They are registered as bidirectional rewrite rules that subsequent claims
-and proofs can use.
+The def statement uses := to distinguish definitions from equality claims.
+The bound name is substituted wherever it appears in subsequent expressions.
 
 ## Proofs label`proofs`
 
@@ -241,15 +239,14 @@ this section.
 When variable declarations include dimensions, Verso checks that both sides
 of every claim have matching dimensions.
 
-definition newtons_second_law
-  F = m * a
+def F := m * a
+  Newton's second law.
 
 Definitions are not symbolically verified, but when variable declarations
-are present, Verso still checks dimensional consistency. Both sides of
-this definition have dimension M L T to the minus two.
+are present, Verso still checks dimensional consistency.
 
-definition velocity_from_acceleration
-  v = a * t
+def v_eq := a * t
+  Velocity from constant acceleration.
 
 ## Math Blocks
 

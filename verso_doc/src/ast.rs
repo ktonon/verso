@@ -24,8 +24,8 @@ pub enum Block {
     Proof(Proof),
     /// A variable declaration with dimensions: `!var varname [dims]`
     Var(VarDecl),
-    /// A constant declaration: `!const name = expr`
-    Const(ConstDecl),
+    /// A definition: `def name := expr`
+    Def(DefDecl),
     /// A function declaration: `!func name(params) = expr`
     Func(FuncDecl),
     /// A list (bullet or numbered).
@@ -174,8 +174,6 @@ pub struct Claim {
     pub name: String,
     pub lhs: Expr,
     pub rhs: Expr,
-    /// If true, this is a definition (unverified, always registered as a rule).
-    pub is_definition: bool,
     pub span: Span,
 }
 
@@ -196,7 +194,7 @@ pub struct ProofStep {
     pub span: Span,
 }
 
-/// A variable declaration: `!var varname [M L T^-2]`
+/// A variable declaration: `var varname [M L T^-2]`
 #[derive(Debug)]
 pub struct VarDecl {
     pub var_name: String,
@@ -205,16 +203,16 @@ pub struct VarDecl {
     pub span: Span,
 }
 
-/// A constant declaration: `!const name = value_expr`
+/// A definition: `def name := value_expr`
 #[derive(Debug)]
-pub struct ConstDecl {
+pub struct DefDecl {
     pub name: String,
     pub value: Expr,
     pub description: Option<String>,
     pub span: Span,
 }
 
-/// A function declaration: `!func name(params) = body_expr`
+/// A function declaration: `func name(params) = body_expr`
 #[derive(Debug)]
 pub struct FuncDecl {
     pub name: String,

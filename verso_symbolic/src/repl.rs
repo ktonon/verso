@@ -64,10 +64,10 @@ impl Session {
             });
         }
 
-        // const declaration
-        if input == "const" || input.starts_with("const ") {
-            let rest = input.strip_prefix("const").unwrap().trim();
-            return Some(match parse_const_decl(rest) {
+        // def declaration (also recognizes const for backwards compat in REPL)
+        if input == "def" || input.starts_with("def ") {
+            let rest = input.strip_prefix("def").unwrap().trim();
+            return Some(match parse_def_decl(rest) {
                 Ok((name, value)) => {
                     let (stripped, inline_dims) = match self.ctx.push_inline_dims(&value) {
                         Ok(r) => r,
@@ -76,7 +76,7 @@ impl Session {
                     let mut out = String::new();
 
                     if let Some(Err(e)) = self.ctx.check_expr_dim(&stripped) {
-                        let value_str = rest[rest.find('=').unwrap() + 1..].trim();
+                        let value_str = rest[rest.find(":=").unwrap() + 2..].trim();
                         let value_offset = input.chars().count() - value_str.chars().count();
                         out.push_str(&format_dim_error(&e, value_str, 2 + value_offset));
                         out.push('\n');
@@ -85,7 +85,7 @@ impl Session {
                     let simplified = self.ctx.simplify(&stripped);
                     let type_suffix = format_type_suffix(&simplified, expr_ty.as_ref());
                     out.push_str(&format!(
-                        "\x1b[90m{} = {}{}\x1b[0m",
+                        "\x1b[90m{} := {}{}\x1b[0m",
                         name,
                         fmt_colored(&simplified),
                         type_suffix
@@ -114,6 +114,41 @@ impl Session {
                 }
                 Err(msg) => format!("Error: {}", msg),
             });
+        }
+
+        // Implicit def: name := expr (shorthand for `def name := expr`)
+        if let Some(assign_pos) = input.find(":=") {
+            let name = input[..assign_pos].trim();
+            let value_str = input[assign_pos + 2..].trim();
+            if !name.is_empty() && !value_str.is_empty() {
+                return Some(match parse_expr(value_str) {
+                    Ok(value) => {
+                        let (stripped, inline_dims) = match self.ctx.push_inline_dims(&value) {
+                            Ok(r) => r,
+                            Err(e) => return Some(format!("Error: {}", e)),
+                        };
+                        let mut out = String::new();
+                        if let Some(Err(e)) = self.ctx.check_expr_dim(&stripped) {
+                            let value_offset = input.chars().count() - value_str.chars().count();
+                            out.push_str(&format_dim_error(&e, value_str, 2 + value_offset));
+                            out.push('\n');
+                        }
+                        let expr_ty = self.ctx.infer_ty(&stripped);
+                        let simplified = self.ctx.simplify(&stripped);
+                        let type_suffix = format_type_suffix(&simplified, expr_ty.as_ref());
+                        out.push_str(&format!(
+                            "\x1b[90m{} := {}{}\x1b[0m",
+                            name,
+                            fmt_colored(&simplified),
+                            type_suffix
+                        ));
+                        self.ctx.declare_const(name, value);
+                        self.ctx.pop_dims(&inline_dims);
+                        out
+                    }
+                    Err(e) => format!("Error: {:?}", e),
+                });
+            }
         }
 
         // Equality check
@@ -307,8 +342,9 @@ pub fn run() -> Result<(), ReadlineError> {
                 let is_command_or_statement = input.starts_with('!')
                     || input.starts_with('?')
                     || input.starts_with("var ")
-                    || input.starts_with("const ")
-                    || input.starts_with("func ");
+                    || input.starts_with("def ")
+                    || input.starts_with("func ")
+                    || input.contains(":=");
                 if !is_command_or_statement {
                     record_input(&mut input_history, &mut rl, history_mode, input);
                 }
@@ -370,17 +406,17 @@ Examples:
   var θ [1]           dimensionless",
     },
     HelpEntry {
-        command: "const",
-        summary: "Declare a named constant",
+        command: "def",
+        summary: "Define a named constant or expression",
         detail: "\
-const <name> = <expr>
+def <name> := <expr>
 
 Binds a name to an expression. The name is substituted
-in subsequent expressions.
+in subsequent expressions. Shorthand: name := expr
 
 Examples:
-  const c = 3*10^8
-  const g = 9.81 [m/s^2]",
+  def c := 3*10^8
+  c := 3*10^8          (implicit def)",
     },
     HelpEntry {
         command: "func",
@@ -470,15 +506,15 @@ fn parse_var_decl(rest: &str) -> Result<(String, Dimension), String> {
     Ok((name, dimension))
 }
 
-fn parse_const_decl(rest: &str) -> Result<(String, Expr), String> {
-    let eq_pos = rest
-        .find('=')
-        .ok_or("const requires name = expr, e.g. const c = 3*10^8")?;
-    let name = rest[..eq_pos].trim().to_string();
+fn parse_def_decl(rest: &str) -> Result<(String, Expr), String> {
+    let assign_pos = rest
+        .find(":=")
+        .ok_or("def requires name := expr, e.g. def c := 3*10^8")?;
+    let name = rest[..assign_pos].trim().to_string();
     if name.is_empty() {
-        return Err("const requires a name".into());
+        return Err("def requires a name".into());
     }
-    let value_str = rest[eq_pos + 1..].trim();
+    let value_str = rest[assign_pos + 2..].trim();
     let value = parse_expr(value_str).map_err(|e| format!("{:?}", e))?;
     Ok((name, value))
 }
@@ -781,11 +817,11 @@ v [L T^-1]
     }
 
     #[test]
-    fn session_const_substitution() {
+    fn session_def_substitution() {
         session!(
             r#"
-> const c = 3
-c = 3 [1]
+> def c := 3
+c := 3 [1]
 
 > c + 1
 4 [1]
@@ -794,11 +830,11 @@ c = 3 [1]
     }
 
     #[test]
-    fn session_const_with_units() {
+    fn session_def_with_units() {
         session!(
             r#"
-> const g = 3*10^8 [m/s]
-g = 300000000 [m/s]
+> def g := 3*10^8 [m/s]
+g := 300000000 [m/s]
 "#
         );
     }
@@ -994,11 +1030,11 @@ x [1]
     }
 
     #[test]
-    fn session_unicode_in_const_declaration() {
+    fn session_unicode_in_def_declaration() {
         session!(
             r#"
-> const :alpha: = 3
-α = 3 [1]
+> def :alpha: := 3
+α := 3 [1]
 
 > :alpha:
 3 [1]
@@ -1022,7 +1058,7 @@ x [1]
         let mut s = Session::new();
         let out = eval(&mut s, "?");
         assert!(out.contains("var"), "should list var");
-        assert!(out.contains("const"), "should list const");
+        assert!(out.contains("def"), "should list def");
         assert!(out.contains("func"), "should list func");
         assert!(out.contains("!trace"), "should list !trace");
         assert!(out.contains("!reset"), "should list !reset");
