@@ -114,6 +114,12 @@ Changes needed:
 - `find_decl_line` now matches `def ` prefix (with `:` in split chars for `:=`)
 - Updated all fixture files and test strings
 
+### Phase 3 (completed)
+- `func name(params) = body` → `func name(params) := body`
+- Updated both document parser and REPL parser
+- Updated REPL func output format and help text
+- Updated all test fixtures
+
 ## Verification
 
 - `npm test` — all unit tests pass

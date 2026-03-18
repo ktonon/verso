@@ -26,7 +26,7 @@ pub enum Block {
     Var(VarDecl),
     /// A definition: `def name := expr`
     Def(DefDecl),
-    /// A function declaration: `!func name(params) = expr`
+    /// A function declaration: `!func name(params) := expr`
     Func(FuncDecl),
     /// A list (bullet or numbered).
     List(List),
@@ -212,7 +212,7 @@ pub struct DefDecl {
     pub span: Span,
 }
 
-/// A function declaration: `func name(params) = body_expr`
+/// A function declaration: `func name(params) := body_expr`
 #[derive(Debug)]
 pub struct FuncDecl {
     pub name: String,

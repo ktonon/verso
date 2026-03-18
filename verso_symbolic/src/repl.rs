@@ -104,7 +104,7 @@ impl Session {
             return Some(match parse_func_decl(rest) {
                 Ok((name, params, body)) => {
                     let out = format!(
-                        "\x1b[90m{}({}) = {}\x1b[0m",
+                        "\x1b[90m{}({}) := {}\x1b[0m",
                         name,
                         params.join(", "),
                         fmt_colored(&body)
@@ -422,13 +422,13 @@ Examples:
         command: "func",
         summary: "Declare a function",
         detail: "\
-func <name>(<params>) = <body>
+func <name>(<params>) := <body>
 
 Defines a function that can be called in expressions.
 
 Examples:
-  func sq(x) = x^2
-  func ke(m, v) = m*v^2/2",
+  func sq(x) := x^2
+  func ke(m, v) := m*v^2/2",
     },
 ];
 
@@ -520,7 +520,7 @@ fn parse_def_decl(rest: &str) -> Result<(String, Expr), String> {
 }
 
 fn parse_func_decl(rest: &str) -> Result<(String, Vec<String>, Expr), String> {
-    let lparen = rest.find('(').ok_or("func requires name(params) = expr")?;
+    let lparen = rest.find('(').ok_or("func requires name(params) := expr")?;
     let name = rest[..lparen].trim().to_string();
     if name.is_empty() {
         return Err("func requires a name".into());
@@ -536,8 +536,8 @@ fn parse_func_decl(rest: &str) -> Result<(String, Vec<String>, Expr), String> {
     }
     let after = rest[rparen + 1..].trim();
     let body_str = after
-        .strip_prefix('=')
-        .ok_or("func requires = after parameters")?
+        .strip_prefix(":=")
+        .ok_or("func requires := after parameters")?
         .trim();
     let body = parse_expr(body_str).map_err(|e| format!("{:?}", e))?;
     Ok((name, params, body))
@@ -937,8 +937,8 @@ v [1]
     fn session_func_declaration_and_use() {
         session!(
             r#"
-> func sq(x) = x^2 + 1
-sq(x) = x^2 + 1
+> func sq(x) := x^2 + 1
+sq(x) := x^2 + 1
 
 > sq(3)
 10 [1]

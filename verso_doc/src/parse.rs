@@ -501,7 +501,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             let rest = trimmed.strip_prefix("func").unwrap().trim();
             let lparen = rest.find('(').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: "func requires name(params) = expr, e.g. func KE(m, v) = (1/2)*m*v^2"
+                message: "func requires name(params) := expr, e.g. func KE(m, v) := (1/2)*m*v^2"
                     .into(),
             })?;
             let name = rest[..lparen].trim().to_string();
@@ -529,10 +529,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             }
             let after_rparen = rest[rparen + 1..].trim();
             let body_str = after_rparen
-                .strip_prefix('=')
+                .strip_prefix(":=")
                 .ok_or_else(|| ParseDocError {
                     line: i + 1,
-                    message: "func requires = after parameters".into(),
+                    message: "func requires := after parameters".into(),
                 })?
                 .trim();
             let body = parse_expr(body_str).map_err(|e| ParseDocError {
@@ -1672,7 +1672,7 @@ proof pythag
 
     #[test]
     fn parse_func_with_description() {
-        let src = "func sq(x) = x^2\n  Square function.";
+        let src = "func sq(x) := x^2\n  Square function.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Func(f) => {
@@ -1736,7 +1736,7 @@ proof pythag
 
     #[test]
     fn parse_func_declaration() {
-        let src = "func KE(m, v) = (1/2) * m * v^2";
+        let src = "func KE(m, v) := (1/2) * m * v^2";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1750,7 +1750,7 @@ proof pythag
 
     #[test]
     fn parse_func_missing_parens() {
-        let src = "func f = x";
+        let src = "func f := x";
         let err = parse_document(src).unwrap_err();
         assert!(
             err.message.contains("func requires"),
@@ -1761,7 +1761,7 @@ proof pythag
 
     #[test]
     fn parse_func_no_params() {
-        let src = "func f() = x";
+        let src = "func f() := x";
         let err = parse_document(src).unwrap_err();
         assert!(
             err.message.contains("at least one parameter"),
@@ -2969,7 +2969,7 @@ More prose here.
 
     #[test]
     fn parse_func_empty_name() {
-        let err = parse_document("func (x) = x").unwrap_err();
+        let err = parse_document("func (x) := x").unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
 
@@ -3066,7 +3066,7 @@ More prose here.
 
     #[test]
     fn parse_func_empty_params_error() {
-        let err = parse_document("func f() = x").unwrap_err();
+        let err = parse_document("func f() := x").unwrap_err();
         assert!(err.message.contains("requires at least one parameter"));
     }
 }

@@ -342,7 +342,7 @@ proof expand
     #[test]
     fn verify_func_expansion() {
         let src = "\
-func sq(x) = x^2
+func sq(x) := x^2
 claim square
   sq(3) = 9
 ";
@@ -358,7 +358,7 @@ claim square
     #[test]
     fn verify_func_two_params() {
         let src = "\
-func KE(m, v) = (1/2) * m * v^2
+func KE(m, v) := (1/2) * m * v^2
 claim energy
   KE(2, 3) = 9
 ";
@@ -375,7 +375,7 @@ claim energy
     fn verify_func_with_const() {
         let src = "\
 def g := 10
-func PE(m, h) = m * g * h
+func PE(m, h) := m * g * h
 claim potential
   PE(2, 5) = 100
 ";

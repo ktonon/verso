@@ -931,7 +931,7 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
             }
             Block::Func(decl) => {
                 let params = decl.params.join(", ");
-                let mut detail = format!("({}) = {}", params, decl.body);
+                let mut detail = format!("({}) := {}", params, decl.body);
                 if let Some(desc) = &decl.description {
                     detail.push_str("\n\n");
                     detail.push_str(desc);
@@ -1618,7 +1618,7 @@ claim add_zero
 
     #[test]
     fn collect_symbols_func() {
-        let doc = parse_document("func sq(x) = x^2").unwrap();
+        let doc = parse_document("func sq(x) := x^2").unwrap();
         let syms = collect_symbols(&doc);
         assert_eq!(syms.len(), 1);
         assert_eq!(syms[0].name, "sq");

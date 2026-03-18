@@ -177,7 +177,7 @@ Like variables, definitions accept an optional indented description.
 
 Functions define parameterized expressions that expand at use sites.
 
-func KE(m, v) = (1/2)*m*v^2
+func KE(m, v) := (1/2)*m*v^2
   Kinetic energy.
 
 Parameters are positional. The body can reference previously declared
