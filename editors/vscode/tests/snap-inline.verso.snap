@@ -96,34 +96,48 @@
 #                      ^ source.verso markup.heading.2.verso string.other.begin.verso
 #                       ^^^^^^^^^^^^^ source.verso markup.heading.2.verso entity.name.tag.label.verso
 #                                    ^ source.verso markup.heading.2.verso string.other.end.verso
->!var v [L T^-1]
-#^^^^ source.verso keyword.control.directive.var.verso
-#    ^ source.verso
-#     ^ source.verso variable.parameter.var.verso
-#      ^ source.verso
-#       ^^^^^^^^ source.verso storage.type.dimension.verso
->!var F [M L T^-2]
-#^^^^ source.verso keyword.control.directive.var.verso
-#    ^ source.verso
-#     ^ source.verso variable.parameter.var.verso
-#      ^ source.verso
-#       ^^^^^^^^^^ source.verso storage.type.dimension.verso
->!const c = 3*10^8
-#^^^^^^ source.verso keyword.control.directive.const.verso
-#      ^ source.verso
-#       ^ source.verso variable.parameter.const.verso
-#        ^ source.verso
-#         ^ source.verso keyword.operator.assignment.verso
-#          ^ source.verso
-#           ^^^^^^ source.verso string.unquoted.expression.verso
->!func KE(m, v) = (1/2)*m*v^2
-#^^^^^ source.verso keyword.control.directive.func.verso
+>var v [L T^-1]
+#^^^ source.verso keyword.control.directive.var.verso
+#   ^ source.verso
+#    ^ source.verso variable.parameter.var.verso
 #     ^ source.verso
-#      ^^ source.verso entity.name.function.verso
+#      ^^^^^^^^ source.verso storage.type.dimension.verso
+>var F [M L T^-2]
+#^^^ source.verso keyword.control.directive.var.verso
+#   ^ source.verso
+#    ^ source.verso variable.parameter.var.verso
+#     ^ source.verso
+#      ^^^^^^^^^^ source.verso storage.type.dimension.verso
+>def c := 3*10^8
+#^^^ source.verso keyword.control.directive.def.verso
+#   ^ source.verso
+#    ^ source.verso variable.parameter.def.verso
+#     ^ source.verso
+#      ^^ source.verso keyword.operator.definition.verso
 #        ^ source.verso
-#         ^^^^ source.verso variable.parameter.func.verso
-#             ^^ source.verso
-#               ^ source.verso keyword.operator.assignment.verso
+#         ^ source.verso meta.expression.rhs.verso constant.numeric.decimal.verso
+#          ^ source.verso meta.expression.rhs.verso keyword.operator.arithmetic.verso
+#           ^^ source.verso meta.expression.rhs.verso constant.numeric.decimal.verso
+#             ^ source.verso meta.expression.rhs.verso keyword.operator.power.verso
+#              ^ source.verso meta.expression.rhs.verso constant.numeric.decimal.verso
+>func KE(m, v) := (1/2)*m*v^2
+#^^^^ source.verso keyword.control.directive.func.verso
+#    ^ source.verso
+#     ^^ source.verso entity.name.function.verso
+#       ^ source.verso
+#        ^^^^ source.verso variable.parameter.func.verso
+#            ^^ source.verso
+#              ^^ source.verso keyword.operator.assignment.verso
 #                ^ source.verso
-#                 ^^^^^^^^^^^ source.verso string.unquoted.expression.verso
+#                 ^ source.verso meta.expression.rhs.verso punctuation.brackets.round.verso
+#                  ^ source.verso meta.expression.rhs.verso constant.numeric.decimal.verso
+#                   ^ source.verso meta.expression.rhs.verso keyword.operator.arithmetic.verso
+#                    ^ source.verso meta.expression.rhs.verso constant.numeric.decimal.verso
+#                     ^ source.verso meta.expression.rhs.verso punctuation.brackets.round.verso
+#                      ^ source.verso meta.expression.rhs.verso keyword.operator.arithmetic.verso
+#                       ^ source.verso meta.expression.rhs.verso
+#                        ^ source.verso meta.expression.rhs.verso keyword.operator.arithmetic.verso
+#                         ^ source.verso meta.expression.rhs.verso
+#                          ^ source.verso meta.expression.rhs.verso keyword.operator.power.verso
+#                           ^ source.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 >

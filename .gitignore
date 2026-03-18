@@ -3,5 +3,6 @@ node_modules/
 checkpoints/
 data_training/
 target/
+editors/vscode/dist/
 editors/vscode/out/
 editors/vscode/*.vsix
