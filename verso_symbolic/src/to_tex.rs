@@ -144,10 +144,16 @@ impl ToTex for Expr {
                         format!("\\frac{{{}}}{{{}}}", a.to_tex(), inner.to_tex())
                     }
                     _ => {
-                        let a_tex = maybe_paren(a, self);
-                        let b_tex = maybe_paren(b, self);
+                        // Normalize coefficient-first ordering for display
+                        let (lhs, rhs) = if !is_numeric_like(a) && is_numeric_like(b) {
+                            (b, a)
+                        } else {
+                            (a, b)
+                        };
+                        let a_tex = maybe_paren(lhs, self);
+                        let b_tex = maybe_paren(rhs, self);
                         // Use \times between numeric factors to avoid ambiguity (e.g. 2 \times 10^{10})
-                        let op = if is_numeric_like(a) && is_numeric_like(b) {
+                        let op = if is_numeric_like(lhs) && is_numeric_like(rhs) {
                             " \\times "
                         } else {
                             match classify_mul(a, b) {

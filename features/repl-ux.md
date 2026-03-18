@@ -22,7 +22,7 @@ Improve the user experience of the verso REPL for mathematicians and physicists.
 
 ### Confusing Behavior
 
-9. **`sin(2x)` displays as `sin(x·2)`** — The argument's display uses sorted factor order (`x·2`) instead of the conventional coefficient-first form (`2x`). The reverse direction works: `2 sin(x) cos(x) → sin(2x)`.
+9. ~~**`sin(2x)` displays as `sin(x·2)`**~~ **Fixed.** Formatter now normalizes coefficient-first ordering: when the right operand of a scalar `Mul` is a `Rational`, it displays the coefficient before the variable (both in REPL and LaTeX output).
 10. **`F = m * a` is `false` after declaring typed variables** — `!var F [M L T^-2]` and `!var m [M]`, `!var a [L T^-2]` makes a user expect `F = m*a` to be true (since dimensions match), but the REPL only checks symbolic equality, not dimensional equivalence. Could be addressed with documentation or a hint in the output.
 11. **`3 [km]` immediately converts to `3000 [m]`** — Units are eagerly converted to SI base during simplification. A physicist typing `3 [km]` expects to see the value preserved in their chosen unit.
 12. **Dim errors shown alongside equality results** — `a + b = b + a` with mixed-dimension vars shows a dim error warning *and* `true`. The warning is useful but the combination looks contradictory.

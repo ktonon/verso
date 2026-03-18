@@ -176,6 +176,15 @@ fn format_expr(expr: &Expr, t: &Theme) -> String {
                                 format_paren(b, expr, t)
                             );
                         }
+                        if let ExprKind::Rational(r) = &b.kind {
+                            return format!(
+                                "{}{}{}{}",
+                                t.cyan,
+                                r,
+                                t.reset,
+                                format_paren(a, expr, t)
+                            );
+                        }
                     }
                     let op_char = match mul_kind {
                         MulKind::Scalar => "⋅",
@@ -366,6 +375,8 @@ mod tests {
     fn display_mul_scalar() {
         assert_eq!(format!("{}", mul(scalar("x"), scalar("y"))), "x⋅y");
         assert_eq!(format!("{}", mul(constant(2.0), scalar("y"))), "2y");
+        // Coefficient on right still displays coefficient-first
+        assert_eq!(format!("{}", mul(scalar("x"), constant(2.0))), "2x");
     }
 
     #[test]
