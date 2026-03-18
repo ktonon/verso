@@ -246,7 +246,7 @@ impl RandomizedBeamSearch {
 
             if !next_candidates.is_empty() && random_count > 0 {
                 let sampled: Vec<_> = next_candidates
-                    .choose_multiple(rng, random_count.min(next_candidates.len()))
+                    .sample(rng, random_count.min(next_candidates.len()))
                     .cloned()
                     .collect();
                 for (e, _) in sampled {

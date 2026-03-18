@@ -4,7 +4,7 @@ use rand::distr::weighted::WeightedIndex;
 use rand::prelude::Distribution;
 use rand::prelude::IndexedRandom;
 use rand::rngs::StdRng;
-use rand::Rng;
+use rand::RngExt;
 
 /// Configuration for random expression generation.
 pub struct GenExprConfig {
