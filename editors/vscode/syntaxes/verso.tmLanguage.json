@@ -11,6 +11,7 @@
     { "include": "#directive-var" },
     { "include": "#directive-def" },
     { "include": "#directive-func" },
+    { "include": "#directive-expect-fail" },
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
     { "include": "#directive-table" },
@@ -163,6 +164,16 @@
         "4": { "name": "keyword.operator.assignment.verso" },
         "5": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
       }
+    },
+
+    "directive-expect-fail": {
+      "begin": "^(expect_fail)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.expect-fail.verso" },
+        "2": { "name": "entity.name.function.expect-fail.verso" }
+      },
+      "name": "meta.block.expect-fail.verso"
     },
 
     "directive-bibliography": {

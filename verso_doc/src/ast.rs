@@ -56,6 +56,12 @@ pub enum Block {
     PageBreak,
     /// Table of contents: `!toc`
     Toc,
+    /// Expect-fail block: succeeds only when inner verification fails.
+    ExpectFail {
+        name: String,
+        blocks: Vec<Block>,
+        span: Span,
+    },
 }
 
 /// A figure block.

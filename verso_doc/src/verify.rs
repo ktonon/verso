@@ -36,7 +36,10 @@ impl VerificationResult {
     pub fn passed(&self) -> bool {
         let symbolic_pass = matches!(
             self.outcome,
-            Outcome::Pass | Outcome::NumericalPass { .. } | Outcome::ProofPass { .. }
+            Outcome::Pass
+                | Outcome::NumericalPass { .. }
+                | Outcome::ProofPass { .. }
+                | Outcome::ExpectFailPass
         );
         let dim_pass = self.dim_outcome.as_ref().map_or(true, |d| d.passed());
         symbolic_pass && dim_pass
@@ -64,6 +67,10 @@ pub enum Outcome {
         residual: Expr,
         step_span: Span,
     },
+    /// expect_fail block: inner verification had at least one failure (test passes).
+    ExpectFailPass,
+    /// expect_fail block: all inner checks passed unexpectedly (test fails).
+    ExpectFailFail,
 }
 
 /// Verify all claims and proofs in a document.
@@ -92,10 +99,84 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
             Block::Proof(proof) => {
                 results.push(verify_proof(proof, &ctx));
             }
+            Block::ExpectFail { name, blocks, span } => {
+                results.push(verify_expect_fail(name, blocks, span, &ctx));
+            }
             _ => {}
         }
     }
 
+    VerificationReport { results }
+}
+
+/// Verify an expect_fail block. Runs the inner blocks in isolation.
+/// Succeeds if at least one inner verification fails.
+fn verify_expect_fail(
+    name: &str,
+    inner_blocks: &[Block],
+    span: &Span,
+    parent_ctx: &Context,
+) -> VerificationResult {
+    let inner_report = verify_blocks(inner_blocks, parent_ctx);
+    let has_failure = inner_report.results.iter().any(|r| !r.passed());
+    VerificationResult {
+        name: name.to_string(),
+        span: *span,
+        outcome: if has_failure {
+            Outcome::ExpectFailPass
+        } else {
+            Outcome::ExpectFailFail
+        },
+        dim_outcome: None,
+        units: vec![],
+    }
+}
+
+/// Verify a slice of blocks, building on a parent context's declarations.
+/// Creates a fresh context and re-registers the parent's consts, vars, and funcs.
+fn verify_blocks(blocks: &[Block], parent_ctx: &Context) -> VerificationReport {
+    let mut ctx = Context::new();
+    // Inherit parent declarations
+    for (name, expr) in &parent_ctx.consts {
+        ctx.declare_const(name, expr.clone());
+    }
+    for (name, func) in &parent_ctx.funcs {
+        ctx.declare_func(name, func.params.clone(), func.body.clone());
+    }
+    ctx.dims = parent_ctx.dims.clone();
+
+    let mut results = Vec::new();
+    for block in blocks {
+        match block {
+            Block::Var(decl) => {
+                ctx.declare_var(&decl.var_name, Some(decl.dimension.clone()));
+            }
+            Block::Def(decl) => {
+                ctx.declare_const(&decl.name, decl.value.clone());
+            }
+            Block::Func(decl) => {
+                ctx.declare_func(&decl.name, decl.params.clone(), decl.body.clone());
+            }
+            Block::Claim(claim) => {
+                let result = verify_claim(claim, &ctx);
+                if result.passed() {
+                    ctx.add_claim_as_rule(&claim.name, &claim.lhs, &claim.rhs);
+                }
+                results.push(result);
+            }
+            Block::Proof(proof) => {
+                results.push(verify_proof(proof, &ctx));
+            }
+            Block::ExpectFail {
+                name,
+                blocks: inner,
+                span,
+            } => {
+                results.push(verify_expect_fail(name, inner, span, &ctx));
+            }
+            _ => {}
+        }
+    }
     VerificationReport { results }
 }
 
@@ -496,6 +577,64 @@ proof dim_bad
         assert!(
             result.dim_outcome.is_some(),
             "proof should have dim_outcome"
+        );
+    }
+
+    #[test]
+    fn expect_fail_passes_on_dim_mismatch() {
+        let src = "\
+var v [L T^-1]
+var a [L T^-2]
+
+expect_fail wrong_dim
+  claim bad
+    v = a";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.results.len(), 1);
+        let result = &report.results[0];
+        assert_eq!(result.name, "wrong_dim");
+        assert!(
+            result.passed(),
+            "expect_fail should pass when inner claim fails"
+        );
+        assert!(matches!(result.outcome, Outcome::ExpectFailPass));
+    }
+
+    #[test]
+    fn expect_fail_fails_when_all_pass() {
+        let src = "\
+expect_fail should_not_pass
+  claim ok
+    x = x";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.results.len(), 1);
+        let result = &report.results[0];
+        assert_eq!(result.name, "should_not_pass");
+        assert!(
+            !result.passed(),
+            "expect_fail should fail when inner claim passes"
+        );
+        assert!(matches!(result.outcome, Outcome::ExpectFailFail));
+    }
+
+    #[test]
+    fn expect_fail_inherits_parent_context() {
+        // The parent defines c; the inner block uses c in a claim that should fail
+        let src = "\
+def c := 3*10^8
+var v [L T^-1]
+
+expect_fail dim_mismatch_with_const
+  claim bad
+    c = v";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.results.len(), 1);
+        assert!(
+            report.results[0].passed(),
+            "should pass: c (dimensionless) != v (L T^-1)"
         );
     }
 }

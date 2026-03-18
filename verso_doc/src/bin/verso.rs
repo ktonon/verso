@@ -882,7 +882,7 @@ async fn cmd_lsp() {
 
         for result in &report.results {
             match &result.outcome {
-                Outcome::Pass | Outcome::ProofPass { .. } => {}
+                Outcome::Pass | Outcome::ProofPass { .. } | Outcome::ExpectFailPass => {}
                 Outcome::NumericalPass {
                     samples, residual, ..
                 } => {
@@ -919,6 +919,18 @@ async fn cmd_lsp() {
                         message: format!(
                             "'{}' step {} failed: {} \u{2260} {}. Residual: {}",
                             result.name, step_index, from, to, residual
+                        ),
+                        source: Some("verso".to_string()),
+                        ..Default::default()
+                    });
+                }
+                Outcome::ExpectFailFail => {
+                    diagnostics.push(Diagnostic {
+                        range: line_range(result.span.line),
+                        severity: Some(DiagnosticSeverity::ERROR),
+                        message: format!(
+                            "expect_fail '{}': all checks passed unexpectedly",
+                            result.name
                         ),
                         source: Some("verso".to_string()),
                         ..Default::default()

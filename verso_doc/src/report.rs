@@ -87,6 +87,20 @@ fn write_result(f: &mut fmt::Formatter<'_>, result: &VerificationResult) -> fmt:
             writeln!(f, "      to: {}", to)?;
             writeln!(f, "    residual: {}", residual)
         }
+        Outcome::ExpectFailPass => {
+            writeln!(
+                f,
+                "  \x1b[32m\u{2713}\x1b[0m {} (expect_fail, line {})",
+                result.name, result.span.line
+            )
+        }
+        Outcome::ExpectFailFail => {
+            writeln!(
+                f,
+                "  \x1b[31m\u{2717}\x1b[0m {} (expect_fail: all checks passed unexpectedly, line {})",
+                result.name, result.span.line
+            )
+        }
     }
 }
 

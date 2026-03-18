@@ -231,6 +231,9 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Table(table) => {
                 write_table(&mut out, table, &ctx);
             }
+            Block::ExpectFail { .. } => {
+                // Test-only construct, not emitted in output
+            }
         }
     }
 

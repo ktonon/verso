@@ -496,6 +496,46 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // Expect-fail block
+        if trimmed == "expect_fail" || trimmed.starts_with("expect_fail ") {
+            let name = trimmed.strip_prefix("expect_fail").unwrap().trim().to_string();
+            if name.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: "expect_fail requires a name".into(),
+                });
+            }
+            let ef_line = i + 1;
+            i += 1;
+
+            // Collect indented body lines and dedent them
+            let mut body_lines = Vec::new();
+            while i < lines.len() && is_continuation(&lines[i]) {
+                // Strip the first level of indentation (up to 2 spaces)
+                let line = &lines[i];
+                let dedented = if line.starts_with("  ") {
+                    &line[2..]
+                } else {
+                    line.trim_start()
+                };
+                body_lines.push(dedented.to_string());
+                i += 1;
+            }
+
+            let body_text = body_lines.join("\n");
+            let inner_doc = parse_document(&body_text).map_err(|e| ParseDocError {
+                line: ef_line + e.line,
+                message: e.message,
+            })?;
+
+            blocks.push(Block::ExpectFail {
+                name,
+                blocks: inner_doc.blocks,
+                span: Span { line: ef_line },
+            });
+            continue;
+        }
+
         // Variable declaration
         if trimmed == "var" || trimmed.starts_with("var ") {
             let rest = trimmed.strip_prefix("var").unwrap().trim();
@@ -2848,6 +2888,29 @@ More prose here.
             other => panic!("expected Func, got {:?}", other),
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // Expect fail
+
+    #[test]
+    fn parse_expect_fail_basic() {
+        let src = "expect_fail bad_dim\n  var v [L T^-1]\n  var a [L T^-2]\n  claim bad\n    v = a";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::ExpectFail { name, blocks, .. } => {
+                assert_eq!(name, "bad_dim");
+                assert_eq!(blocks.len(), 3); // var, var, claim
+            }
+            other => panic!("expected ExpectFail, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_expect_fail_missing_name() {
+        let src = "expect_fail\n  claim bad\n    x = y";
+        let err = parse_document(src).unwrap_err();
+        assert!(err.message.contains("expect_fail requires a name"));
     }
 
     // Page breaks

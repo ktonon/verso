@@ -41,9 +41,9 @@ Added `tests` field to `.verso.jsonc` config. `verso check` includes test roots 
 
 Key files: `verso_doc/src/config.rs` (TestConfig, check_inputs), `verso_doc/src/bin/verso.rs` (check command), `schema/v0.1.0/verso.schema.json`.
 
-### Phase 3: `expect_fail`
+### Phase 3: `expect_fail` — COMPLETE
 
-Add an `expect_fail` block that succeeds only when the enclosed claim or check fails. Essential for testing dimensional mismatches and intentional constraint violations.
+Implemented as a new `Block::ExpectFail` AST variant. The parser collects the indented body, dedents it, and recursively parses it as inner blocks. Verification runs inner blocks in a child context (inheriting parent declarations) and inverts the result: passes if any inner check fails, fails if all pass.
 
 ```
 expect_fail wrong_dimension
@@ -53,7 +53,7 @@ expect_fail wrong_dimension
     v = a
 ```
 
-Note: a `test` keyword was considered but doesn't add value over `claim` — in a test root, claims already don't emit to a PDF. The distinction is test root vs paper root, not test vs claim.
+Key files: `verso_doc/src/ast.rs` (ExpectFail variant), `verso_doc/src/parse.rs` (parsing), `verso_doc/src/verify.rs` (verify_expect_fail, verify_blocks), `verso_doc/src/report.rs` (display), `verso_doc/src/bin/verso.rs` (LSP diagnostics).
 
 ### Phase 4: Machine-readable output (defer)
 
