@@ -19,7 +19,8 @@ impl fmt::Display for ParseDocError {
 
 impl std::error::Error for ParseDocError {}
 
-/// Resolve `!include` directives by reading and inlining included files.
+/// Resolve `!include` and `use` directives by reading and inlining included files.
+/// `!include` inlines the entire file; `use` inlines only declarations (var, def, func).
 /// Detects circular includes. Paths are relative to `base_dir`.
 pub fn resolve_includes(
     src: &str,
@@ -37,24 +38,18 @@ pub fn resolve_includes(
                     message: "!include requires a file path".into(),
                 });
             }
-            let path = base_dir.join(path_str);
-            let canonical = path.canonicalize().map_err(|e| ParseDocError {
-                line: i + 1,
-                message: format!("!include '{}': {}", path_str, e),
-            })?;
-            if seen.contains(&canonical) {
+            let resolved = resolve_file(path_str, base_dir, seen, i, false)?;
+            out.push_str(&resolved);
+            out.push('\n');
+        } else if trimmed == "use" || trimmed.starts_with("use ") {
+            let path_str = trimmed.strip_prefix("use").unwrap().trim();
+            if path_str.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: format!("!include '{}': circular include detected", path_str),
+                    message: "use requires a file path, e.g. use notation.verso".into(),
                 });
             }
-            seen.push(canonical.clone());
-            let content = std::fs::read_to_string(&canonical).map_err(|e| ParseDocError {
-                line: i + 1,
-                message: format!("!include '{}': {}", path_str, e),
-            })?;
-            let child_dir = canonical.parent().unwrap_or(base_dir);
-            let resolved = resolve_includes(&content, child_dir, seen)?;
+            let resolved = resolve_file(path_str, base_dir, seen, i, true)?;
             out.push_str(&resolved);
             out.push('\n');
         } else {
@@ -63,6 +58,74 @@ pub fn resolve_includes(
         }
     }
     Ok(out)
+}
+
+/// Read and resolve a file for `!include` or `use`.
+/// If `symbols_only` is true, only declaration lines (var, def, func) and their
+/// indented body lines are extracted.
+fn resolve_file(
+    path_str: &str,
+    base_dir: &std::path::Path,
+    seen: &mut Vec<std::path::PathBuf>,
+    line_idx: usize,
+    symbols_only: bool,
+) -> Result<String, ParseDocError> {
+    let directive = if symbols_only { "use" } else { "!include" };
+    let path = base_dir.join(path_str);
+    let canonical = path.canonicalize().map_err(|e| ParseDocError {
+        line: line_idx + 1,
+        message: format!("{} '{}': {}", directive, path_str, e),
+    })?;
+    if seen.contains(&canonical) {
+        return Err(ParseDocError {
+            line: line_idx + 1,
+            message: format!("{} '{}': circular include detected", directive, path_str),
+        });
+    }
+    seen.push(canonical.clone());
+    let content = std::fs::read_to_string(&canonical).map_err(|e| ParseDocError {
+        line: line_idx + 1,
+        message: format!("{} '{}': {}", directive, path_str, e),
+    })?;
+    let child_dir = canonical.parent().unwrap_or(base_dir);
+    let resolved = resolve_includes(&content, child_dir, seen)?;
+
+    if symbols_only {
+        Ok(extract_declarations(&resolved))
+    } else {
+        Ok(resolved)
+    }
+}
+
+/// Extract only declaration lines (var, def, func) and their indented body lines
+/// from a resolved document source.
+fn extract_declarations(src: &str) -> String {
+    let lines: Vec<&str> = src.lines().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let trimmed = lines[i].trim();
+        let is_decl = trimmed.starts_with("var ")
+            || trimmed == "var"
+            || trimmed.starts_with("def ")
+            || trimmed == "def"
+            || trimmed.starts_with("func ")
+            || trimmed == "func";
+        if is_decl {
+            out.push_str(lines[i]);
+            out.push('\n');
+            i += 1;
+            // Include indented body lines (description/metadata)
+            while i < lines.len() && !lines[i].is_empty() && lines[i].starts_with(' ') {
+                out.push_str(lines[i]);
+                out.push('\n');
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    out
 }
 
 /// Collect all file dependencies for a `.verso` file (the file itself + all includes, recursively).
@@ -619,8 +682,11 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Skip !include lines (resolved before parsing in parse_document_from_file)
-        if trimmed.starts_with("!include") {
+        // Skip !include and use lines (resolved before parsing in parse_document_from_file)
+        if trimmed.starts_with("!include")
+            || trimmed == "use"
+            || trimmed.starts_with("use ")
+        {
             i += 1;
             continue;
         }
@@ -2656,6 +2722,132 @@ More prose here.
             },
             _ => panic!("expected Prose"),
         }
+    }
+
+    // Use (symbol-only imports)
+
+    #[test]
+    fn use_imports_declarations_only() {
+        let dir = std::env::temp_dir().join("verso_test_use_basic");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(
+            dir.join("main.verso"),
+            "use notation.verso\n\nclaim test\n  c = 3*10^8",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("notation.verso"),
+            "# Notation\n\nvar x [L]\n\ndef c := 3*10^8\n\nSome prose paragraph.\n\nclaim foo\n  x = x",
+        )
+        .unwrap();
+        let doc = parse_document_from_file(&dir.join("main.verso")).unwrap();
+        // Should only get var + def from notation.verso, then claim from main.verso
+        // No section, prose, or claim from notation.verso
+        let mut has_var = false;
+        let mut has_def = false;
+        let mut has_claim = false;
+        let mut has_section = false;
+        let mut has_prose = false;
+        for block in &doc.blocks {
+            match block {
+                Block::Var(_) => has_var = true,
+                Block::Def(_) => has_def = true,
+                Block::Claim(c) => {
+                    assert_eq!(c.name, "test", "only main.verso claim should be present");
+                    has_claim = true;
+                }
+                Block::Section { .. } => has_section = true,
+                Block::Prose(_) => has_prose = true,
+                _ => {}
+            }
+        }
+        assert!(has_var, "var from notation.verso should be imported");
+        assert!(has_def, "def from notation.verso should be imported");
+        assert!(has_claim, "claim from main.verso should be present");
+        assert!(!has_section, "section from notation.verso should NOT be imported");
+        assert!(!has_prose, "prose from notation.verso should NOT be imported");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn use_imports_descriptions() {
+        let dir = std::env::temp_dir().join("verso_test_use_descriptions");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("main.verso"), "use defs.verso").unwrap();
+        std::fs::write(
+            dir.join("defs.verso"),
+            "var v [L T^-1]\n  Velocity.\n\ndef c := 3*10^8\n  Speed of light.",
+        )
+        .unwrap();
+        let doc = parse_document_from_file(&dir.join("main.verso")).unwrap();
+        // Descriptions should come through
+        match &doc.blocks[0] {
+            Block::Var(decl) => {
+                assert_eq!(decl.var_name, "v");
+                assert_eq!(decl.description.as_deref(), Some("Velocity."));
+            }
+            other => panic!("expected Var, got {:?}", other),
+        }
+        match &doc.blocks[1] {
+            Block::Def(decl) => {
+                assert_eq!(decl.name, "c");
+                assert_eq!(decl.description.as_deref(), Some("Speed of light."));
+            }
+            other => panic!("expected Def, got {:?}", other),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn use_tracks_dependencies() {
+        let dir = std::env::temp_dir().join("verso_test_use_deps");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("main.verso"), "use notation.verso").unwrap();
+        std::fs::write(dir.join("notation.verso"), "var x [L]").unwrap();
+        let deps = collect_dependencies(&dir.join("main.verso")).unwrap();
+        assert_eq!(deps.len(), 2, "should track both main and notation files");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn use_missing_file_error() {
+        let dir = std::env::temp_dir().join("verso_test_use_missing");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("main.verso"), "use nonexistent.verso").unwrap();
+        let err = parse_document_from_file(&dir.join("main.verso")).unwrap_err();
+        assert!(err.message.contains("nonexistent.verso"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn use_empty_path_error() {
+        let dir = std::env::temp_dir().join("verso_test_use_empty");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("main.verso"), "use").unwrap();
+        let err = parse_document_from_file(&dir.join("main.verso")).unwrap_err();
+        assert!(err.message.contains("use requires a file path"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn use_imports_func() {
+        let dir = std::env::temp_dir().join("verso_test_use_func");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        std::fs::write(dir.join("main.verso"), "use funcs.verso").unwrap();
+        std::fs::write(dir.join("funcs.verso"), "func KE(m, v) := (1/2)*m*v^2").unwrap();
+        let doc = parse_document_from_file(&dir.join("main.verso")).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Func(f) => assert_eq!(f.name, "KE"),
+            other => panic!("expected Func, got {:?}", other),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // Page breaks

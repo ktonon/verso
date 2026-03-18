@@ -10,11 +10,11 @@ This feature is not about proving the physics of a paper correct. It is about ca
 
 ## Plan
 
-### Phase 1: Symbol-only import (`use`)
+### Phase 1: Symbol-only import (`use`) — COMPLETE
 
-The load-bearing piece. Without it, test files must duplicate all declarations.
+Implemented in `resolve_includes()` in parse.rs. `use path.verso` reads the target file through the same resolution pipeline as `!include` (circular detection, recursive resolution), then `extract_declarations()` filters to only var/def/func lines and their indented body (descriptions). The rest of the pipeline (verify, compile, LSP) is unchanged — they see the inlined declarations as if they were written directly.
 
-Add a `use` statement that imports symbols (var, def, func) from another `.verso` file without pulling in prose. This differs from `!include` which inlines the full document content.
+Key files: `verso_doc/src/parse.rs` (resolve_file, extract_declarations), `editors/vscode/syntaxes/verso.tmLanguage.json` (directive-use).
 
 ```
 use src/notation.verso
@@ -23,8 +23,6 @@ use src/dynamics.verso
 claim scaling_consistent
   ℓ_{n-1} * σ = ℓ_{n}
 ```
-
-Open question: could `!include` gain a symbols-only mode instead of a new keyword? A new keyword is cleaner — `use` signals intent (I need symbols) vs `!include` (inline this content).
 
 ### Phase 2: Test roots in config
 

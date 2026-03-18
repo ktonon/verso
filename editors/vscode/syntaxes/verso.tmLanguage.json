@@ -18,6 +18,7 @@
     { "include": "#directive-center" },
     { "include": "#directive-pagebreak" },
     { "include": "#directive-include" },
+    { "include": "#directive-use" },
     { "include": "#directive-metadata" },
     { "include": "#directive-environment" },
     { "include": "#block-quote" },
@@ -254,6 +255,14 @@
       "match": "^(!include)\\s+(.+)$",
       "captures": {
         "1": { "name": "keyword.control.directive.include.verso" },
+        "2": { "name": "string.unquoted.path.verso" }
+      }
+    },
+
+    "directive-use": {
+      "match": "^(use)\\s+(.+)$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.use.verso" },
         "2": { "name": "string.unquoted.path.verso" }
       }
     },
