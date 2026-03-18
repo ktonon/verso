@@ -140,4 +140,19 @@
 #                         ^ source.verso meta.expression.rhs.verso
 #                          ^ source.verso meta.expression.rhs.verso keyword.operator.power.verso
 #                           ^ source.verso meta.expression.rhs.verso constant.numeric.decimal.verso
+>- A bullet item with math`x^2`.
+#^ source.verso markup.list.unnumbered.verso punctuation.definition.list.begin.verso
+# ^ source.verso
+#  ^^^^^^^^^^^^^^^^^^^ source.verso meta.list.item.verso
+#                     ^^^^ source.verso meta.list.item.verso keyword.other.tag.math.verso
+#                         ^ source.verso meta.list.item.verso string.other.begin.verso
+#                          ^ source.verso meta.list.item.verso string.other.math.verso
+#                           ^ source.verso meta.list.item.verso string.other.math.verso keyword.operator.power.verso
+#                            ^ source.verso meta.list.item.verso string.other.math.verso constant.numeric.decimal.verso
+#                             ^ source.verso meta.list.item.verso string.other.end.verso
+#                              ^ source.verso meta.list.item.verso
+>1. A numbered item.
+#^^ source.verso markup.list.numbered.verso punctuation.definition.list.begin.verso
+#  ^ source.verso
+#   ^^^^^^^^^^^^^^^^ source.verso meta.list.item.verso
 >

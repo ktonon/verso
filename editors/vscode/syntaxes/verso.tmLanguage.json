@@ -323,7 +323,7 @@
       "match": "^(\\s*)(-)\\s+(.+)$",
       "captures": {
         "1": { "name": "punctuation.whitespace.verso" },
-        "2": { "name": "punctuation.definition.list.begin.verso" },
+        "2": { "name": "markup.list.unnumbered.verso punctuation.definition.list.begin.verso" },
         "3": { "name": "meta.list.item.verso", "patterns": [{ "include": "#prose-inline" }] }
       }
     },
@@ -332,7 +332,7 @@
       "match": "^(\\s*)(\\d+\\.)\\s+(.+)$",
       "captures": {
         "1": { "name": "punctuation.whitespace.verso" },
-        "2": { "name": "punctuation.definition.list.begin.verso" },
+        "2": { "name": "markup.list.numbered.verso punctuation.definition.list.begin.verso" },
         "3": { "name": "meta.list.item.verso", "patterns": [{ "include": "#prose-inline" }] }
       }
     },
