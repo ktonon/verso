@@ -33,6 +33,12 @@ impl Session {
         if input.is_empty() || input == "!q" || input == "!quit" || input == "!exit" {
             return None;
         }
+        if input == "?" || input == "?help" {
+            return Some(help_all());
+        }
+        if let Some(topic) = input.strip_prefix('?') {
+            return Some(help_topic(topic.trim()));
+        }
         if input == "!trace" {
             self.show_trace = !self.show_trace;
             return Some(format!(
@@ -335,6 +341,108 @@ pub fn run() -> Result<(), ReadlineError> {
     }
 
     Ok(())
+}
+
+struct HelpEntry {
+    command: &'static str,
+    summary: &'static str,
+    detail: &'static str,
+}
+
+const HELP_ENTRIES: &[HelpEntry] = &[
+    HelpEntry {
+        command: "var",
+        summary: "Declare a typed variable",
+        detail: "\
+!var <name> [<dimensions>]
+
+Declares a variable with the given dimensional type.
+The dimension persists for the rest of the session.
+
+Examples:
+  !var v [L T^-1]
+  !var F [M L T^-2]
+  !var θ [1]           dimensionless",
+    },
+    HelpEntry {
+        command: "const",
+        summary: "Declare a named constant",
+        detail: "\
+!const <name> = <expr>
+
+Binds a name to an expression. The name is substituted
+in subsequent expressions.
+
+Examples:
+  !const c = 3*10^8
+  !const g = 9.81 [m/s^2]",
+    },
+    HelpEntry {
+        command: "func",
+        summary: "Declare a function",
+        detail: "\
+!func <name>(<params>) = <body>
+
+Defines a function that can be called in expressions.
+
+Examples:
+  !func sq(x) = x^2
+  !func ke(m, v) = m*v^2/2",
+    },
+    HelpEntry {
+        command: "trace",
+        summary: "Toggle step-by-step simplification trace",
+        detail: "\
+!trace
+
+Shows each rewrite step applied during simplification,
+including the rule name and pattern. Toggle on/off.",
+    },
+    HelpEntry {
+        command: "reset",
+        summary: "Clear all declarations and rules",
+        detail: "\
+!reset
+
+Clears all variable, constant, and function declarations,
+and any rules derived from verified equalities.",
+    },
+    HelpEntry {
+        command: "history",
+        summary: "Toggle between input and result history",
+        detail: "\
+!history  (alias: !hist)
+
+Switches the up-arrow history between your inputs and
+the simplified results. Default is input history.",
+    },
+    HelpEntry {
+        command: "q",
+        summary: "Quit the REPL",
+        detail: "\
+!q  (aliases: !quit, !exit)
+
+Exits the REPL session.",
+    },
+];
+
+fn help_all() -> String {
+    let mut out = String::from("Commands:\n");
+    for entry in HELP_ENTRIES {
+        out.push_str(&format!("  !{:<10} {}\n", entry.command, entry.summary));
+    }
+    out.push_str("\nType ?<command> for details, e.g. ?var");
+    out
+}
+
+fn help_topic(topic: &str) -> String {
+    let topic = topic.strip_prefix('!').unwrap_or(topic);
+    for entry in HELP_ENTRIES {
+        if entry.command == topic {
+            return entry.detail.to_string();
+        }
+    }
+    format!("unknown command '{}' — type ? for a list", topic)
 }
 
 fn parse_var_decl(rest: &str) -> Result<(String, Dimension), String> {
@@ -893,6 +1001,36 @@ x [1]
             crate::unicode::replace_all(":mu: + :unknown:"),
             "μ + :unknown:"
         );
+    }
+
+    // ── help tests ─────────────────────────────────────────────
+
+    #[test]
+    fn help_lists_all_commands() {
+        let mut s = Session::new();
+        let out = eval(&mut s, "?");
+        assert!(out.contains("!var"), "should list !var");
+        assert!(out.contains("!const"), "should list !const");
+        assert!(out.contains("!func"), "should list !func");
+        assert!(out.contains("!trace"), "should list !trace");
+        assert!(out.contains("!reset"), "should list !reset");
+        assert!(out.contains("!history"), "should list !history");
+        assert!(out.contains("!q"), "should list !q");
+    }
+
+    #[test]
+    fn help_specific_command() {
+        let mut s = Session::new();
+        let out = eval(&mut s, "?var");
+        assert!(out.contains("!var"), "should mention !var");
+        assert!(out.contains("[L T^-1]"), "should show example");
+    }
+
+    #[test]
+    fn help_unknown_command() {
+        let mut s = Session::new();
+        let out = eval(&mut s, "?foo");
+        assert!(out.contains("unknown"), "should say unknown");
     }
 
     #[test]
