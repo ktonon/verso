@@ -16,8 +16,8 @@ Improve the user experience of the verso REPL for mathematicians and physicists.
 
 ### Parser Limitations
 
-6. **Negative exponents require parens** — `2^-3` fails; must write `2^(-3)`. The parser doesn't accept unary minus after `^`.
-7. **Double negation prefix fails** — `--x` fails; must write `-(-x)`. The parser doesn't accept consecutive unary minus.
+6. ~~**Negative exponents require parens**~~ **Won't fix.** `2^-3` fails; must write `2^(-3)`. Parens are a reasonable workaround.
+7. ~~**Double negation prefix fails**~~ **Won't fix.** `--x` fails; must write `-(-x)`. Parens are a reasonable workaround.
 8. ~~**Cannot multiply/divide unit quantities**~~ **Fixed.** Unit brackets now bind per-operand within `parse_multiplicative` when the first operand has a unit annotation. `eval_constants` combines `Quantity * Quantity` into a single Quantity with merged units.
 
 ### Confusing Behavior
@@ -30,7 +30,7 @@ Improve the user experience of the verso REPL for mathematicians and physicists.
 ## Implementation Notes
 
 - Bug tests added in `repl::tests` as regular assertions (prefixed `bug_`). All 7 bug tests pass.
-- Items 6-7 (parser) are low priority — parens are a reasonable workaround.
+- Items 6-7 (parser) closed as won't fix — parens are a reasonable workaround.
 - Items 9-12 (confusing behavior) are tracked for future improvement.
 
 ## Verification
