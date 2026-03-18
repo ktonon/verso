@@ -348,6 +348,44 @@ Paths are relative to the including file's directory. Nested includes
 are supported; circular includes are detected and produce an error.
 Labels and cross-references work across included files.
 
+## Symbol-only Imports
+
+The use statement imports declarations (var, def, func) from another
+Verso file without pulling in prose, claims, sections, or other content.
+This is useful for sharing a notation file across multiple documents
+or test files.
+
+The path is relative to the current file's directory, the same as
+!include. Circular imports are detected. Imported symbols are available
+for claims and proofs in the importing document.
+
+# Semantic Regression Tests
+
+Verso supports test documents that verify the symbolic layer of a paper
+without producing publishable output.
+
+## Test Roots in Config
+
+The .verso.jsonc config file supports a tests array alongside papers.
+Test roots are checked by the verso check command but are not built by
+verso build.
+
+## expect_fail Blocks
+
+An expect_fail block contains inner declarations and claims. Verification
+succeeds only when at least one inner check fails. This is useful for
+testing dimensional mismatches or intentional constraint violations.
+
+expect_fail dim_mismatch_example
+  claim bad
+    v = a
+
+The block above succeeds because the claim fails dimensionally: v has
+dimension L T^-1 while a has dimension L T^-2.
+
+Inner blocks can declare their own variables and definitions. The block
+inherits all declarations from the enclosing document.
+
 # Expression Syntax label`expressions`
 
 Expressions inside math backticks, claims, and proofs use Verso's symbolic

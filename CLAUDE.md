@@ -107,6 +107,25 @@ npm run repl:beam
 - `sin(pi / 4)` → `√2 / 2`
 - `(x + y + 1)(x + y + 1) - x**2 - y**2 - 1 - 2*x*y - 2*x - 2*y` → `0`
 
+## Document Features
+
+### Multi-file Documents
+- `!include path.verso` — inlines the entire file at the include point
+- `use path.verso` — imports only declarations (var, def, func) without prose or claims
+
+### Semantic Regression Tests
+- `.verso.jsonc` supports a `"tests"` array: test roots are checked by `verso check` but not built by `verso build`
+- `expect_fail name` — block containing inner declarations/claims that passes only when at least one inner check fails
+
+### Config (.verso.jsonc)
+```jsonc
+{
+  "input": "paper.verso",          // or "papers": [{ "input": "..." }]
+  "outputDirectory": "build",
+  "tests": [{ "input": "paper.test.verso" }]
+}
+```
+
 ## Testing
 
 ```bash
