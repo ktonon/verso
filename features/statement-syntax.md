@@ -95,7 +95,12 @@ Changes needed:
 
 ## Implementation Notes
 
-(To be updated as work progresses.)
+### Phase 1 (completed)
+- Dropped `!` prefix from all six statement keywords: `var`, `const`, `func`, `claim`, `definition`, `proof`
+- Document metadata directives (`!title`, `!abstract`, `!table`, etc.) keep `!` prefix
+- Parser uses `trimmed == "keyword" || trimmed.starts_with("keyword ")` for safe matching
+- REPL help now distinguishes "Statements" (no `!`) from "Commands" (`!`)
+- Updated all test fixtures (`.verso` files, inline test strings in parse.rs, compile_tex.rs, verify.rs, repl.rs)
 
 ## Verification
 

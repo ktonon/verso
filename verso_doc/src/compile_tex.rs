@@ -878,13 +878,13 @@ fn strip_label_tag(title: &str) -> String {
 }
 
 /// Find the line number (1-indexed) where a claim or definition is defined in raw text.
-/// Find the line number of a `!var`, `!const`, or `!func` declaration by name.
-/// Uses subscript base matching (e.g. `ℓ` matches `!var ℓ_{n} [L]`).
+/// Find the line number of a `var`, `const`, or `func` declaration by name.
+/// Uses subscript base matching (e.g. `ℓ` matches `var ℓ_{n} [L]`).
 pub fn find_decl_line(name: &str, text: &str) -> Option<usize> {
     let base = verso_symbolic::context::subscript_base(name);
     for (i, line) in text.lines().enumerate() {
         let trimmed = line.trim();
-        for prefix in &["!var ", "!const ", "!func "] {
+        for prefix in &["var ", "const ", "func "] {
             if let Some(rest) = trimmed.strip_prefix(prefix) {
                 // Extract the declared name (up to space, `[`, `=`, or `(`)
                 let decl_name = rest
@@ -905,12 +905,12 @@ pub fn find_decl_line(name: &str, text: &str) -> Option<usize> {
 pub fn find_claim_line(name: &str, text: &str) -> Option<usize> {
     for (i, line) in text.lines().enumerate() {
         let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("!claim") {
+        if let Some(rest) = trimmed.strip_prefix("claim") {
             if rest.trim() == name {
                 return Some(i + 1);
             }
         }
-        if let Some(rest) = trimmed.strip_prefix("!definition") {
+        if let Some(rest) = trimmed.strip_prefix("definition") {
             if rest.trim() == name {
                 return Some(i + 1);
             }
@@ -1020,7 +1020,7 @@ mod tests {
     #[test]
     fn compile_definition_unicode() {
         let doc =
-            parse_document("!definition Characteristic-Length\n  ℓ_{n-1} = ℓ_n / σ")
+            parse_document("definition Characteristic-Length\n  ℓ_{n-1} = ℓ_n / σ")
                 .unwrap();
         let tex = compile_to_tex(&doc);
         assert!(
@@ -1044,7 +1044,7 @@ mod tests {
 
     #[test]
     fn compile_claim() {
-        let doc = parse_document("!claim foo\n  x + 1 = y").unwrap();
+        let doc = parse_document("claim foo\n  x + 1 = y").unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\begin{equation} \\label{eq:foo}"));
         assert!(tex.contains("\\end{equation}"));
@@ -1053,7 +1053,7 @@ mod tests {
     #[test]
     fn compile_proof() {
         let src = "\
-!proof expand
+proof expand
   x + 0
   = x             ; add_identity
 ";
@@ -1070,7 +1070,7 @@ mod tests {
         let src = "\
 # Algebra
 
-!claim add_zero
+claim add_zero
   x + 0 = x
 ";
         let doc = parse_document(src).unwrap();
@@ -1147,7 +1147,7 @@ mod tests {
 
     #[test]
     fn compile_definition_as_equation() {
-        let src = "!definition char-length\n  a = b + c";
+        let src = "definition char-length\n  a = b + c";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\newtheorem{definition}{Definition}"));
@@ -1628,19 +1628,19 @@ mod tests {
 
     #[test]
     fn find_claim_line_basic() {
-        let text = "!var x [L]\n\n!claim energy\n  x = x";
+        let text = "var x [L]\n\nclaim energy\n  x = x";
         assert_eq!(find_claim_line("energy", text), Some(3));
     }
 
     #[test]
     fn find_claim_line_definition() {
-        let text = "!definition KE\n  (1/2) * m * v^2 = KE";
+        let text = "definition KE\n  (1/2) * m * v^2 = KE";
         assert_eq!(find_claim_line("KE", text), Some(1));
     }
 
     #[test]
     fn find_claim_line_not_found() {
-        let text = "!claim energy\n  x = x";
+        let text = "claim energy\n  x = x";
         assert_eq!(find_claim_line("missing", text), None);
     }
 
@@ -1648,7 +1648,7 @@ mod tests {
 
     #[test]
     fn collect_symbols_var() {
-        let doc = parse_document("!var v [L T^-1]").unwrap();
+        let doc = parse_document("var v [L T^-1]").unwrap();
         let syms = collect_symbols(&doc);
         assert_eq!(syms.len(), 1);
         assert_eq!(syms[0].name, "v");
@@ -1657,7 +1657,7 @@ mod tests {
 
     #[test]
     fn collect_symbols_const() {
-        let doc = parse_document("!const k = 2").unwrap();
+        let doc = parse_document("const k = 2").unwrap();
         let syms = collect_symbols(&doc);
         assert_eq!(syms.len(), 1);
         assert_eq!(syms[0].name, "k");
@@ -1667,7 +1667,7 @@ mod tests {
 
     #[test]
     fn collect_symbols_func() {
-        let doc = parse_document("!func sq(x) = x^2").unwrap();
+        let doc = parse_document("func sq(x) = x^2").unwrap();
         let syms = collect_symbols(&doc);
         assert_eq!(syms.len(), 1);
         assert_eq!(syms[0].name, "sq");
@@ -1676,7 +1676,7 @@ mod tests {
 
     #[test]
     fn collect_symbols_claim() {
-        let doc = parse_document("!claim trivial\n  x = x").unwrap();
+        let doc = parse_document("claim trivial\n  x = x").unwrap();
         let syms = collect_symbols(&doc);
         assert_eq!(syms.len(), 1);
         assert_eq!(syms[0].name, "trivial");
@@ -1685,7 +1685,7 @@ mod tests {
 
     #[test]
     fn collect_symbols_definition() {
-        let doc = parse_document("!definition KE\n  (1/2) * m * v^2 = KE").unwrap();
+        let doc = parse_document("definition KE\n  (1/2) * m * v^2 = KE").unwrap();
         let syms = collect_symbols(&doc);
         assert_eq!(syms.len(), 1);
         assert_eq!(syms[0].name, "KE");
@@ -1694,7 +1694,7 @@ mod tests {
 
     #[test]
     fn collect_symbols_var_with_description() {
-        let doc = parse_document("!var v [L T^-1]\n  Velocity.").unwrap();
+        let doc = parse_document("var v [L T^-1]\n  Velocity.").unwrap();
         let syms = collect_symbols(&doc);
         assert_eq!(syms.len(), 1);
         assert!(syms[0].detail.contains("Velocity."));
@@ -1702,7 +1702,7 @@ mod tests {
 
     #[test]
     fn compile_sym_var() {
-        let src = "!var v [L T^-1]\n  Velocity.\n\nHere: sym`v`";
+        let src = "var v [L T^-1]\n  Velocity.\n\nHere: sym`v`";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("$v$"), "should render symbol as math: {}", tex);
@@ -1711,7 +1711,7 @@ mod tests {
 
     #[test]
     fn compile_sym_with_override() {
-        let src = "!var v [L T^-1]\n  Velocity.\n\nHere: sym`v|Speed of the particle.`";
+        let src = "var v [L T^-1]\n  Velocity.\n\nHere: sym`v|Speed of the particle.`";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(

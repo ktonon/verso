@@ -15,4 +15,4 @@
 | [erd-support.md](erd-support.md) | ERD Paper Support | 2026-03-16 | 2026-03-16 | planned |
 | [unicode-completions.md](unicode-completions.md) | Unicode Completions | 2026-03-16 | 2026-03-16 | completed |
 | [bang-directives.md](bang-directives.md) | Bang Directives | 2026-03-16 | 2026-03-16 | completed |
-| [statement-syntax.md](statement-syntax.md) | Statement Syntax Overhaul | 2026-03-17 | 2026-03-17 | planned |
+| [statement-syntax.md](statement-syntax.md) | Statement Syntax Overhaul | 2026-03-17 | 2026-03-17 | wip |

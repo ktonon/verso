@@ -26,7 +26,7 @@ pub struct VerificationResult {
     pub name: String,
     pub span: Span,
     pub outcome: Outcome,
-    /// Result of dimensional analysis (None if no !var declarations in document).
+    /// Result of dimensional analysis (None if no var declarations in document).
     pub dim_outcome: Option<DimOutcome>,
     /// Unit annotations found in the claim expressions.
     pub units: Vec<String>,
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn verify_trivial_identity() {
-        let doc = parse_document("!claim trivial\n  x = x").unwrap();
+        let doc = parse_document("claim trivial\n  x = x").unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.pass_count(), 1);
         assert_eq!(report.fail_count(), 0);
@@ -210,21 +210,21 @@ mod tests {
 
     #[test]
     fn verify_add_zero() {
-        let doc = parse_document("!claim add_zero\n  x + 0 = x").unwrap();
+        let doc = parse_document("claim add_zero\n  x + 0 = x").unwrap();
         let report = verify_document(&doc);
         assert!(report.all_passed());
     }
 
     #[test]
     fn verify_failing_claim() {
-        let doc = parse_document("!claim wrong\n  x + 1 = x").unwrap();
+        let doc = parse_document("claim wrong\n  x + 1 = x").unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.fail_count(), 1);
     }
 
     #[test]
     fn verify_pythagorean() {
-        let doc = parse_document("!claim pythag\n  sin(x)^2 + cos(x)^2 = 1").unwrap();
+        let doc = parse_document("claim pythag\n  sin(x)^2 + cos(x)^2 = 1").unwrap();
         let report = verify_document(&doc);
         assert!(report.all_passed(), "pythagorean identity should pass");
     }
@@ -232,13 +232,13 @@ mod tests {
     #[test]
     fn verify_multiple_claims() {
         let src = "\
-!claim id1
+claim id1
   x + 0 = x
 
-!claim id2
+claim id2
   x * 1 = x
 
-!claim bad
+claim bad
   x + 1 = x
 ";
         let doc = parse_document(src).unwrap();
@@ -250,7 +250,7 @@ mod tests {
     #[test]
     fn verify_simple_proof() {
         let src = "\
-!proof identity
+proof identity
   x + 0
   = x
 ";
@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn verify_multi_step_proof() {
         let src = "\
-!proof expand
+proof expand
   (x + 1)(x + 1)
   = x^2 + x + x + 1
   = x^2 + 2x + 1
@@ -282,7 +282,7 @@ mod tests {
 
     #[test]
     fn verify_claim_collects_units() {
-        let src = "!claim unit_conv\n  1000 [m] = 1 [km]";
+        let src = "claim unit_conv\n  1000 [m] = 1 [km]";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.results[0].units, vec!["km", "m"]);
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn verify_claim_no_units_is_empty() {
-        let doc = parse_document("!claim trivial\n  x = x").unwrap();
+        let doc = parse_document("claim trivial\n  x = x").unwrap();
         let report = verify_document(&doc);
         assert!(report.results[0].units.is_empty());
     }
@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn verify_proof_with_bad_step() {
         let src = "\
-!proof bad
+proof bad
   x
   = x + 1
 ";
@@ -314,8 +314,8 @@ mod tests {
     #[test]
     fn verify_const_substitution() {
         let src = "\
-!const k = 2
-!claim double
+const k = 2
+claim double
   k * x = 2 * x
 ";
         let doc = parse_document(src).unwrap();
@@ -330,8 +330,8 @@ mod tests {
     #[test]
     fn verify_const_in_proof() {
         let src = "\
-!const a = 3
-!proof expand
+const a = 3
+proof expand
   a * (x + 1)
   = 3 * x + 3
 ";
@@ -347,8 +347,8 @@ mod tests {
     #[test]
     fn verify_func_expansion() {
         let src = "\
-!func sq(x) = x^2
-!claim square
+func sq(x) = x^2
+claim square
   sq(3) = 9
 ";
         let doc = parse_document(src).unwrap();
@@ -363,8 +363,8 @@ mod tests {
     #[test]
     fn verify_func_two_params() {
         let src = "\
-!func KE(m, v) = (1/2) * m * v^2
-!claim energy
+func KE(m, v) = (1/2) * m * v^2
+claim energy
   KE(2, 3) = 9
 ";
         let doc = parse_document(src).unwrap();
@@ -379,9 +379,9 @@ mod tests {
     #[test]
     fn verify_func_with_const() {
         let src = "\
-!const g = 10
-!func PE(m, h) = m * g * h
-!claim potential
+const g = 10
+func PE(m, h) = m * g * h
+claim potential
   PE(2, 5) = 100
 ";
         let doc = parse_document(src).unwrap();
@@ -397,10 +397,10 @@ mod tests {
     fn verify_claim_becomes_rule() {
         // First claim establishes a rule; second claim uses it
         let src = "\
-!claim double
+claim double
   2 * x = x + x
 
-!claim quadruple
+claim quadruple
   4 * x = 2 * x + 2 * x
 ";
         let doc = parse_document(src).unwrap();
@@ -417,10 +417,10 @@ mod tests {
         // Regression: a claim where σ appears only in the RHS must not panic
         // when the claim is later used as a rule (σ stays concrete, not a wildcard)
         let src = "\
-!definition recurrence
+definition recurrence
   a = b / σ
 
-!claim trivial
+claim trivial
   x = x
 ";
         let doc = parse_document(src).unwrap();
@@ -436,8 +436,8 @@ mod tests {
     #[test]
     fn verify_const_wrong_value_fails() {
         let src = "\
-!const k = 2
-!claim wrong
+const k = 2
+claim wrong
   k * x = 3 * x
 ";
         let doc = parse_document(src).unwrap();
@@ -448,9 +448,9 @@ mod tests {
     #[test]
     fn verify_claim_with_const_catches_dim_error() {
         let src = "\
-!var v [L T^-1]
-!const c = 5
-!claim bad
+var v [L T^-1]
+const c = 5
+claim bad
   v = c
 ";
         let doc = parse_document(src).unwrap();
@@ -470,8 +470,8 @@ mod tests {
     #[test]
     fn verify_proof_has_dim_outcome() {
         let src = "\
-!var x [L]
-!proof double
+var x [L]
+proof double
   2 * x
   = x + x
 ";
@@ -491,9 +491,9 @@ mod tests {
     #[test]
     fn verify_proof_dim_mismatch_fails() {
         let src = "\
-!var v [L T^-1]
-!var t [T]
-!proof dim_bad
+var v [L T^-1]
+var t [T]
+proof dim_bad
   v * t
   = v + t
 ";

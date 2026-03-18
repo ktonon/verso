@@ -347,12 +347,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Claim block
-        if trimmed.starts_with("!claim") {
-            let name = trimmed["!claim".len()..].trim().to_string();
+        if trimmed == "claim" || trimmed.starts_with("claim ") {
+            let name = trimmed.strip_prefix("claim").unwrap().trim().to_string();
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "!claim requires a name".into(),
+                    message: "claim requires a name".into(),
                 });
             }
             let claim_line = i + 1;
@@ -371,7 +371,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if body.is_empty() {
                 return Err(ParseDocError {
                     line: claim_line,
-                    message: "!claim body is empty".into(),
+                    message: "claim body is empty".into(),
                 });
             }
 
@@ -381,12 +381,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Definition block (unverified claim)
-        if trimmed.starts_with("!definition") {
-            let name = trimmed["!definition".len()..].trim().to_string();
+        if trimmed == "definition" || trimmed.starts_with("definition ") {
+            let name = trimmed.strip_prefix("definition").unwrap().trim().to_string();
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "!definition requires a name".into(),
+                    message: "definition requires a name".into(),
                 });
             }
             let def_line = i + 1;
@@ -404,7 +404,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if body.is_empty() {
                 return Err(ParseDocError {
                     line: def_line,
-                    message: "!definition body is empty".into(),
+                    message: "definition body is empty".into(),
                 });
             }
 
@@ -414,12 +414,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Proof block
-        if trimmed.starts_with("!proof") {
-            let claim_name = trimmed["!proof".len()..].trim().to_string();
+        if trimmed == "proof" || trimmed.starts_with("proof ") {
+            let claim_name = trimmed.strip_prefix("proof").unwrap().trim().to_string();
             if claim_name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "!proof requires a claim name".into(),
+                    message: "proof requires a claim name".into(),
                 });
             }
             let proof_line = i + 1;
@@ -454,7 +454,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if steps.len() < 2 {
                 return Err(ParseDocError {
                     line: proof_line,
-                    message: "!proof requires at least two steps".into(),
+                    message: "proof requires at least two steps".into(),
                 });
             }
 
@@ -467,24 +467,24 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Variable declaration
-        if trimmed.starts_with("!var") {
-            let rest = trimmed["!var".len()..].trim();
+        if trimmed == "var" || trimmed.starts_with("var ") {
+            let rest = trimmed.strip_prefix("var").unwrap().trim();
             // Parse: varname [dim spec]
             let bracket_pos = rest.find('[').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: "!var requires a variable name and dimension, e.g. !var x [L T^-1]".into(),
+                message: "var requires a variable name and dimension, e.g. var x [L T^-1]".into(),
             })?;
             let var_name = rest[..bracket_pos].trim().to_string();
             if var_name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "!var requires a variable name".into(),
+                    message: "var requires a variable name".into(),
                 });
             }
             let dim_str = rest[bracket_pos..].trim();
             let dimension = Dimension::parse(dim_str).map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!("!var '{}': {}", var_name, e),
+                message: format!("var '{}': {}", var_name, e),
             })?;
             let span = Span { line: i + 1 };
             i += 1;
@@ -499,23 +499,23 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Constant declaration
-        if trimmed.starts_with("!const") {
-            let rest = trimmed["!const".len()..].trim();
+        if trimmed == "const" || trimmed.starts_with("const ") {
+            let rest = trimmed.strip_prefix("const").unwrap().trim();
             let eq_pos = rest.find('=').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: "!const requires name = expr, e.g. !const c = 3*10^8".into(),
+                message: "const requires name = expr, e.g. const c = 3*10^8".into(),
             })?;
             let name = rest[..eq_pos].trim().to_string();
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "!const requires a name".into(),
+                    message: "const requires a name".into(),
                 });
             }
             let value_str = rest[eq_pos + 1..].trim();
             let value = parse_expr(value_str).map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!("!const '{}': {:?}", name, e),
+                message: format!("const '{}': {:?}", name, e),
             })?;
             let span = Span { line: i + 1 };
             i += 1;
@@ -530,23 +530,23 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
         }
 
         // Function declaration
-        if trimmed.starts_with("!func") {
-            let rest = trimmed["!func".len()..].trim();
+        if trimmed == "func" || trimmed.starts_with("func ") {
+            let rest = trimmed.strip_prefix("func").unwrap().trim();
             let lparen = rest.find('(').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: "!func requires name(params) = expr, e.g. !func KE(m, v) = (1/2)*m*v^2"
+                message: "func requires name(params) = expr, e.g. func KE(m, v) = (1/2)*m*v^2"
                     .into(),
             })?;
             let name = rest[..lparen].trim().to_string();
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "!func requires a name".into(),
+                    message: "func requires a name".into(),
                 });
             }
             let rparen = rest.find(')').ok_or_else(|| ParseDocError {
                 line: i + 1,
-                message: "!func missing closing parenthesis".into(),
+                message: "func missing closing parenthesis".into(),
             })?;
             let params_str = &rest[lparen + 1..rparen];
             let params: Vec<String> = params_str
@@ -557,7 +557,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if params.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "!func requires at least one parameter".into(),
+                    message: "func requires at least one parameter".into(),
                 });
             }
             let after_rparen = rest[rparen + 1..].trim();
@@ -565,12 +565,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 .strip_prefix('=')
                 .ok_or_else(|| ParseDocError {
                     line: i + 1,
-                    message: "!func requires = after parameters".into(),
+                    message: "func requires = after parameters".into(),
                 })?
                 .trim();
             let body = parse_expr(body_str).map_err(|e| ParseDocError {
                 line: i + 1,
-                message: format!("!func '{}': {:?}", name, e),
+                message: format!("func '{}': {:?}", name, e),
             })?;
             let span = Span { line: i + 1 };
             i += 1;
@@ -1587,7 +1587,7 @@ mod tests {
 
     #[test]
     fn parse_claim() {
-        let src = "!claim identity\n  x + 0 = x";
+        let src = "claim identity\n  x + 0 = x";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1600,14 +1600,14 @@ mod tests {
 
     #[test]
     fn parse_claim_missing_equals() {
-        let src = "!claim bad\n  x + 0";
+        let src = "claim bad\n  x + 0";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("expected 'lhs = rhs'"));
     }
 
     #[test]
     fn parse_claim_missing_name() {
-        let src = "!claim\n  x = x";
+        let src = "claim\n  x = x";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
@@ -1615,7 +1615,7 @@ mod tests {
     #[test]
     fn parse_proof() {
         let src = "\
-!proof pythag
+proof pythag
   sin(x)^2 + cos(x)^2
   = 1                        ; pythagorean_identity";
         let doc = parse_document(src).unwrap();
@@ -1636,21 +1636,21 @@ mod tests {
 
     #[test]
     fn parse_proof_requires_two_steps() {
-        let src = "!proof foo\n  x";
+        let src = "proof foo\n  x";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("at least two steps"));
     }
 
     #[test]
     fn parse_proof_missing_name() {
-        let src = "!proof\n  x\n  = y";
+        let src = "proof\n  x\n  = y";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("requires a claim name"));
     }
 
     #[test]
     fn parse_var_declaration() {
-        let src = "!var x [L]\n!var v [L T^-1]";
+        let src = "var x [L]\nvar v [L T^-1]";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         match &doc.blocks[0] {
@@ -1671,7 +1671,7 @@ mod tests {
 
     #[test]
     fn parse_var_with_description() {
-        let src = "!var σ [1]\n  Rung scaling factor.\n  Dimensionless ratio.";
+        let src = "var σ[1]\n  Rung scaling factor.\n  Dimensionless ratio.";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1688,7 +1688,7 @@ mod tests {
 
     #[test]
     fn parse_var_no_description() {
-        let src = "!var x [L]\n\nSome prose.";
+        let src = "var x [L]\n\nSome prose.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Var(d) => {
@@ -1700,7 +1700,7 @@ mod tests {
 
     #[test]
     fn parse_const_with_description() {
-        let src = "!const N = 3\n  Number of rungs.";
+        let src = "const N = 3\n  Number of rungs.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Const(c) => {
@@ -1712,7 +1712,7 @@ mod tests {
 
     #[test]
     fn parse_func_with_description() {
-        let src = "!func sq(x) = x^2\n  Square function.";
+        let src = "func sq(x) = x^2\n  Square function.";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Func(f) => {
@@ -1724,10 +1724,10 @@ mod tests {
 
     #[test]
     fn parse_var_missing_brackets() {
-        let src = "!var x L";
+        let src = "var xL";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains("!var requires"),
+            err.message.contains("var requires"),
             "unexpected error: {}",
             err.message
         );
@@ -1735,7 +1735,7 @@ mod tests {
 
     #[test]
     fn parse_const_declaration() {
-        let src = "!const c = 3*10^8";
+        let src = "const c = 3*10^8";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1755,10 +1755,10 @@ mod tests {
 
     #[test]
     fn parse_const_missing_equals() {
-        let src = "!const c 3";
+        let src = "const c 3";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains("!const requires"),
+            err.message.contains("const requires"),
             "unexpected error: {}",
             err.message
         );
@@ -1766,10 +1766,10 @@ mod tests {
 
     #[test]
     fn parse_const_missing_name() {
-        let src = "!const = 3";
+        let src = "const = 3";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains("!const requires a name"),
+            err.message.contains("const requires a name"),
             "unexpected error: {}",
             err.message
         );
@@ -1777,7 +1777,7 @@ mod tests {
 
     #[test]
     fn parse_func_declaration() {
-        let src = "!func KE(m, v) = (1/2) * m * v^2";
+        let src = "func KE(m, v) = (1/2) * m * v^2";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
@@ -1791,10 +1791,10 @@ mod tests {
 
     #[test]
     fn parse_func_missing_parens() {
-        let src = "!func f = x";
+        let src = "func f = x";
         let err = parse_document(src).unwrap_err();
         assert!(
-            err.message.contains("!func requires"),
+            err.message.contains("func requires"),
             "unexpected error: {}",
             err.message
         );
@@ -1802,7 +1802,7 @@ mod tests {
 
     #[test]
     fn parse_func_no_params() {
-        let src = "!func f() = x";
+        let src = "func f() = x";
         let err = parse_document(src).unwrap_err();
         assert!(
             err.message.contains("at least one parameter"),
@@ -1818,7 +1818,7 @@ mod tests {
 
 Some introductory text.
 
-!claim add_zero
+claim add_zero
   x + 0 = x
 
 More prose here.
@@ -2057,7 +2057,7 @@ More prose here.
 
     #[test]
     fn parse_list_terminated_by_directive() {
-        let src = "- Item one\n!claim foo\n  x = x";
+        let src = "- Item one\nclaim foo\n  x = x";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::List(_)));
@@ -2111,7 +2111,7 @@ More prose here.
     #[test]
     fn parse_math_block_not_verified() {
         // Math blocks should appear in the document but not in verification
-        let src = "```math\nx + 1\n```\n\n!claim foo\n  x + 0 = x";
+        let src = "```math\nx + 1\n```\n\nclaim foo\n  x + 0 = x";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::MathBlock(_)));
@@ -2202,7 +2202,7 @@ More prose here.
 
     #[test]
     fn parse_definition_as_unverified_claim() {
-        let src = "!definition char-length\n  a = b + c";
+        let src = "definition char-length\n  a = b + c";
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Claim(claim) => {
@@ -2215,7 +2215,7 @@ More prose here.
 
     #[test]
     fn parse_definition_requires_name() {
-        let result = parse_document("!definition\n  a = b");
+        let result = parse_document("definition\n  a = b");
         assert!(result.is_err());
     }
 
@@ -2282,7 +2282,7 @@ More prose here.
 
     #[test]
     fn parse_env_not_confused_with_claim() {
-        let src = "!theorem Test\n  Body.\n\n!claim foo\n  x = x";
+        let src = "!theorem Test\n  Body.\n\nclaim foo\n  x = x";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 2);
         assert!(matches!(&doc.blocks[0], Block::Environment(_)));
@@ -2969,7 +2969,7 @@ More prose here.
     #[test]
     fn parse_claim_with_inline_dim() {
         // Claim using inline dimension annotations on variables
-        let src = "!var F [M L T^-2]\n!claim newton\n  F = m [M] * a [L T^-2]";
+        let src = "var F [M L T^-2]\nclaim newton\n  F = m [M] * a [L T^-2]";
         let doc = parse_document(src).unwrap();
         // Should parse without error — the claim body has inline dimensions
         assert_eq!(doc.blocks.len(), 2); // Var + Claim
@@ -2978,7 +2978,7 @@ More prose here.
     #[test]
     fn parse_claim_with_quantity() {
         // Claim using a quantity (numeric with unit)
-        let src = "!claim speed_of_light\n  c [L T^-1] = 3*10^8 [m/s]";
+        let src = "claim speed_of_light\n  c [L T^-1] = 3*10^8 [m/s]";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1); // just the Claim (no !var needed)
     }
@@ -2993,43 +2993,43 @@ More prose here.
 
     #[test]
     fn parse_claim_empty_body() {
-        let err = parse_document("!claim foo\n\nSome prose").unwrap_err();
+        let err = parse_document("claim foo\n\nSome prose").unwrap_err();
         assert!(err.message.contains("body is empty"));
     }
 
     #[test]
     fn parse_proof_requires_name() {
-        let err = parse_document("!proof\n  x\n  x").unwrap_err();
+        let err = parse_document("proof\n  x\n  x").unwrap_err();
         assert!(err.message.contains("requires a claim name"));
     }
 
     #[test]
     fn parse_var_missing_name() {
-        let err = parse_document("!var [L]").unwrap_err();
+        let err = parse_document("var [L]").unwrap_err();
         assert!(err.message.contains("requires a variable name"));
     }
 
     #[test]
     fn parse_const_empty_name() {
-        let err = parse_document("!const = 5").unwrap_err();
+        let err = parse_document("const = 5").unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
 
     #[test]
     fn parse_func_missing_closing_paren() {
-        let err = parse_document("!func f(x = x + 1").unwrap_err();
+        let err = parse_document("func f(x = x + 1").unwrap_err();
         assert!(err.message.contains("closing parenthesis"));
     }
 
     #[test]
     fn parse_func_missing_eq() {
-        let err = parse_document("!func f(x) x + 1").unwrap_err();
+        let err = parse_document("func f(x) x + 1").unwrap_err();
         assert!(err.message.contains("="));
     }
 
     #[test]
     fn parse_func_empty_name() {
-        let err = parse_document("!func (x) = x").unwrap_err();
+        let err = parse_document("func (x) = x").unwrap_err();
         assert!(err.message.contains("requires a name"));
     }
 
@@ -3126,7 +3126,7 @@ More prose here.
 
     #[test]
     fn parse_func_empty_params_error() {
-        let err = parse_document("!func f() = x").unwrap_err();
+        let err = parse_document("func f() = x").unwrap_err();
         assert!(err.message.contains("requires at least one parameter"));
     }
 }

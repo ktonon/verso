@@ -89,7 +89,7 @@ tex`\vec{v}` renders a vector.
 
 Use sym backticks to render a declared symbol with its type information
 and description. The symbol must be declared earlier via a !var, !const,
-or !func directive. For example, sym`v` renders the variable along
+or func directive. For example, sym`v` renders the variable along
 with its dimension and description. An override description can be
 provided after a pipe: sym`v|the speed of the particle`.
 
@@ -110,17 +110,17 @@ inline formatting including **bold** and *italic*.].
 
 ## Variable Declarations
 
-Variables are declared with the !var directive, specifying a name and its
+Variables are declared with the var directive, specifying a name and its
 physical dimensions in brackets. When variables are declared, Verso checks
 that both sides of every claim have matching dimensions.
 
-!var v [L T^-1]
+var v [L T^-1]
   Velocity.
-!var a [L T^-2]
+var a [L T^-2]
   Acceleration.
-!var t [T]
-!var m [M]
-!var F [M L T^-2]
+var t [T]
+var m [M]
+var F [M L T^-2]
   Force.
 
 An optional indented description may follow the declaration line.
@@ -168,7 +168,7 @@ relationship with math`v_{f}` or plain math`v`.
 Constants bind a name to a fixed value. The value is substituted wherever
 the name appears in subsequent claims and proofs.
 
-!const g = 10
+const g = 10
   Gravitational acceleration (simplified).
 
 Like variables, constants accept an optional indented description.
@@ -177,7 +177,7 @@ Like variables, constants accept an optional indented description.
 
 Functions define parameterized expressions that expand at use sites.
 
-!func KE(m, v) = (1/2)*m*v^2
+func KE(m, v) = (1/2)*m*v^2
   Kinetic energy.
 
 Parameters are positional. The body can reference previously declared
@@ -191,13 +191,13 @@ A claim is a named equation that Verso verifies. Verification checks that
 the left-hand side minus the right-hand side simplifies to zero, falling
 back to numerical spot-checking if symbolic simplification is insufficient.
 
-!claim add_zero_identity
+claim add_zero_identity
   x + 0 = x
 
-!claim mul_one_identity
+claim mul_one_identity
   x * 1 = x
 
-!claim square_expansion
+claim square_expansion
   (x + y)^2 = x^2 + 2*x*y + y^2
 
 The body must be indented. Exactly one equals sign separates the left-hand
@@ -212,7 +212,7 @@ A definition is an unverified claim that also becomes a rewrite rule. This
 is useful for introducing new notation or equalities that the verification
 engine should accept without proof.
 
-!definition kinetic_energy
+definition kinetic_energy
   KE(m, v) = (1/2)*m*v^2
 
 Unlike claims, definitions are not checked by the simplification engine.
@@ -224,10 +224,10 @@ and proofs can use.
 A proof is a step-by-step derivation that references a claim. Each adjacent
 pair of steps is verified independently.
 
-!claim quadratic_diff
+claim quadratic_diff
   (x + 1)^2 - x^2 = 2*x + 1
 
-!proof quadratic_diff
+proof quadratic_diff
   (x + 1)^2 - x^2
   = x^2 + 2*x + 1 - x^2
   = 2*x + 1
@@ -241,14 +241,14 @@ this section.
 When variable declarations include dimensions, Verso checks that both sides
 of every claim have matching dimensions.
 
-!definition newtons_second_law
+definition newtons_second_law
   F = m * a
 
 Definitions are not symbolically verified, but when variable declarations
 are present, Verso still checks dimensional consistency. Both sides of
 this definition have dimension M L T to the minus two.
 
-!definition velocity_from_acceleration
+definition velocity_from_acceleration
   v = a * t
 
 ## Math Blocks

@@ -52,9 +52,9 @@ impl Session {
             return Some("context reset".to_string());
         }
 
-        // !var declaration
-        if input.starts_with("!var") {
-            let rest = input["!var".len()..].trim();
+        // var declaration
+        if input == "var" || input.starts_with("var ") {
+            let rest = input.strip_prefix("var").unwrap().trim();
             return Some(match parse_var_decl(rest) {
                 Ok((name, dim)) => {
                     self.ctx.declare_var(&name, Some(dim.clone()));
@@ -64,9 +64,9 @@ impl Session {
             });
         }
 
-        // !const declaration
-        if input.starts_with("!const") {
-            let rest = input["!const".len()..].trim();
+        // const declaration
+        if input == "const" || input.starts_with("const ") {
+            let rest = input.strip_prefix("const").unwrap().trim();
             return Some(match parse_const_decl(rest) {
                 Ok((name, value)) => {
                     let (stripped, inline_dims) = match self.ctx.push_inline_dims(&value) {
@@ -98,9 +98,9 @@ impl Session {
             });
         }
 
-        // !func declaration
-        if input.starts_with("!func") {
-            let rest = input["!func".len()..].trim();
+        // func declaration
+        if input == "func" || input.starts_with("func ") {
+            let rest = input.strip_prefix("func").unwrap().trim();
             return Some(match parse_func_decl(rest) {
                 Ok((name, params, body)) => {
                     let out = format!(
@@ -303,8 +303,13 @@ pub fn run() -> Result<(), ReadlineError> {
                     continue;
                 }
 
-                // Track input history for non-command lines
-                if !input.starts_with('!') {
+                // Track input history for non-command/statement lines
+                let is_command_or_statement = input.starts_with('!')
+                    || input.starts_with('?')
+                    || input.starts_with("var ")
+                    || input.starts_with("const ")
+                    || input.starts_with("func ");
+                if !is_command_or_statement {
                     record_input(&mut input_history, &mut rl, history_mode, input);
                 }
 
@@ -312,7 +317,7 @@ pub fn run() -> Result<(), ReadlineError> {
                     Some(output) => {
                         println!("{}\n", output);
                         // Record simplified result for result history (expression lines only)
-                        if !input.starts_with('!') && !input.contains('=') {
+                        if !is_command_or_statement && !input.contains('=') {
                             if let Ok(expr) = parse_expr(input) {
                                 if let Ok((expr, inline_dims)) = session.ctx.push_inline_dims(&expr)
                                 {
@@ -349,46 +354,49 @@ struct HelpEntry {
     detail: &'static str,
 }
 
-const HELP_ENTRIES: &[HelpEntry] = &[
+const STATEMENT_ENTRIES: &[HelpEntry] = &[
     HelpEntry {
         command: "var",
         summary: "Declare a typed variable",
         detail: "\
-!var <name> [<dimensions>]
+var <name> [<dimensions>]
 
 Declares a variable with the given dimensional type.
 The dimension persists for the rest of the session.
 
 Examples:
-  !var v [L T^-1]
-  !var F [M L T^-2]
-  !var θ [1]           dimensionless",
+  var v [L T^-1]
+  var F [M L T^-2]
+  var θ [1]           dimensionless",
     },
     HelpEntry {
         command: "const",
         summary: "Declare a named constant",
         detail: "\
-!const <name> = <expr>
+const <name> = <expr>
 
 Binds a name to an expression. The name is substituted
 in subsequent expressions.
 
 Examples:
-  !const c = 3*10^8
-  !const g = 9.81 [m/s^2]",
+  const c = 3*10^8
+  const g = 9.81 [m/s^2]",
     },
     HelpEntry {
         command: "func",
         summary: "Declare a function",
         detail: "\
-!func <name>(<params>) = <body>
+func <name>(<params>) = <body>
 
 Defines a function that can be called in expressions.
 
 Examples:
-  !func sq(x) = x^2
-  !func ke(m, v) = m*v^2/2",
+  func sq(x) = x^2
+  func ke(m, v) = m*v^2/2",
     },
+];
+
+const COMMAND_ENTRIES: &[HelpEntry] = &[
     HelpEntry {
         command: "trace",
         summary: "Toggle step-by-step simplification trace",
@@ -427,9 +435,13 @@ Exits the REPL session.",
 ];
 
 fn help_all() -> String {
-    let mut out = String::from("Commands:\n");
-    for entry in HELP_ENTRIES {
-        out.push_str(&format!("  !{:<10} {}\n", entry.command, entry.summary));
+    let mut out = String::from("Statements:\n");
+    for entry in STATEMENT_ENTRIES {
+        out.push_str(&format!("  {:<12} {}\n", entry.command, entry.summary));
+    }
+    out.push_str("\nCommands:\n");
+    for entry in COMMAND_ENTRIES {
+        out.push_str(&format!("  !{:<11} {}\n", entry.command, entry.summary));
     }
     out.push_str("\nType ?<command> for details, e.g. ?var");
     out
@@ -437,7 +449,7 @@ fn help_all() -> String {
 
 fn help_topic(topic: &str) -> String {
     let topic = topic.strip_prefix('!').unwrap_or(topic);
-    for entry in HELP_ENTRIES {
+    for entry in STATEMENT_ENTRIES.iter().chain(COMMAND_ENTRIES.iter()) {
         if entry.command == topic {
             return entry.detail.to_string();
         }
@@ -448,10 +460,10 @@ fn help_topic(topic: &str) -> String {
 fn parse_var_decl(rest: &str) -> Result<(String, Dimension), String> {
     let bracket_pos = rest
         .find('[')
-        .ok_or("!var requires name [dims], e.g. !var v [L T^-1]")?;
+        .ok_or("var requires name [dims], e.g. var v [L T^-1]")?;
     let name = rest[..bracket_pos].trim().to_string();
     if name.is_empty() {
-        return Err("!var requires a variable name".into());
+        return Err("var requires a variable name".into());
     }
     let dim_str = rest[bracket_pos..].trim();
     let dimension = Dimension::parse(dim_str).map_err(|e| format!("{}", e))?;
@@ -461,10 +473,10 @@ fn parse_var_decl(rest: &str) -> Result<(String, Dimension), String> {
 fn parse_const_decl(rest: &str) -> Result<(String, Expr), String> {
     let eq_pos = rest
         .find('=')
-        .ok_or("!const requires name = expr, e.g. !const c = 3*10^8")?;
+        .ok_or("const requires name = expr, e.g. const c = 3*10^8")?;
     let name = rest[..eq_pos].trim().to_string();
     if name.is_empty() {
-        return Err("!const requires a name".into());
+        return Err("const requires a name".into());
     }
     let value_str = rest[eq_pos + 1..].trim();
     let value = parse_expr(value_str).map_err(|e| format!("{:?}", e))?;
@@ -472,24 +484,24 @@ fn parse_const_decl(rest: &str) -> Result<(String, Expr), String> {
 }
 
 fn parse_func_decl(rest: &str) -> Result<(String, Vec<String>, Expr), String> {
-    let lparen = rest.find('(').ok_or("!func requires name(params) = expr")?;
+    let lparen = rest.find('(').ok_or("func requires name(params) = expr")?;
     let name = rest[..lparen].trim().to_string();
     if name.is_empty() {
-        return Err("!func requires a name".into());
+        return Err("func requires a name".into());
     }
-    let rparen = rest.find(')').ok_or("!func missing closing parenthesis")?;
+    let rparen = rest.find(')').ok_or("func missing closing parenthesis")?;
     let params: Vec<String> = rest[lparen + 1..rparen]
         .split(',')
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect();
     if params.is_empty() {
-        return Err("!func requires at least one parameter".into());
+        return Err("func requires at least one parameter".into());
     }
     let after = rest[rparen + 1..].trim();
     let body_str = after
         .strip_prefix('=')
-        .ok_or("!func requires = after parameters")?
+        .ok_or("func requires = after parameters")?
         .trim();
     let body = parse_expr(body_str).map_err(|e| format!("{:?}", e))?;
     Ok((name, params, body))
@@ -759,7 +771,7 @@ x [1]
     fn session_var_declaration_persists() {
         session!(
             r#"
-> !var v [L T^-1]
+> var v [L T^-1]
 v: [L T^-1]
 
 > v
@@ -772,7 +784,7 @@ v [L T^-1]
     fn session_const_substitution() {
         session!(
             r#"
-> !const c = 3
+> const c = 3
 c = 3 [1]
 
 > c + 1
@@ -785,7 +797,7 @@ c = 3 [1]
     fn session_const_with_units() {
         session!(
             r#"
-> !const g = 3*10^8 [m/s]
+> const g = 3*10^8 [m/s]
 g = 300000000 [m/s]
 "#
         );
@@ -831,7 +843,7 @@ a [1]
     fn session_var_dims_persist() {
         session!(
             r#"
-> !var a [L]
+> var a [L]
 a: [L]
 
 > a
@@ -847,7 +859,7 @@ a [L]
     fn session_var_dims_prevents_inline_override() {
         session!(
             r#"
-> !var a [L]
+> var a [L]
 a: [L]
 
 > a [T]
@@ -873,7 +885,7 @@ false  residual: 2b
     fn session_reset_clears_context() {
         session!(
             r#"
-> !var v [L T^-1]
+> var v [L T^-1]
 v: [L T^-1]
 
 > !reset
@@ -889,7 +901,7 @@ v [1]
     fn session_func_declaration_and_use() {
         session!(
             r#"
-> !func sq(x) = x^2 + 1
+> func sq(x) = x^2 + 1
 sq(x) = x^2 + 1
 
 > sq(3)
@@ -915,7 +927,7 @@ true
     fn session_inline_dim_cannot_override_declared() {
         session!(
             r#"
-> !var a [T]
+> var a [T]
 a: [T]
 
 > a [L]
@@ -972,7 +984,7 @@ x [1]
     fn session_unicode_in_var_declaration() {
         session!(
             r#"
-> !var :mu: [M]
+> var :mu: [M]
 μ: [M]
 
 > μ
@@ -985,7 +997,7 @@ x [1]
     fn session_unicode_in_const_declaration() {
         session!(
             r#"
-> !const :alpha: = 3
+> const :alpha: = 3
 α = 3 [1]
 
 > :alpha:
@@ -1009,9 +1021,9 @@ x [1]
     fn help_lists_all_commands() {
         let mut s = Session::new();
         let out = eval(&mut s, "?");
-        assert!(out.contains("!var"), "should list !var");
-        assert!(out.contains("!const"), "should list !const");
-        assert!(out.contains("!func"), "should list !func");
+        assert!(out.contains("var"), "should list var");
+        assert!(out.contains("const"), "should list const");
+        assert!(out.contains("func"), "should list func");
         assert!(out.contains("!trace"), "should list !trace");
         assert!(out.contains("!reset"), "should list !reset");
         assert!(out.contains("!history"), "should list !history");
@@ -1022,7 +1034,7 @@ x [1]
     fn help_specific_command() {
         let mut s = Session::new();
         let out = eval(&mut s, "?var");
-        assert!(out.contains("!var"), "should mention !var");
+        assert!(out.contains("var"), "should mention var");
         assert!(out.contains("[L T^-1]"), "should show example");
     }
 
@@ -1037,14 +1049,14 @@ x [1]
     fn parse_transcript_no_output_skips_assertion() {
         let pairs = parse_transcript(
             r#"
-> !var v [L]
+> var v [L]
 > v
 v [L]
 "#,
         );
         assert_eq!(
             pairs,
-            vec![("!var v [L]", String::new()), ("v", "v [L]".to_string()),]
+            vec![("var v [L]", String::new()), ("v", "v [L]".to_string()),]
         );
     }
 }

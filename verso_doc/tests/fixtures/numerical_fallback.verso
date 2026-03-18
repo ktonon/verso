@@ -2,8 +2,8 @@
 
 These claims are true but beyond the symbolic engine's current rules.
 
-!claim sinh_def
+claim sinh_def
   sinh(x) = (exp(x) - exp(-x))/2
 
-!claim cosh_def
+claim cosh_def
   cosh(x) = (exp(x) + exp(-x))/2

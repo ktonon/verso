@@ -2,15 +2,15 @@
 
 The Pythagorean identity states that math`sin(x)^2 + cos(x)^2` equals 1 for all math`x`.
 
-!claim pythagorean
+claim pythagorean
   sin(x)^2 + cos(x)^2 = 1
 
 From claim`pythagorean` we can derive the double angle formula.
 
-!claim double_angle_cos
+claim double_angle_cos
   cos(x)^2 - sin(x)^2 = 2cos(x)^2 - 1
 
-!proof double_angle_cos
+proof double_angle_cos
   cos(x)^2 - sin(x)^2
   = cos(x)^2 - (1 - cos(x)^2)
   = 2cos(x)^2 - 1

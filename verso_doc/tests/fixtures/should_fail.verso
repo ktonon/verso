@@ -1,4 +1,4 @@
 # Intentionally Failing Claims
 
-!claim wrong_identity
+claim wrong_identity
   x + 1 = x
