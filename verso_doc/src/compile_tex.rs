@@ -99,6 +99,9 @@ pub fn compile_to_tex(doc: &Document) -> String {
         writeln!(out, "\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{{hyperref}}").unwrap();
     }
     writeln!(out, "\\usepackage{{bookmark}}").unwrap();
+    writeln!(out, "\\usepackage{{array}}").unwrap();
+    writeln!(out, "\\usepackage{{float}}").unwrap();
+    writeln!(out, "\\usepackage{{longtable}}").unwrap();
     writeln!(out, "\\usepackage{{graphicx}}").unwrap();
     writeln!(out, "\\usepackage{{wrapfig}}").unwrap();
 
@@ -580,7 +583,7 @@ fn write_block_quote(
 }
 
 fn write_figure(out: &mut String, fig: &Figure, ctx: &TexContext) {
-    writeln!(out, "\\begin{{figure}}[htbp]").unwrap();
+    writeln!(out, "\\begin{{figure}}[H]").unwrap();
     writeln!(out, "\\centering").unwrap();
     writeln!(
         out,
@@ -600,18 +603,35 @@ fn write_figure(out: &mut String, fig: &Figure, ctx: &TexContext) {
 }
 
 fn write_table(out: &mut String, table: &Table, ctx: &TexContext) {
-    writeln!(out, "\\begin{{table}}[htbp]").unwrap();
-    writeln!(out, "\\centering").unwrap();
+    let n = table.columns.len();
+    // Use paragraph columns that share \textwidth evenly so long text wraps.
+    // Each column has 2*\tabcolsep (default 6pt each side), so subtract ~12pt per column.
+    // For \textwidth ≈ 345pt (article, 1in margins), 12pt/345pt ≈ 0.035 per column.
+    let frac = (1.0 / n as f64) - 0.035;
     let col_spec: String = table
         .columns
         .iter()
-        .map(|a| match a {
-            ColumnAlign::Left => 'l',
-            ColumnAlign::Center => 'c',
-            ColumnAlign::Right => 'r',
+        .map(|a| {
+            let align = match a {
+                ColumnAlign::Left => "\\raggedright",
+                ColumnAlign::Center => "\\centering",
+                ColumnAlign::Right => "\\raggedleft",
+            };
+            format!(
+                ">{{{}\\arraybackslash}}p{{{:.3}\\textwidth}}",
+                align, frac
+            )
         })
-        .collect();
-    writeln!(out, "\\begin{{tabular}}{{{}}}", col_spec).unwrap();
+        .collect::<Vec<_>>()
+        .join("");
+    // Use longtable so tables flow inline and break across pages naturally.
+    writeln!(out, "\\begin{{longtable}}{{{}}}", col_spec).unwrap();
+    if let Some(title) = &table.title {
+        writeln!(out, "\\caption{{{}}} \\\\", escape_prose(title)).unwrap();
+    }
+    if let Some(label) = &table.label {
+        writeln!(out, "\\label{{tab:{}}}", label).unwrap();
+    }
     writeln!(out, "\\hline").unwrap();
     // Header row
     for (i, cell) in table.header.iter().enumerate() {
@@ -624,6 +644,20 @@ fn write_table(out: &mut String, table: &Table, ctx: &TexContext) {
     }
     writeln!(out, " \\\\").unwrap();
     writeln!(out, "\\hline").unwrap();
+    writeln!(out, "\\endfirsthead").unwrap();
+    // Continuation header on subsequent pages
+    writeln!(out, "\\hline").unwrap();
+    for (i, cell) in table.header.iter().enumerate() {
+        if i > 0 {
+            write!(out, " & ").unwrap();
+        }
+        write!(out, "\\textbf{{").unwrap();
+        write_prose_fragments(out, cell, ctx);
+        write!(out, "}}").unwrap();
+    }
+    writeln!(out, " \\\\").unwrap();
+    writeln!(out, "\\hline").unwrap();
+    writeln!(out, "\\endhead").unwrap();
     // Data rows
     for row in &table.rows {
         for (i, cell) in row.iter().enumerate() {
@@ -635,14 +669,7 @@ fn write_table(out: &mut String, table: &Table, ctx: &TexContext) {
         writeln!(out, " \\\\").unwrap();
     }
     writeln!(out, "\\hline").unwrap();
-    writeln!(out, "\\end{{tabular}}").unwrap();
-    if let Some(title) = &table.title {
-        writeln!(out, "\\caption{{{}}}", escape_prose(title)).unwrap();
-    }
-    if let Some(label) = &table.label {
-        writeln!(out, "\\label{{tab:{}}}", label).unwrap();
-    }
-    writeln!(out, "\\end{{table}}").unwrap();
+    writeln!(out, "\\end{{longtable}}").unwrap();
 }
 
 fn write_environment(
@@ -1368,12 +1395,16 @@ claim add_zero
         let src = "!table Results\n  | A | B |\n  |:--|--:|\n  | 1 | 2 |";
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
-        assert!(tex.contains("\\begin{table}[htbp]"));
-        assert!(tex.contains("\\begin{tabular}{lr}"));
+        assert!(tex.contains("\\begin{longtable}"));
+        assert!(
+            tex.contains("\\raggedright\\arraybackslash") && tex.contains("\\raggedleft\\arraybackslash"),
+            "should use paragraph columns with alignment: {}",
+            tex
+        );
         assert!(tex.contains("\\textbf{A} & \\textbf{B}"));
         assert!(tex.contains("1 & 2"));
         assert!(tex.contains("\\caption{Results}"));
-        assert!(tex.contains("\\end{table}"));
+        assert!(tex.contains("\\end{longtable}"));
     }
 
     #[test]
@@ -1400,7 +1431,7 @@ claim add_zero
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
         assert!(tex.contains("\\usepackage{graphicx}"));
-        assert!(tex.contains("\\begin{figure}[htbp]"));
+        assert!(tex.contains("\\begin{figure}[H]"));
         assert!(tex.contains("\\centering"));
         assert!(tex.contains("\\includegraphics[width=0.8\\textwidth]{plots/energy.pdf}"));
         assert!(tex.contains("\\caption{Energy levels.}"));
