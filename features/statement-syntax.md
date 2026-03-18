@@ -120,6 +120,15 @@ Changes needed:
 - Updated REPL func output format and help text
 - Updated all test fixtures
 
+### Phase 4 (completed)
+- TextMate grammar: removed `!` from `claim`, `proof`, `var`, `func` patterns
+- TextMate grammar: removed `definition` alternative from claim pattern
+- TextMate grammar: renamed `directive-const` → `directive-def`, updated regex to `^(def)\s+(\S+)\s*(:=)\s*(.+)$`
+- TextMate grammar: updated `func` pattern to use `:=` instead of `=`
+- Snippets: updated `claim`, `proof`, `var`, `func` to drop `!` prefix
+- Snippets: replaced `Constant` (`!const name = value`) with `Definition` (`def name := value`)
+- Snippets: removed old `Definition` snippet (`!definition`)
+
 ## Verification
 
 - `npm test` — all unit tests pass

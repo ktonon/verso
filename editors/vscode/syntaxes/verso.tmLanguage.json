@@ -9,7 +9,7 @@
     { "include": "#directive-claim" },
     { "include": "#directive-proof" },
     { "include": "#directive-var" },
-    { "include": "#directive-const" },
+    { "include": "#directive-def" },
     { "include": "#directive-func" },
     { "include": "#directive-bibliography" },
     { "include": "#directive-figure" },
@@ -80,7 +80,7 @@
     },
 
     "directive-claim": {
-      "begin": "^(!(?:claim|definition))\\s+(\\S+)\\s*$",
+      "begin": "^(claim)\\s+(\\S+)\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.claim.verso" },
@@ -102,7 +102,7 @@
     },
 
     "directive-proof": {
-      "begin": "^(!proof)\\s+(\\S+)\\s*$",
+      "begin": "^(proof)\\s+(\\S+)\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.proof.verso" },
@@ -135,7 +135,7 @@
     },
 
     "directive-var": {
-      "match": "^(!var)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+      "match": "^(var)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
       "captures": {
         "1": { "name": "keyword.control.directive.var.verso" },
         "2": { "name": "variable.parameter.var.verso" },
@@ -143,18 +143,18 @@
       }
     },
 
-    "directive-const": {
-      "match": "^(!const)\\s+(\\S+)\\s*(=)\\s*(.+)$",
+    "directive-def": {
+      "match": "^(def)\\s+(\\S+)\\s*(:=)\\s*(.+)$",
       "captures": {
-        "1": { "name": "keyword.control.directive.const.verso" },
-        "2": { "name": "variable.parameter.const.verso" },
-        "3": { "name": "keyword.operator.assignment.verso" },
+        "1": { "name": "keyword.control.directive.def.verso" },
+        "2": { "name": "variable.parameter.def.verso" },
+        "3": { "name": "keyword.operator.definition.verso" },
         "4": { "name": "string.unquoted.expression.verso" }
       }
     },
 
     "directive-func": {
-      "match": "^(!func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(=)\\s*(.+)$",
+      "match": "^(func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(:=)\\s*(.+)$",
       "captures": {
         "1": { "name": "keyword.control.directive.func.verso" },
         "2": { "name": "entity.name.function.verso" },

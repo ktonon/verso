@@ -2,7 +2,7 @@
   "Claim": {
     "prefix": "claim",
     "body": [
-      "!claim ${1:name}",
+      "claim ${1:name}",
       "  ${2:lhs} = ${3:rhs}",
       ""
     ],
@@ -11,7 +11,7 @@
   "Proof": {
     "prefix": "proof",
     "body": [
-      "!proof ${1:name}",
+      "proof ${1:name}",
       "  ${2:expr}",
       "  = ${3:step}",
       ""
@@ -21,21 +21,21 @@
   "Variable": {
     "prefix": "var",
     "body": [
-      "!var ${1:name} [${2:dims}]"
+      "var ${1:name} [${2:dims}]"
     ],
     "description": "Variable declaration with dimensions"
   },
-  "Constant": {
-    "prefix": "const",
+  "Definition": {
+    "prefix": "def",
     "body": [
-      "!const ${1:name} = ${2:value}"
+      "def ${1:name} := ${2:value}"
     ],
-    "description": "Constant declaration"
+    "description": "Definition binding"
   },
   "Function": {
     "prefix": "func",
     "body": [
-      "!func ${1:name}(${2:params}) = ${3:body}"
+      "func ${1:name}(${2:params}) := ${3:body}"
     ],
     "description": "Function declaration"
   },
@@ -56,15 +56,6 @@
       ""
     ],
     "description": "Lemma environment"
-  },
-  "Definition": {
-    "prefix": "def",
-    "body": [
-      "!definition ${1:name}",
-      "  ${2:lhs} = ${3:rhs}",
-      ""
-    ],
-    "description": "Definition (unverified claim)"
   },
   "Math Block": {
     "prefix": "mathb",
