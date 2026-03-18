@@ -129,6 +129,11 @@ Changes needed:
 - Snippets: replaced `Constant` (`!const name = value`) with `Definition` (`def name := value`)
 - Snippets: removed old `Definition` snippet (`!definition`)
 
+### Phase 5 (completed)
+- Fixed stale `!var`, `!const`, `!func` references in syntax guide prose
+- Fixed stale `!` prefixes in doc comments (`ast.rs`, `parse.rs`)
+- Removed `!definition` from environment doc comment (no longer a keyword)
+
 ## Verification
 
 - `npm test` — all unit tests pass

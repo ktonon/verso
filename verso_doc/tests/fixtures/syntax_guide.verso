@@ -88,8 +88,8 @@ tex`\vec{v}` renders a vector.
 #### Symbol Display
 
 Use sym backticks to render a declared symbol with its type information
-and description. The symbol must be declared earlier via a !var, !const,
-or func directive. For example, sym`v` renders the variable along
+and description. The symbol must be declared earlier via a var, def,
+or func statement. For example, sym`v` renders the variable along
 with its dimension and description. An override description can be
 provided after a pipe: sym`v|the speed of the particle`.
 

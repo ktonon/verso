@@ -2920,7 +2920,7 @@ More prose here.
         // Claim using a quantity (numeric with unit)
         let src = "claim speed_of_light\n  c [L T^-1] = 3*10^8 [m/s]";
         let doc = parse_document(src).unwrap();
-        assert_eq!(doc.blocks.len(), 1); // just the Claim (no !var needed)
+        assert_eq!(doc.blocks.len(), 1); // just the Claim (no var needed)
     }
 
     // --- Error paths ---

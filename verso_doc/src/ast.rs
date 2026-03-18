@@ -22,11 +22,11 @@ pub enum Block {
     Claim(Claim),
     /// A proof chain for a named claim.
     Proof(Proof),
-    /// A variable declaration with dimensions: `!var varname [dims]`
+    /// A variable declaration with dimensions: `var varname [dims]`
     Var(VarDecl),
     /// A definition: `def name := expr`
     Def(DefDecl),
-    /// A function declaration: `!func name(params) := expr`
+    /// A function declaration: `func name(params) := expr`
     Func(FuncDecl),
     /// A list (bullet or numbered).
     List(List),
@@ -34,7 +34,7 @@ pub enum Block {
     MathBlock(MathBlock),
     /// A bibliography declaration: `!bibliography refs.bib`
     Bibliography { path: String, span: Span },
-    /// A theorem-like environment: `!theorem`, `!definition`, etc.
+    /// A theorem-like environment: `!theorem`, `!lemma`, etc.
     Environment(Environment),
     /// A block quote: lines starting with `> `.
     BlockQuote(Vec<ProseFragment>),
