@@ -24,9 +24,9 @@ claim scaling_consistent
   ℓ_{n-1} * σ = ℓ_{n}
 ```
 
-### Phase 2: Test roots in config
+### Phase 2: Test roots in config — COMPLETE
 
-Add a `.verso.jsonc` config field so `verso check` picks up test roots but `verso build` skips them:
+Added `tests` field to `.verso.jsonc` config. `verso check` includes test roots via `check_inputs()`; `verso build` uses `inputs()` which excludes them. JSON schema updated. `verso init` template includes commented-out example.
 
 ```jsonc
 {
@@ -39,7 +39,7 @@ Add a `.verso.jsonc` config field so `verso check` picks up test roots but `vers
 }
 ```
 
-Keep it minimal — a test root is just a `.verso` file that is checked but not compiled to PDF.
+Key files: `verso_doc/src/config.rs` (TestConfig, check_inputs), `verso_doc/src/bin/verso.rs` (check command), `schema/v0.1.0/verso.schema.json`.
 
 ### Phase 3: `expect_fail`
 

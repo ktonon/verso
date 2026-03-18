@@ -51,7 +51,7 @@ fn main() {
     match cli.command {
         Command::Check { files, watch } => {
             let files = if files.is_empty() {
-                require_config().inputs()
+                require_config().check_inputs()
             } else {
                 files
             };

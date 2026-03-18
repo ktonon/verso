@@ -21,6 +21,9 @@ pub struct VersoConfig {
     pub input: Option<String>,
     #[serde(default)]
     pub papers: Option<Vec<PaperConfig>>,
+    /// Test roots — checked by `verso check` but not built by `verso build`.
+    #[serde(default)]
+    pub tests: Option<Vec<TestConfig>>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -29,6 +32,12 @@ pub struct PaperConfig {
     pub input: String,
     #[serde(default)]
     pub output: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TestConfig {
+    pub input: String,
 }
 
 #[derive(Debug)]
@@ -190,6 +199,11 @@ pub fn default_config_content() -> String {
   //     "input": "other.verso"
   //   }}
   // ]
+
+  // Test roots — checked by 'verso check' but not built:
+  // "tests": [
+  //   {{ "input": "paper.test.verso" }}
+  // ]
 }}
 "#,
         SCHEMA_REF, VERSION
@@ -200,12 +214,20 @@ pub fn default_config_content() -> String {
 pub struct ResolvedConfig {
     pub output_dir: String,
     pub papers: Vec<ResolvedPaper>,
+    pub tests: Vec<String>,
 }
 
 impl ResolvedConfig {
     /// Input paths for all papers.
     pub fn inputs(&self) -> Vec<String> {
         self.papers.iter().map(|p| p.input.clone()).collect()
+    }
+
+    /// Input paths for all papers plus test roots.
+    pub fn check_inputs(&self) -> Vec<String> {
+        let mut inputs = self.inputs();
+        inputs.extend(self.tests.iter().cloned());
+        inputs
     }
 }
 
@@ -317,10 +339,16 @@ pub fn resolve_config(dir: &Path) -> Result<Option<ResolvedConfig>, ConfigError>
         None => return Ok(None),
     };
     let config = load_config(&path)?;
+    let tests = config
+        .tests
+        .as_ref()
+        .map(|ts| ts.iter().map(|t| t.input.clone()).collect())
+        .unwrap_or_default();
     let papers = config.resolve()?;
     Ok(Some(ResolvedConfig {
         output_dir: config.output_dir().to_string(),
         papers,
+        tests,
     }))
 }
 
@@ -395,6 +423,7 @@ mod tests {
             output_directory: None,
             input: Some("src/paper.verso".into()),
             papers: None,
+            tests: None,
         };
         let papers = cfg.resolve().unwrap();
         assert_eq!(papers.len(), 1);
@@ -419,6 +448,7 @@ mod tests {
                     output: Some("thesis".into()),
                 },
             ]),
+            tests: None,
         };
         let papers = cfg.resolve().unwrap();
         assert_eq!(papers[0].output, "gateway-sw");
@@ -433,6 +463,7 @@ mod tests {
             output_directory: None,
             input: Some("a.verso".into()),
             papers: Some(vec![]),
+            tests: None,
         };
         assert_eq!(cfg.resolve().unwrap_err(), ConfigError::InputAndPapers);
     }
@@ -445,6 +476,7 @@ mod tests {
             output_directory: None,
             input: None,
             papers: None,
+            tests: None,
         };
         assert_eq!(cfg.resolve().unwrap_err(), ConfigError::NoInput);
     }
@@ -460,6 +492,7 @@ mod tests {
                 input: "a.verso".into(),
                 output: Some("a.pdf".into()),
             }]),
+            tests: None,
         };
         assert_eq!(
             cfg.resolve().unwrap_err(),
@@ -475,6 +508,7 @@ mod tests {
             output_directory: None,
             input: Some("paper.verso".into()),
             papers: None,
+            tests: None,
         };
         assert_eq!(cfg.output_dir(), ".");
     }
@@ -487,6 +521,7 @@ mod tests {
             output_directory: Some("build".into()),
             input: Some("paper.verso".into()),
             papers: None,
+            tests: None,
         };
         assert_eq!(cfg.output_dir(), "build");
     }
@@ -638,8 +673,65 @@ mod tests {
                     output: "b".to_string(),
                 },
             ],
+            tests: vec![],
         };
         assert_eq!(config.inputs(), vec!["a.verso", "b.verso"]);
+    }
+
+    #[test]
+    fn parse_config_with_tests() {
+        let cfg = VersoConfig::from_jsonc(
+            r#"{
+            "input": "paper.verso",
+            "tests": [
+                { "input": "paper.test.verso" }
+            ]
+        }"#,
+        )
+        .unwrap();
+        let tests = cfg.tests.unwrap();
+        assert_eq!(tests.len(), 1);
+        assert_eq!(tests[0].input, "paper.test.verso");
+    }
+
+    #[test]
+    fn check_inputs_includes_tests() {
+        let config = ResolvedConfig {
+            output_dir: ".".to_string(),
+            papers: vec![ResolvedPaper {
+                input: "paper.verso".to_string(),
+                output: "paper".to_string(),
+            }],
+            tests: vec!["paper.test.verso".to_string()],
+        };
+        assert_eq!(config.inputs(), vec!["paper.verso"]);
+        assert_eq!(
+            config.check_inputs(),
+            vec!["paper.verso", "paper.test.verso"]
+        );
+    }
+
+    #[test]
+    fn resolve_config_with_tests() {
+        let dir = std::env::temp_dir().join("verso-test-resolve-tests");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".verso.jsonc"),
+            r#"{
+                "input": "paper.verso",
+                "tests": [{ "input": "paper.test.verso" }]
+            }"#,
+        )
+        .unwrap();
+        let config = resolve_config(&dir).unwrap().unwrap();
+        assert_eq!(config.inputs(), vec!["paper.verso"]);
+        assert_eq!(config.tests, vec!["paper.test.verso"]);
+        assert_eq!(
+            config.check_inputs(),
+            vec!["paper.verso", "paper.test.verso"]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

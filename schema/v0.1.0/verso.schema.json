@@ -40,6 +40,21 @@
         "required": ["input"],
         "additionalProperties": false
       }
+    },
+    "tests": {
+      "type": "array",
+      "description": "Test roots — checked by 'verso check' but not built by 'verso build'",
+      "items": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Path to the test .verso file"
+          }
+        },
+        "required": ["input"],
+        "additionalProperties": false
+      }
     }
   },
   "oneOf": [
