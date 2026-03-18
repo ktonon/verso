@@ -149,7 +149,7 @@
         "1": { "name": "keyword.control.directive.def.verso" },
         "2": { "name": "variable.parameter.def.verso" },
         "3": { "name": "keyword.operator.definition.verso" },
-        "4": { "name": "string.unquoted.expression.verso" }
+        "4": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
       }
     },
 
@@ -160,7 +160,7 @@
         "2": { "name": "entity.name.function.verso" },
         "3": { "name": "variable.parameter.func.verso" },
         "4": { "name": "keyword.operator.assignment.verso" },
-        "5": { "name": "string.unquoted.expression.verso" }
+        "5": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
       }
     },
 

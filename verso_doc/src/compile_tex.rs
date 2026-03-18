@@ -1,6 +1,6 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, Document, EnvKind, Environment, Figure, List, MathBlock, Proof,
-    ProseFragment, Table,
+    Block, Claim, ColumnAlign, DefDecl, Document, EnvKind, Environment, Figure, List, MathBlock,
+    Proof, ProseFragment, Table, VarDecl,
 };
 use crate::parse::parse_prose_fragments;
 use std::collections::{HashMap, HashSet};
@@ -189,7 +189,13 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Proof(proof) => {
                 write_proof(&mut out, proof);
             }
-            Block::Var(_) | Block::Def(_) | Block::Func(_) => {}
+            Block::Var(decl) => {
+                write_var(&mut out, decl, &ctx);
+            }
+            Block::Def(decl) => {
+                write_def(&mut out, decl, &ctx);
+            }
+            Block::Func(_) => {}
             Block::Title(_) | Block::Author(_) | Block::Date(_) | Block::Abstract(_) => {}
             Block::PageBreak => {
                 writeln!(out, "\\newpage").unwrap();
@@ -411,10 +417,7 @@ fn write_prose_fragments(
                 }
             }
             ProseFragment::Sym { name, display } => {
-                let base = verso_symbolic::context::subscript_base(name);
-                let sym = ctx.symbols.iter().find(|s| {
-                    s.name == *name || verso_symbolic::context::subscript_base(&s.name) == base
-                });
+                let sym = find_symbol(&ctx.symbols, name);
                 // Render symbol name as math
                 let tex_name = verso_symbolic::parse_expr(name)
                     .map(|e| e.to_tex())
@@ -425,7 +428,16 @@ fn write_prose_fragments(
                     // Suppress [1] (dimensionless) as it adds no useful information
                     let type_info = sym.detail.lines().next().unwrap_or("");
                     if !type_info.is_empty() && type_info != "[1]" {
-                        write!(out, " ${}$", escape_tex_dim(type_info)).unwrap();
+                        // For defs/funcs/claims, type_info is an expression — render via to_tex
+                        // For vars, type_info is a dimension like [L T^-1] — use escape_tex_dim
+                        let tex_info = if sym.kind == "var" {
+                            escape_tex_dim(type_info)
+                        } else {
+                            verso_symbolic::parse_expr(type_info)
+                                .map(|e| e.to_tex())
+                                .unwrap_or_else(|_| escape_tex_dim(type_info))
+                        };
+                        write!(out, " ${}$", tex_info).unwrap();
                     }
                     // Use override display if provided, otherwise the declared description
                     let desc = display
@@ -449,6 +461,45 @@ fn write_prose_fragments(
                 out.push_str("\n\\par\n");
             }
         }
+    }
+}
+
+fn write_var(out: &mut String, decl: &VarDecl, ctx: &TexContext) {
+    if let Some(desc) = &decl.description {
+        write_description(out, desc, ctx);
+    }
+    let tex_name = verso_symbolic::parse_expr(&decl.var_name)
+        .map(|e| e.to_tex())
+        .unwrap_or_else(|_| decl.var_name.clone());
+    let dim = format!("{}", decl.dimension);
+    writeln!(out, "\\begin{{equation}}").unwrap();
+    if dim != "1" {
+        writeln!(out, "  {} \\quad {}", tex_name, escape_tex_dim(&dim)).unwrap();
+    } else {
+        writeln!(out, "  {}", tex_name).unwrap();
+    }
+    writeln!(out, "\\end{{equation}}").unwrap();
+}
+
+fn write_def(out: &mut String, decl: &DefDecl, ctx: &TexContext) {
+    if let Some(desc) = &decl.description {
+        write_description(out, desc, ctx);
+    }
+    let tex_name = verso_symbolic::parse_expr(&decl.name)
+        .map(|e| e.to_tex())
+        .unwrap_or_else(|_| decl.name.clone());
+    writeln!(out, "\\begin{{equation}}").unwrap();
+    writeln!(out, "  {} \\mathrel{{:=}} {}", tex_name, decl.value.to_tex()).unwrap();
+    writeln!(out, "\\end{{equation}}").unwrap();
+}
+
+fn write_description(out: &mut String, desc: &str, ctx: &TexContext) {
+    match parse_prose_fragments(desc) {
+        Ok(frags) => {
+            write_prose_fragments(out, &frags, ctx);
+            writeln!(out).unwrap();
+        }
+        Err(_) => writeln!(out, "{}", escape_prose(desc)).unwrap(),
     }
 }
 
@@ -898,6 +949,15 @@ pub fn find_claim_line(name: &str, text: &str) -> Option<usize> {
     None
 }
 
+/// Look up a symbol by name, preferring exact match over subscript base fallback.
+pub fn find_symbol<'a>(symbols: &'a [SymbolInfo], query: &str) -> Option<&'a SymbolInfo> {
+    if let Some(sym) = symbols.iter().find(|s| s.name == query) {
+        return Some(sym);
+    }
+    let query_base = verso_symbolic::context::subscript_base(query);
+    symbols.iter().find(|s| verso_symbolic::context::subscript_base(&s.name) == query_base)
+}
+
 /// Collect symbol information from a parsed document for hover display.
 pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
     let mut symbols = Vec::new();
@@ -992,13 +1052,65 @@ mod tests {
     }
 
     #[test]
-    fn compile_def_is_invisible() {
+    fn compile_var_renders_equation() {
+        let src = "var v [L T^-1]\n  Velocity.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains("\\begin{equation}"),
+            "var should render as equation: {}",
+            tex
+        );
+        assert!(
+            tex.contains("\\end{equation}"),
+            "var should close equation: {}",
+            tex
+        );
+        // Should contain the variable name in math mode
+        assert!(tex.contains("v"), "should contain variable name: {}", tex);
+        // Should contain the dimension
+        assert!(
+            tex.contains("\\mathrm{L}"),
+            "should contain dimension: {}",
+            tex
+        );
+        // Should contain the description
+        assert!(
+            tex.contains("Velocity."),
+            "should contain description: {}",
+            tex
+        );
+    }
+
+    #[test]
+    fn compile_def_renders_equation() {
         let doc = parse_document("def c := 3*10^8").unwrap();
         let tex = compile_to_tex(&doc);
-        // def blocks are invisible in LaTeX output (substitution only)
         assert!(
-            !tex.contains("10^{8}"),
-            "def should not appear in output: {}",
+            tex.contains("\\begin{equation}"),
+            "def should render as equation: {}",
+            tex
+        );
+        assert!(
+            tex.contains(":="),
+            "def should show := operator: {}",
+            tex
+        );
+        assert!(
+            tex.contains("10^{8}"),
+            "def should contain expression: {}",
+            tex
+        );
+    }
+
+    #[test]
+    fn compile_def_with_description() {
+        let src = "def c := 3*10^8\n  Speed of light.";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains("Speed of light."),
+            "def should render description: {}",
             tex
         );
     }
@@ -1662,9 +1774,42 @@ claim add_zero
             "should use override: {}",
             tex
         );
+        // The sym reference should use the override, not the declared description.
+        // "Velocity." still appears from the var block itself, so check the sym line specifically.
+        let sym_line = tex.lines().find(|l| l.contains("Speed of the particle.")).unwrap();
         assert!(
-            !tex.contains("Velocity."),
-            "should not use declared desc: {}",
+            !sym_line.contains("Velocity."),
+            "sym line should not contain declared desc: {}",
+            sym_line
+        );
+    }
+
+    #[test]
+    fn compile_sym_prefers_exact_match_over_base() {
+        let src = "var ℓ_{n} [L]\n  Characteristic length at rung math`n`.\ndef ℓ_{n-1} := ℓ_{n} / σ\n  Characteristic length scaling\n\n- sym`ℓ_{n-1}`";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains("Characteristic length scaling"),
+            "sym should resolve to the exact-match def, not the base-match var: {}",
+            tex
+        );
+    }
+
+    #[test]
+    fn compile_sym_def_detail_uses_latex() {
+        let src = "var ℓ_{n} [L]\ndef ℓ_{n-1} := ℓ_{n} / σ\n\n- sym`ℓ_{n-1}`";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        // The def value should be rendered as LaTeX math, not raw unicode
+        assert!(
+            !tex.contains("ℓ"),
+            "should not contain raw unicode ℓ in output: {}",
+            tex
+        );
+        assert!(
+            !tex.contains("σ"),
+            "should not contain raw unicode σ in output: {}",
             tex
         );
     }

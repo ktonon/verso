@@ -526,8 +526,8 @@ async fn cmd_lsp() {
     use tower_lsp::lsp_types::*;
     use tower_lsp::{Client, LanguageServer, LspService, Server};
     use verso_doc::compile_tex::{
-        collect_symbols, find_claim_line, find_decl_line, find_label_line,
-        find_unresolved_refs_against, SymbolInfo,
+        collect_symbols, find_claim_line, find_decl_line, find_label_line, find_symbol,
+        find_unresolved_refs_against,
     };
     use verso_doc::dim::DimOutcome;
     use verso_doc::parse::{collect_dependencies, parse_document, parse_document_from_file};
@@ -787,11 +787,26 @@ async fn cmd_lsp() {
             }
 
             // Try to extract a math symbol: first from math`...` tags, then from
-            // indented body lines (claims, definitions, proofs contain raw math).
+            // indented body lines (claims, definitions, proofs contain raw math),
+            // then from def/func RHS (after :=).
             let symbol = extract_math_symbol_at_cursor(line_text, col)
                 .or_else(|| {
                     if line_text.starts_with("  ") {
                         extract_identifier_at(line_text, col)
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| {
+                    // def/func lines: allow hover on identifiers after :=
+                    let trimmed = line_text.trim_start();
+                    if trimmed.starts_with("def ") || trimmed.starts_with("func ") {
+                        let rhs_start = line_text.find(":=").map(|i| i + 2)?;
+                        if col >= rhs_start {
+                            extract_identifier_at(line_text, col)
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
@@ -1091,18 +1106,6 @@ async fn cmd_lsp() {
         Some(ident.to_string())
     }
 
-    /// Look up a symbol by name, falling back to subscript base matching.
-    /// For example, looking up `ℓ_{n-1}` will match a symbol named `ℓ_{n}`
-    /// because both have the base name `ℓ`.
-    fn find_symbol<'a>(symbols: &'a [SymbolInfo], query: &str) -> Option<&'a SymbolInfo> {
-        // Exact match first
-        if let Some(sym) = symbols.iter().find(|s| s.name == query) {
-            return Some(sym);
-        }
-        // Subscript base fallback: strip `_{...}` from both query and symbol name
-        let query_base = verso_symbolic::context::subscript_base(query);
-        symbols.iter().find(|s| verso_symbolic::context::subscript_base(&s.name) == query_base)
-    }
 
     fn find_root_document(file_path: &Path) -> Option<PathBuf> {
         let mut dir = file_path.parent()?;
