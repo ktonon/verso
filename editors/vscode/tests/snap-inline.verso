@@ -14,3 +14,7 @@ def c := 3*10^8
 func KE(m, v) := (1/2)*m*v^2
 - A bullet item with math`x^2`.
 1. A numbered item.
+!table Elements
+  | Name | Status |
+  |------|--------|
+  | Alpha | active |

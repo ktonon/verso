@@ -155,4 +155,25 @@
 #^^ source.verso markup.list.numbered.verso punctuation.definition.list.begin.verso
 #  ^ source.verso
 #   ^^^^^^^^^^^^^^^^ source.verso meta.list.item.verso
+>!table Elements
+#^^^^^^ source.verso meta.block.table.verso keyword.control.directive.table.verso
+#      ^ source.verso meta.block.table.verso
+#       ^^^^^^^^ source.verso meta.block.table.verso entity.name.section.table.verso
+>  | Name | Status |
+#^^ source.verso meta.block.table.verso
+#  ^ source.verso meta.block.table.verso keyword.operator.table.verso
+#   ^^^^^^ source.verso meta.block.table.verso
+#         ^ source.verso meta.block.table.verso keyword.operator.table.verso
+#          ^^^^^^^^ source.verso meta.block.table.verso
+#                  ^ source.verso meta.block.table.verso keyword.operator.table.verso
+>  |------|--------|
+#^^ source.verso meta.block.table.verso
+#  ^^^^^^^^^^^^^^^^^ source.verso meta.block.table.verso comment.line.verso
+>  | Alpha | active |
+#^^ source.verso meta.block.table.verso
+#  ^ source.verso meta.block.table.verso keyword.operator.table.verso
+#   ^^^^^^^ source.verso meta.block.table.verso
+#          ^ source.verso meta.block.table.verso keyword.operator.table.verso
+#           ^^^^^^^^ source.verso meta.block.table.verso
+#                   ^ source.verso meta.block.table.verso keyword.operator.table.verso
 >

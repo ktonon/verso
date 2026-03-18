@@ -209,9 +209,22 @@
             "3": { "name": "string.unquoted.value.verso" }
           }
         },
+        { "include": "#table-rows" }
+      ]
+    },
+
+    "table-rows": {
+      "patterns": [
+        {
+          "comment": "Separator row: |---|---|",
+          "match": "^\\s*(\\|[-:\\s|]+\\|)\\s*$",
+          "captures": {
+            "1": { "name": "comment.line.verso" }
+          }
+        },
         {
           "match": "(\\|)",
-          "name": "punctuation.separator.table.verso"
+          "name": "keyword.operator.table.verso"
         }
       ]
     },
