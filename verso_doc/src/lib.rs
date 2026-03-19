@@ -17,6 +17,7 @@ pub mod dim;
 pub mod eval;
 pub mod parse;
 pub mod report;
+mod source;
 pub mod verify;
 
 pub use ast::{

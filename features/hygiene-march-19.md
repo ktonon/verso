@@ -23,6 +23,9 @@ coverage.
   and `verso_training`.
 - 2026-03-19: Phase 2 reduced duplication in `verso_doc/src/verify.rs` by
   extracting shared block execution for top-level and nested verification.
+- 2026-03-19: Phase 3 started by extracting parser source-loading and include
+  resolution logic into `verso_doc/src/source.rs`, reducing the scope of
+  `verso_doc/src/parse.rs` without changing its public API.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
