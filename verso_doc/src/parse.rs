@@ -1,6 +1,6 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, DefDecl, Document, EnvKind, Environment, Figure, FuncDecl, List,
-    ListItem, MathBlock, Proof, ProofStep, ProseFragment, Span, Table, VarDecl,
+    Block, Claim, ColumnAlign, DefDecl, Document, EnvKind, Environment, ExpectFailType, Figure,
+    FuncDecl, List, ListItem, MathBlock, Proof, ProofStep, ProseFragment, Span, Table, VarDecl,
 };
 use std::fmt;
 use verso_symbolic::{parse_expr, Dimension};
@@ -496,15 +496,23 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Expect-fail block
+        // Expect-fail block: expect_fail failure_type
         if trimmed == "expect_fail" || trimmed.starts_with("expect_fail ") {
-            let name = trimmed.strip_prefix("expect_fail").unwrap().trim().to_string();
-            if name.is_empty() {
+            let tag = trimmed.strip_prefix("expect_fail").unwrap().trim();
+            if tag.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "expect_fail requires a name".into(),
+                    message: "expect_fail requires a failure type: symbolic, dimension_mismatch, or dimension_error".into(),
                 });
             }
+            let failure_type =
+                ExpectFailType::from_str(tag).ok_or_else(|| ParseDocError {
+                    line: i + 1,
+                    message: format!(
+                        "unknown expect_fail type '{}'. Valid types: symbolic, dimension_mismatch, dimension_error",
+                        tag
+                    ),
+                })?;
             let ef_line = i + 1;
             i += 1;
 
@@ -529,7 +537,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             })?;
 
             blocks.push(Block::ExpectFail {
-                name,
+                failure_type,
                 blocks: inner_doc.blocks,
                 span: Span { line: ef_line },
             });
@@ -2935,12 +2943,16 @@ More prose here.
 
     #[test]
     fn parse_expect_fail_basic() {
-        let src = "expect_fail bad_dim\n  var v [L T^-1]\n  var a [L T^-2]\n  claim bad\n    v = a";
+        let src = "expect_fail dimension_mismatch\n  var v [L T^-1]\n  var a [L T^-2]\n  claim bad\n    v = a";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
-            Block::ExpectFail { name, blocks, .. } => {
-                assert_eq!(name, "bad_dim");
+            Block::ExpectFail {
+                failure_type,
+                blocks,
+                ..
+            } => {
+                assert_eq!(*failure_type, ExpectFailType::DimensionMismatch);
                 assert_eq!(blocks.len(), 3); // var, var, claim
             }
             other => panic!("expected ExpectFail, got {:?}", other),
@@ -2948,10 +2960,17 @@ More prose here.
     }
 
     #[test]
-    fn parse_expect_fail_missing_name() {
+    fn parse_expect_fail_missing_type() {
         let src = "expect_fail\n  claim bad\n    x = y";
         let err = parse_document(src).unwrap_err();
-        assert!(err.message.contains("expect_fail requires a name"));
+        assert!(err.message.contains("expect_fail requires a failure type"));
+    }
+
+    #[test]
+    fn parse_expect_fail_unknown_type() {
+        let src = "expect_fail bogus\n  claim bad\n    x = y";
+        let err = parse_document(src).unwrap_err();
+        assert!(err.message.contains("unknown expect_fail type"));
     }
 
     // Page breaks

@@ -880,8 +880,22 @@ async fn cmd_lsp() {
         let doc = match parse_document(src) {
             Ok(d) => d,
             Err(e) => {
+                // Map error line from resolved doc back to original
+                let line = if !std::ptr::eq(src, text) {
+                    // Find the content of the error line in the resolved text
+                    let err_content = src.lines().nth(e.line - 1).unwrap_or("");
+                    let trimmed = err_content.trim();
+                    // Search original text for a matching line
+                    text.lines()
+                        .enumerate()
+                        .find(|(_, l)| l.trim() == trimmed)
+                        .map(|(i, _)| i + 1)
+                        .unwrap_or(e.line)
+                } else {
+                    e.line
+                };
                 diagnostics.push(Diagnostic {
-                    range: line_range(e.line),
+                    range: line_range(line),
                     severity: Some(DiagnosticSeverity::ERROR),
                     message: e.message,
                     source: Some("verso".to_string()),
@@ -1002,14 +1016,27 @@ async fn cmd_lsp() {
                         ..Default::default()
                     });
                 }
-                Outcome::ExpectFailFail => {
+                Outcome::ExpectFailFail { ref actual } => {
+                    let details: Vec<&str> = actual
+                        .iter()
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.as_str())
+                        .collect();
+                    let msg = if details.is_empty() {
+                        format!(
+                            "expect_fail '{}': all checks passed unexpectedly",
+                            result.name
+                        )
+                    } else {
+                        format!(
+                            "expect_fail '{}': no {} failure found. Actual: {}",
+                            result.name, result.name, details.join("; ")
+                        )
+                    };
                     diagnostics.push(Diagnostic {
                         range: line_range(original_line),
                         severity: Some(DiagnosticSeverity::ERROR),
-                        message: format!(
-                            "expect_fail '{}': all checks passed unexpectedly",
-                            result.name
-                        ),
+                        message: msg,
                         source: Some("verso".to_string()),
                         ..Default::default()
                     });

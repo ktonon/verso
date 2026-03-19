@@ -176,10 +176,10 @@
 #          ^ source.verso meta.block.table.verso keyword.operator.table.verso
 #           ^^^^^^^^ source.verso meta.block.table.verso
 #                   ^ source.verso meta.block.table.verso keyword.operator.table.verso
->expect_fail dim_mismatch
+>expect_fail dimension_mismatch
 #^^^^^^^^^^^ source.verso meta.block.expect-fail.verso keyword.control.directive.expect-fail.verso
 #           ^ source.verso meta.block.expect-fail.verso
-#            ^^^^^^^^^^^^ source.verso meta.block.expect-fail.verso entity.name.function.expect-fail.verso
+#            ^^^^^^^^^^^^^^^^^^ source.verso meta.block.expect-fail.verso support.type.expect-fail.verso
 >  var v [L T^-1]
 #^^ source.verso meta.block.expect-fail.verso
 #  ^^^ source.verso meta.block.expect-fail.verso keyword.control.directive.var.verso

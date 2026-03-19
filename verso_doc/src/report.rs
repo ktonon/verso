@@ -102,12 +102,18 @@ fn write_result(f: &mut fmt::Formatter<'_>, result: &VerificationResult) -> fmt:
                 result.name, result.span.line
             )
         }
-        Outcome::ExpectFailFail => {
+        Outcome::ExpectFailFail { actual } => {
             writeln!(
                 f,
-                "  \x1b[31m\u{2717}\x1b[0m {} (expect_fail: all checks passed unexpectedly, line {})",
+                "  \x1b[31m\u{2717}\x1b[0m expect_fail {} (line {})",
                 result.name, result.span.line
-            )
+            )?;
+            for desc in actual {
+                if !desc.is_empty() {
+                    writeln!(f, "    \x1b[31mactual: {}\x1b[0m", desc)?;
+                }
+            }
+            Ok(())
         }
     }
 }

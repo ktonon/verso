@@ -267,7 +267,7 @@ an expression whose dimension matches the declared one. Verso extracts
 the base name by stripping the subscript and checks the definition's
 right-hand side against the declared dimension.
 
-expect_fail def_dim_base_name_mismatch
+expect_fail dimension_error
   var q_{any} [M]
   def q_{bad} := v
     Defining a member of the q family as a velocity should fail
@@ -397,16 +397,30 @@ verso build.
 
 ## expect_fail Blocks
 
-An expect_fail block contains inner declarations and claims. Verification
-succeeds only when at least one inner check fails. This is useful for
-testing dimensional mismatches or intentional constraint violations.
+An expect_fail block contains inner declarations and claims. Each block
+specifies a required failure type. Verification succeeds only when at
+least one inner check fails with the specified type.
 
-expect_fail dim_mismatch_example
+!table Failure Types
+  | Type | Matches when... |
+  |------|-----------------|
+  | symbolic | Symbolic verification fails (residual is not zero) |
+  | dimension_mismatch | LHS and RHS have incompatible dimensions |
+  | dimension_error | An expression contains a dimensional error |
+
+expect_fail dimension_mismatch
   claim bad
     v = a
 
 The block above succeeds because the claim fails dimensionally: v has
 dimension L T^-1 while a has dimension L T^-2.
+
+expect_fail symbolic
+  claim bad
+    x = x + 1
+
+The block above succeeds because the claim fails symbolically: x minus
+x plus 1 simplifies to 1, not zero.
 
 Inner blocks can declare their own variables and definitions. The block
 inherits all declarations from the enclosing document.

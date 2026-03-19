@@ -1,4 +1,4 @@
-use crate::ast::{Block, Claim, DefDecl, Document, Proof, Span};
+use crate::ast::{Block, Claim, DefDecl, Document, ExpectFailType, Proof, Span};
 use crate::dim::{collect_units, DimOutcome};
 use verso_symbolic::{subscript_base, Context, Expr, ExprKind};
 
@@ -73,8 +73,11 @@ pub enum Outcome {
     },
     /// expect_fail block: inner verification had at least one failure (test passes).
     ExpectFailPass,
-    /// expect_fail block: all inner checks passed unexpectedly (test fails).
-    ExpectFailFail,
+    /// expect_fail block: no inner check failed with the expected type.
+    ExpectFailFail {
+        /// What actually happened with each inner result.
+        actual: Vec<String>,
+    },
 }
 
 /// Verify all claims and proofs in a document.
@@ -109,8 +112,12 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
             Block::Proof(proof) => {
                 results.push(verify_proof(proof, &ctx));
             }
-            Block::ExpectFail { name, blocks, span } => {
-                results.push(verify_expect_fail(name, blocks, span, &ctx));
+            Block::ExpectFail {
+                failure_type,
+                blocks,
+                span,
+            } => {
+                results.push(verify_expect_fail(failure_type, blocks, span, &ctx));
             }
             _ => {}
         }
@@ -120,26 +127,79 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
 }
 
 /// Verify an expect_fail block. Runs the inner blocks in isolation.
-/// Succeeds if at least one inner verification fails.
+/// Succeeds only when at least one inner result fails with the specified type.
 fn verify_expect_fail(
-    name: &str,
+    failure_type: &ExpectFailType,
     inner_blocks: &[Block],
     span: &Span,
     parent_ctx: &Context,
 ) -> VerificationResult {
     let inner_report = verify_blocks(inner_blocks, parent_ctx);
-    let has_failure = inner_report.results.iter().any(|r| !r.passed());
+    let has_expected_failure = inner_report.results.iter().any(|r| {
+        match failure_type {
+            ExpectFailType::Symbolic => {
+                matches!(r.outcome, Outcome::Fail { .. } | Outcome::ProofStepFail { .. })
+            }
+            ExpectFailType::DimensionMismatch => {
+                matches!(r.dim_outcome, Some(DimOutcome::LhsRhsMismatch { .. }))
+            }
+            ExpectFailType::DimensionError => {
+                matches!(r.dim_outcome, Some(DimOutcome::ExprError { .. }))
+                    || matches!(r.outcome, Outcome::DefDimError { .. })
+            }
+        }
+    });
+    let outcome = if has_expected_failure {
+        Outcome::ExpectFailPass
+    } else {
+        Outcome::ExpectFailFail {
+            actual: inner_report.results.iter().map(describe_result).collect(),
+        }
+    };
     VerificationResult {
-        name: name.to_string(),
+        name: failure_type.to_string(),
         span: *span,
-        outcome: if has_failure {
-            Outcome::ExpectFailPass
-        } else {
-            Outcome::ExpectFailFail
-        },
+        outcome,
         dim_outcome: None,
         units: vec![],
     }
+}
+
+/// Summarize a verification result for diagnostic messages.
+fn describe_result(r: &VerificationResult) -> String {
+    let mut parts = Vec::new();
+    match &r.outcome {
+        Outcome::Pass => parts.push(format!("'{}' passed symbolically", r.name)),
+        Outcome::NumericalPass { samples, .. } => {
+            parts.push(format!("'{}' passed numerically ({} samples)", r.name, samples))
+        }
+        Outcome::Fail { residual } => {
+            parts.push(format!("'{}' failed symbolically (residual: {})", r.name, residual))
+        }
+        Outcome::ProofPass { steps } => {
+            parts.push(format!("'{}' proof passed ({} steps)", r.name, steps))
+        }
+        Outcome::ProofStepFail { step_index, .. } => {
+            parts.push(format!("'{}' proof step {} failed", r.name, step_index))
+        }
+        Outcome::DefDimError { error } => {
+            parts.push(format!("def '{}' dimension error: {}", r.name, error))
+        }
+        Outcome::ExpectFailPass | Outcome::ExpectFailFail { .. } => {}
+    }
+    if let Some(ref dim) = r.dim_outcome {
+        match dim {
+            DimOutcome::Pass => parts.push("dimensions ok".into()),
+            DimOutcome::Skipped { .. } => {}
+            DimOutcome::LhsRhsMismatch { lhs, rhs } => {
+                parts.push(format!("dimension mismatch: lhs {}, rhs {}", lhs, rhs))
+            }
+            DimOutcome::ExprError { side, error } => {
+                parts.push(format!("dimension error in {}: {}", side, error))
+            }
+        }
+    }
+    parts.join("; ")
 }
 
 /// Verify a slice of blocks, building on a parent context's declarations.
@@ -184,11 +244,11 @@ fn verify_blocks(blocks: &[Block], parent_ctx: &Context) -> VerificationReport {
                 results.push(verify_proof(proof, &ctx));
             }
             Block::ExpectFail {
-                name,
+                failure_type,
                 blocks: inner,
                 span,
             } => {
-                results.push(verify_expect_fail(name, inner, span, &ctx));
+                results.push(verify_expect_fail(failure_type, inner, span, &ctx));
             }
             _ => {}
         }
@@ -786,37 +846,47 @@ proof dim_bad
 var v [L T^-1]
 var a [L T^-2]
 
-expect_fail wrong_dim
+expect_fail dimension_mismatch
   claim bad
     v = a";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.results.len(), 1);
         let result = &report.results[0];
-        assert_eq!(result.name, "wrong_dim");
+        assert_eq!(result.name, "dimension_mismatch");
         assert!(
             result.passed(),
-            "expect_fail should pass when inner claim fails"
+            "expect_fail should pass when inner claim fails with dim mismatch"
         );
         assert!(matches!(result.outcome, Outcome::ExpectFailPass));
     }
 
     #[test]
-    fn expect_fail_fails_when_all_pass() {
+    fn expect_fail_fails_when_wrong_type() {
+        // claim x = x passes symbolically, so expect_fail symbolic should fail
         let src = "\
-expect_fail should_not_pass
+expect_fail symbolic
   claim ok
     x = x";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.results.len(), 1);
         let result = &report.results[0];
-        assert_eq!(result.name, "should_not_pass");
+        assert_eq!(result.name, "symbolic");
         assert!(
             !result.passed(),
-            "expect_fail should fail when inner claim passes"
+            "expect_fail symbolic should fail when inner claim passes"
         );
-        assert!(matches!(result.outcome, Outcome::ExpectFailFail));
+        assert!(matches!(result.outcome, Outcome::ExpectFailFail { .. }));
+        // Should report what actually happened
+        if let Outcome::ExpectFailFail { actual } = &result.outcome {
+            assert!(!actual.is_empty(), "should describe what actually happened");
+            assert!(
+                actual[0].contains("passed symbolically"),
+                "should say claim passed: {}",
+                actual[0]
+            );
+        }
     }
 
     #[test]
@@ -826,7 +896,7 @@ expect_fail should_not_pass
 def c := 3*10^8
 var v [L T^-1]
 
-expect_fail dim_mismatch_with_const
+expect_fail dimension_mismatch
   claim bad
     c = v";
         let doc = parse_document(src).unwrap();

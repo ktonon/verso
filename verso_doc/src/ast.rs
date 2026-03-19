@@ -56,12 +56,49 @@ pub enum Block {
     PageBreak,
     /// Table of contents: `!toc`
     Toc,
-    /// Expect-fail block: succeeds only when inner verification fails.
+    /// Expect-fail block: succeeds only when inner verification fails
+    /// with the specified failure type.
     ExpectFail {
-        name: String,
+        failure_type: ExpectFailType,
         blocks: Vec<Block>,
         span: Span,
     },
+}
+
+/// The kind of failure an expect_fail block requires.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExpectFailType {
+    /// Symbolic verification fails (residual != 0).
+    Symbolic,
+    /// LHS and RHS have incompatible dimensions.
+    DimensionMismatch,
+    /// An expression contains a dimensional error (e.g. adding length to time).
+    DimensionError,
+}
+
+impl ExpectFailType {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "symbolic" => Some(Self::Symbolic),
+            "dimension_mismatch" => Some(Self::DimensionMismatch),
+            "dimension_error" => Some(Self::DimensionError),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Symbolic => "symbolic",
+            Self::DimensionMismatch => "dimension_mismatch",
+            Self::DimensionError => "dimension_error",
+        }
+    }
+}
+
+impl std::fmt::Display for ExpectFailType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// A figure block.
