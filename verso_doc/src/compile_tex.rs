@@ -1,13 +1,17 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, DefDecl, Document, EnvKind, Environment, Figure, List, MathBlock,
-    Proof, ProseFragment, Table, VarDecl,
+    Block, Claim, ColumnAlign, DefDecl, Document, Environment, Figure, List, MathBlock, Proof,
+    ProseFragment, Table, VarDecl,
 };
 use crate::parse::parse_prose_fragments;
+use crate::tex_preamble::{
+    build_section_title_map, collect_metadata, collect_used_env_kinds, env_kind_name,
+    write_bibliography, write_preamble, write_theorem_preamble,
+};
 pub use crate::tex_queries::{
     collect_labels, collect_symbols, find_claim_line, find_decl_line, find_label_line,
     find_symbol, find_unresolved_refs, find_unresolved_refs_against, slugify, SymbolInfo,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Write;
 use verso_symbolic::ToTex;
 
@@ -21,71 +25,20 @@ struct TexContext {
 pub fn compile_to_tex(doc: &Document) -> String {
     let mut out = String::new();
 
-    // Build section label→title map for resolving ref`label` display text
-    let mut section_titles: HashMap<String, String> = HashMap::new();
-    for block in &doc.blocks {
-        if let Block::Section { title, label, .. } = block {
-            if let Some(lbl) = label {
-                section_titles.insert(lbl.clone(), title.clone());
-            }
-            section_titles.insert(slugify(title), title.clone());
-        }
-    }
-
     let ctx = TexContext {
-        section_titles,
+        section_titles: build_section_title_map(doc),
         symbols: collect_symbols(doc),
     };
 
-    // Collect metadata
-    let mut title_lines: Option<&Vec<String>> = None;
-    let mut authors: Vec<&str> = Vec::new();
-    let mut date: Option<Option<&str>> = None; // None = no !date, Some(None) = !date with no value, Some(Some(d)) = !date d
-    let mut abstract_fragments: Option<&Vec<ProseFragment>> = None;
-    for block in &doc.blocks {
-        match block {
-            Block::Title(lines) => title_lines = Some(lines),
-            Block::Author(a) => authors.push(a),
-            Block::Date(d) => date = Some(d.as_deref()),
-            Block::Abstract(frags) => abstract_fragments = Some(frags),
-            _ => {}
-        }
-    }
-    let has_metadata = title_lines.is_some() || !authors.is_empty() || date.is_some();
+    let metadata = collect_metadata(doc);
 
     // Check if document uses ref tags (to conditionally include hyperref)
     let has_refs = doc.blocks.iter().any(|b| block_has_refs(b));
 
-    // Preamble: document class and packages
-    writeln!(out, "\\documentclass[11pt]{{article}}").unwrap();
-    writeln!(out, "\\usepackage[margin=1in]{{geometry}}").unwrap();
-    writeln!(out, "\\usepackage[T1]{{fontenc}}").unwrap();
-    writeln!(out, "\\usepackage[utf8]{{inputenc}}").unwrap();
-    writeln!(out, "\\usepackage{{lmodern}}").unwrap();
-    writeln!(out, "\\usepackage{{microtype}}").unwrap();
-    writeln!(out, "\\usepackage{{amsmath}}").unwrap();
-    writeln!(out, "\\usepackage{{amsthm}}").unwrap();
-    writeln!(out, "\\usepackage{{xcolor}}").unwrap();
-    writeln!(out, "\\usepackage{{framed}}").unwrap();
-    if has_refs {
-        writeln!(out, "\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{{hyperref}}").unwrap();
-    }
-    writeln!(out, "\\usepackage{{bookmark}}").unwrap();
-    writeln!(out, "\\usepackage{{array}}").unwrap();
-    writeln!(out, "\\usepackage{{float}}").unwrap();
-    writeln!(out, "\\usepackage{{longtable}}").unwrap();
-    writeln!(out, "\\usepackage{{graphicx}}").unwrap();
-    writeln!(out, "\\usepackage{{wrapfig}}").unwrap();
-
-    // Layout defaults
-    writeln!(out).unwrap();
-    writeln!(out, "\\setlength{{\\parindent}}{{0pt}}").unwrap();
-    writeln!(out, "\\setlength{{\\parskip}}{{6pt plus 2pt minus 1pt}}").unwrap();
-    writeln!(out, "\\setlength{{\\emergencystretch}}{{3em}}").unwrap();
-    writeln!(out, "\\setcounter{{tocdepth}}{{3}}").unwrap();
+    write_preamble(&mut out, has_refs);
 
     // Title block in preamble
-    if let Some(lines) = title_lines {
+    if let Some(lines) = metadata.title_lines {
         writeln!(out).unwrap();
         let title_tex = lines
             .iter()
@@ -94,49 +47,33 @@ pub fn compile_to_tex(doc: &Document) -> String {
             .join(" \\\\\n");
         writeln!(out, "\\title{{{}}}", title_tex).unwrap();
     }
-    if !authors.is_empty() {
-        let joined = authors
+    if !metadata.authors.is_empty() {
+        let joined = metadata
+            .authors
             .iter()
             .map(|a| escape_prose(a))
             .collect::<Vec<_>>()
             .join(" \\and ");
         writeln!(out, "\\author{{{}}}", joined).unwrap();
     }
-    match date {
+    match metadata.date {
         Some(Some(d)) => writeln!(out, "\\date{{{}}}", format_date(d)).unwrap(),
         Some(None) => writeln!(out, "\\date{{\\today}}").unwrap(),
         None => {} // no !date directive — LaTeX defaults to \today
     }
 
-    // Collect used environment kinds for \newtheorem declarations
-    let mut env_kinds: Vec<EnvKind> = Vec::new();
-    let mut seen: HashSet<EnvKind> = HashSet::new();
-
-    for block in &doc.blocks {
-        if let Block::Environment(env) = block {
-            if seen.insert(env.kind) {
-                env_kinds.push(env.kind);
-            }
-        }
-    }
-    if !env_kinds.is_empty() {
-        writeln!(out).unwrap();
-        for kind in &env_kinds {
-            let name = env_kind_name(*kind);
-            let display = env_kind_display(*kind);
-            writeln!(out, "\\newtheorem{{{}}}{{{}}}", name, display).unwrap();
-        }
-    }
+    let env_kinds = collect_used_env_kinds(doc);
+    write_theorem_preamble(&mut out, &env_kinds);
 
     writeln!(out).unwrap();
     writeln!(out, "\\begin{{document}}").unwrap();
 
-    if has_metadata {
+    if metadata.has_metadata {
         writeln!(out).unwrap();
         writeln!(out, "\\maketitle").unwrap();
     }
 
-    if let Some(frags) = abstract_fragments {
+    if let Some(frags) = metadata.abstract_fragments {
         writeln!(out).unwrap();
         writeln!(out, "\\begin{{abstract}}").unwrap();
         write_prose_fragments(&mut out, frags, &ctx);
@@ -209,15 +146,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
         }
     }
 
-    // Bibliography at end of document
-    for block in &doc.blocks {
-        if let Block::Bibliography { path, .. } = block {
-            writeln!(out).unwrap();
-            let bib_name = path.strip_suffix(".bib").unwrap_or(path);
-            writeln!(out, "\\bibliographystyle{{plain}}").unwrap();
-            writeln!(out, "\\bibliography{{{}}}", bib_name).unwrap();
-        }
-    }
+    write_bibliography(&mut out, doc);
 
     writeln!(out).unwrap();
     writeln!(out, "\\end{{document}}").unwrap();
@@ -715,25 +644,6 @@ fn list_has_refs(list: &List) -> bool {
     })
 }
 
-fn env_kind_name(kind: EnvKind) -> &'static str {
-    match kind {
-        EnvKind::Theorem => "theorem",
-        EnvKind::Lemma => "lemma",
-        EnvKind::Corollary => "corollary",
-        EnvKind::Remark => "remark",
-        EnvKind::Example => "example",
-    }
-}
-
-fn env_kind_display(kind: EnvKind) -> &'static str {
-    match kind {
-        EnvKind::Theorem => "Theorem",
-        EnvKind::Lemma => "Lemma",
-        EnvKind::Corollary => "Corollary",
-        EnvKind::Remark => "Remark",
-        EnvKind::Example => "Example",
-    }
-}
 
 #[cfg(test)]
 mod tests {
