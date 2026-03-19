@@ -259,7 +259,14 @@ fn write_section(out: &mut String, level: u8, title: &str, label: Option<&str>) 
         3 => "subsubsection",
         _ => "paragraph",
     };
-    writeln!(out, "\\{}{{{}}}", cmd, escape_prose(title)).unwrap();
+    let escaped = escape_prose(title);
+    if escaped != title {
+        // \texorpdfstring provides a plain-text fallback for PDF bookmarks,
+        // where commands like \_ are not valid.
+        writeln!(out, "\\{}{{\\texorpdfstring{{{}}}{{{}}}}}", cmd, escaped, title).unwrap();
+    } else {
+        writeln!(out, "\\{}{{{}}}", cmd, escaped).unwrap();
+    }
     // Prefer explicit label, fall back to slug
     let lbl = label
         .map(|l| l.to_string())
@@ -339,31 +346,34 @@ fn escape_tex_dim(text: &str) -> String {
     out
 }
 
-/// Escape prose text for LaTeX: `~` → `\textasciitilde{}`, paired `"` → ``` `` ''' ```.
-/// Unpaired trailing `"` is left as-is.
+/// Escape prose text for LaTeX: special characters are escaped so that
+/// plain text survives pdflatex without entering math mode.
+/// Paired `"` are converted to ``` `` ''' ```.
 fn escape_prose(text: &str) -> String {
     let quote_count = text.chars().filter(|&c| c == '"').count();
+    let mut result = String::with_capacity(text.len() + 16);
     let pairs = quote_count / 2;
-    if pairs == 0 {
-        return text.replace('~', "\\textasciitilde{}");
-    }
-    let mut result = String::with_capacity(text.len() + pairs * 4);
     let mut open = true;
     let mut quotes_remaining = quote_count;
     for ch in text.chars() {
         match ch {
-            '"' if open && quotes_remaining > 1 => {
+            '"' if pairs > 0 && open && quotes_remaining > 1 => {
                 result.push_str("``");
                 open = false;
                 quotes_remaining -= 1;
             }
-            '"' if !open => {
+            '"' if pairs > 0 && !open => {
                 result.push_str("''");
                 open = true;
                 quotes_remaining -= 1;
             }
-            '"' => result.push('"'),
             '~' => result.push_str("\\textasciitilde{}"),
+            '_' => result.push_str("\\_"),
+            '^' => result.push_str("\\^{}"),
+            '&' => result.push_str("\\&"),
+            '#' => result.push_str("\\#"),
+            '%' => result.push_str("\\%"),
+            '$' => result.push_str("\\$"),
             _ => result.push(ch),
         }
     }
@@ -1539,7 +1549,11 @@ claim add_zero
         let src = r#"## The "Standard" Model"#;
         let doc = parse_document(src).unwrap();
         let tex = compile_to_tex(&doc);
-        assert!(tex.contains("\\subsection{The ``Standard'' Model}"));
+        assert!(
+            tex.contains(r"\texorpdfstring{The ``Standard'' Model}{The "),
+            "smart quotes in heading should use texorpdfstring: {}",
+            tex
+        );
     }
 
     #[test]
@@ -1856,6 +1870,45 @@ claim add_zero
         assert!(
             tex.contains("$unknown$"),
             "should still render name as math: {}",
+            tex
+        );
+    }
+
+    #[test]
+    fn escape_prose_underscores_and_carets() {
+        let doc = parse_document("The expect_fail block has dimension L T^-1.").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains(r"expect\_fail"),
+            "underscores should be escaped: {}",
+            tex
+        );
+        assert!(
+            tex.contains(r"T\^{}-1"),
+            "carets should be escaped: {}",
+            tex
+        );
+    }
+
+    #[test]
+    fn escape_prose_in_section_title() {
+        let doc = parse_document("## expect_fail Blocks").unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains(r"\texorpdfstring{expect\_fail Blocks}{expect_fail Blocks}"),
+            "section titles with special chars should use texorpdfstring: {}",
+            tex
+        );
+    }
+
+    #[test]
+    fn escape_prose_in_table_cells() {
+        let src = "!table T\n  | Type | Description |\n  |------|-------------|\n  | dimension_mismatch | LHS mismatch |";
+        let doc = parse_document(src).unwrap();
+        let tex = compile_to_tex(&doc);
+        assert!(
+            tex.contains(r"dimension\_mismatch"),
+            "underscores in table cells should be escaped: {}",
             tex
         );
     }
