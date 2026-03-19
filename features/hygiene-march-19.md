@@ -21,6 +21,8 @@ coverage.
 - 2026-03-19: Phase 1 started by documenting the intended crate-root APIs and
   turning `lib.rs` files into curated facades for `verso_doc`, `verso_symbolic`,
   and `verso_training`.
+- 2026-03-19: Phase 2 reduced duplication in `verso_doc/src/verify.rs` by
+  extracting shared block execution for top-level and nested verification.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -93,6 +95,7 @@ Success criteria:
 
 - Adding a new block kind requires fewer cross-file edits.
 - Verification logic for top-level and nested blocks lives in one place.
+- Status: completed on 2026-03-19.
 
 ### Phase 3 - Decompose Oversized Modules
 

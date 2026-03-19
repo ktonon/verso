@@ -83,48 +83,9 @@ pub enum Outcome {
 /// Verify all claims and proofs in a document.
 pub fn verify_document(doc: &Document) -> VerificationReport {
     let mut ctx = Context::new();
-    let mut results = Vec::new();
-
-    for block in &doc.blocks {
-        match block {
-            Block::Var(decl) => {
-                ctx.declare_var(&decl.var_name, Some(decl.dimension.clone()));
-            }
-            Block::Def(decl) => {
-                ctx.declare_const(&decl.name, decl.value.clone());
-                if let Some(ref dim) = decl.dimension {
-                    ctx.declare_var(&decl.name, Some(dim.clone()));
-                }
-                if let Some(result) = check_def_dim(decl, &ctx) {
-                    results.push(result);
-                }
-            }
-            Block::Func(decl) => {
-                ctx.declare_func(&decl.name, decl.params.clone(), decl.body.clone());
-            }
-            Block::Claim(claim) => {
-                let result = verify_claim(claim, &ctx);
-                if result.passed() {
-                    ctx.add_claim_as_rule(&claim.name, &claim.lhs, &claim.rhs);
-                }
-                results.push(result);
-            }
-            Block::Proof(proof) => {
-                results.push(verify_proof(proof, &ctx));
-            }
-            Block::ExpectFail {
-                name,
-                failure_type,
-                blocks,
-                span,
-            } => {
-                results.push(verify_expect_fail(name, failure_type, blocks, span, &ctx));
-            }
-            _ => {}
-        }
+    VerificationReport {
+        results: verify_blocks_in_context(&doc.blocks, &mut ctx),
     }
-
-    VerificationReport { results }
 }
 
 /// Verify an expect_fail block. Runs the inner blocks in isolation.
@@ -217,6 +178,14 @@ fn verify_blocks(blocks: &[Block], parent_ctx: &Context) -> VerificationReport {
     }
     ctx.dims = parent_ctx.dims.clone();
 
+    VerificationReport {
+        results: verify_blocks_in_context(blocks, &mut ctx),
+    }
+}
+
+/// Execute verification over a sequence of blocks, mutating the provided context
+/// as declarations and successful claims are encountered.
+fn verify_blocks_in_context(blocks: &[Block], ctx: &mut Context) -> Vec<VerificationResult> {
     let mut results = Vec::new();
     for block in blocks {
         match block {
@@ -256,7 +225,7 @@ fn verify_blocks(blocks: &[Block], parent_ctx: &Context) -> VerificationReport {
             _ => {}
         }
     }
-    VerificationReport { results }
+    results
 }
 
 /// Verify a single claim by checking that `lhs - rhs` simplifies to 0.
