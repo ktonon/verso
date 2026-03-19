@@ -1,4 +1,4 @@
-use crate::ast::{Block, Claim, Document, List, Proof, ProseFragment};
+use crate::ast::{Block, Document};
 use crate::tex_blocks::{
     write_block_quote, write_environment, write_figure, write_list, write_math_block, write_table,
 };
@@ -10,12 +10,13 @@ use crate::tex_prose::{
     escape_prose, format_date, write_def, write_prose, write_prose_fragments, write_var,
     TexContext,
 };
+use crate::tex_refs::block_has_refs;
+use crate::tex_structure::{write_claim, write_proof, write_section};
 pub use crate::tex_queries::{
     collect_labels, collect_symbols, find_claim_line, find_decl_line, find_label_line,
     find_symbol, find_unresolved_refs, find_unresolved_refs_against, slugify, SymbolInfo,
 };
 use std::fmt::Write;
-use verso_symbolic::ToTex;
 
 /// Compile a Document to a LaTeX string.
 pub fn compile_to_tex(doc: &Document) -> String {
@@ -148,107 +149,6 @@ pub fn compile_to_tex(doc: &Document) -> String {
     writeln!(out, "\\end{{document}}").unwrap();
     out
 }
-
-fn write_section(out: &mut String, level: u8, title: &str, label: Option<&str>) {
-    let cmd = match level {
-        1 => "section",
-        2 => "subsection",
-        3 => "subsubsection",
-        _ => "paragraph",
-    };
-    let escaped = escape_prose(title);
-    if escaped != title {
-        // \texorpdfstring provides a plain-text fallback for PDF bookmarks,
-        // where commands like \_ are not valid.
-        writeln!(out, "\\{}{{\\texorpdfstring{{{}}}{{{}}}}}", cmd, escaped, title).unwrap();
-    } else {
-        writeln!(out, "\\{}{{{}}}", cmd, escaped).unwrap();
-    }
-    // Prefer explicit label, fall back to slug
-    let lbl = label
-        .map(|l| l.to_string())
-        .unwrap_or_else(|| slugify(title));
-    if !lbl.is_empty() {
-        writeln!(out, "\\label{{{}}}", lbl).unwrap();
-    }
-}
-
-fn write_claim(out: &mut String, claim: &Claim) {
-    writeln!(out, "\\begin{{equation}} \\label{{eq:{}}}", claim.name).unwrap();
-    writeln!(out, "  {} = {}", claim.lhs.to_tex(), claim.rhs.to_tex()).unwrap();
-    writeln!(out, "\\end{{equation}}").unwrap();
-}
-
-fn write_proof(out: &mut String, proof: &Proof) {
-    if proof.steps.is_empty() {
-        return;
-    }
-
-    writeln!(out, "\\begin{{align*}}").unwrap();
-    for (i, step) in proof.steps.iter().enumerate() {
-        if i == 0 {
-            write!(out, "  {}", step.expr.to_tex()).unwrap();
-        } else {
-            write!(out, "  &= {}", step.expr.to_tex()).unwrap();
-        }
-
-        // Add justification as a tag
-        if let Some(ref just) = step.justification {
-            write!(out, " && \\text{{({})}}", just).unwrap();
-        }
-
-        if i < proof.steps.len() - 1 {
-            writeln!(out, " \\\\").unwrap();
-        } else {
-            writeln!(out).unwrap();
-        }
-    }
-    writeln!(out, "\\end{{align*}}").unwrap();
-}
-
-/// Check if any prose fragment in a slice contains a Ref or Url (both need hyperref).
-fn fragments_have_refs(fragments: &[ProseFragment]) -> bool {
-    fragments.iter().any(|f| match f {
-        ProseFragment::Ref { .. } | ProseFragment::Url { .. } => true,
-        ProseFragment::Bold(inner)
-        | ProseFragment::Italic(inner)
-        | ProseFragment::Footnote(inner) => fragments_have_refs(inner),
-        _ => false,
-    })
-}
-
-/// Check if a block contains any Ref prose fragments.
-fn block_has_refs(block: &Block) -> bool {
-    match block {
-        Block::Prose(fragments)
-        | Block::BlockQuote(fragments)
-        | Block::Abstract(fragments)
-        | Block::Center(fragments) => fragments_have_refs(fragments),
-        Block::List(list) => list_has_refs(list),
-        Block::Environment(env) => fragments_have_refs(&env.body),
-        Block::Figure(fig) => fig
-            .caption
-            .as_ref()
-            .map_or(false, |c| fragments_have_refs(c)),
-        Block::Table(table) => {
-            table.header.iter().any(|c| fragments_have_refs(c))
-                || table
-                    .rows
-                    .iter()
-                    .any(|r| r.iter().any(|c| fragments_have_refs(c)))
-        }
-        _ => false,
-    }
-}
-
-fn list_has_refs(list: &List) -> bool {
-    list.items.iter().any(|item| {
-        fragments_have_refs(&item.fragments)
-            || item.children.as_ref().map_or(false, |c| list_has_refs(c))
-    })
-}
-
-
 #[cfg(test)]
 mod tests {
     use super::*;

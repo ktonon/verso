@@ -21,6 +21,8 @@ mod source;
 mod tex_blocks;
 mod tex_preamble;
 mod tex_prose;
+mod tex_refs;
+mod tex_structure;
 mod tex_queries;
 pub mod verify;
 

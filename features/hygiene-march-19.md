@@ -38,6 +38,10 @@ coverage.
 - 2026-03-19: Phase 3 then moved list, table, figure, quote, math-block, and
   environment emitters into `verso_doc/src/tex_blocks.rs`, leaving
   `verso_doc/src/compile_tex.rs` more focused on document orchestration.
+- 2026-03-19: Phase 3 then extracted section/claim/proof emitters and
+  hyperref-detection helpers into `verso_doc/src/tex_structure.rs` and
+  `verso_doc/src/tex_refs.rs`, leaving `verso_doc/src/compile_tex.rs` as a thin
+  orchestration layer plus tests.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -172,3 +176,8 @@ npm run coverage:summary
 
 - `npm test` passed.
 - `cargo llvm-cov --workspace --summary-only` reported 85.15% total line coverage.
+- Manual regression checks on 2026-03-19:
+  - Built and reloaded VS Code to confirm the extension still works after the
+    Phase 3 refactors.
+  - Ran check/build against the `erd` document after editing source files and
+    verified the generated PDF output.
