@@ -18,6 +18,9 @@ coverage.
 
 ## Implementation Notes
 
+- 2026-03-19: Phase 1 started by documenting the intended crate-root APIs and
+  turning `lib.rs` files into curated facades for `verso_doc`, `verso_symbolic`,
+  and `verso_training`.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -76,6 +79,7 @@ Success criteria:
 
 - `lib.rs` files read as curated entry points rather than index files.
 - New contributors can tell which APIs are internal versus supported.
+- Status: completed on 2026-03-19.
 
 ### Phase 2 - Unify Document Passes
 
