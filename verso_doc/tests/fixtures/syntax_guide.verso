@@ -279,7 +279,7 @@ dimension matches the declared one. Verso extracts the base name by
 stripping the subscript and checks the definition's right-hand side against
 the declared dimension.
 
-expect_fail dimension_error
+expect_fail wrong_family_dim [dimension_error]
   var q_{any} [M]
   def q_{bad} := v
     Defining a member of the q family as a velocity should fail
@@ -409,9 +409,11 @@ verso build.
 
 ## expect_fail Blocks
 
-An expect_fail block contains inner declarations and claims. Each block
-specifies a required failure type. Verification succeeds only when at
-least one inner check fails with the specified type.
+An expect_fail block contains inner declarations and claims. The syntax
+is: expect_fail name [failure_type]. Both the name and bracketed type
+are required. This mirrors how square brackets are used in var and def
+statements. Verification succeeds only when at least one inner check
+fails with the specified failure type.
 
 !table Failure Types
   | Type | Matches when... |
@@ -420,14 +422,14 @@ least one inner check fails with the specified type.
   | dimension_mismatch | LHS and RHS have incompatible dimensions |
   | dimension_error | An expression contains a dimensional error |
 
-expect_fail dimension_mismatch
+expect_fail wrong_dim [dimension_mismatch]
   claim bad
     v = a
 
 The block above succeeds because the claim fails dimensionally: v has
 dimension L T^-1 while a has dimension L T^-2.
 
-expect_fail symbolic
+expect_fail bad_symbolic [symbolic]
   claim bad
     x = x + 1
 

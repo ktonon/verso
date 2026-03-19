@@ -496,23 +496,51 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Expect-fail block: expect_fail failure_type
+        // Expect-fail block: expect_fail name [failure_type]
         if trimmed == "expect_fail" || trimmed.starts_with("expect_fail ") {
-            let tag = trimmed.strip_prefix("expect_fail").unwrap().trim();
-            if tag.is_empty() {
+            let rest = trimmed.strip_prefix("expect_fail").unwrap().trim();
+            if rest.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "expect_fail requires a failure type: symbolic, dimension_mismatch, or dimension_error".into(),
+                    message: "expect_fail requires: expect_fail name [type]. Valid types: symbolic, dimension_mismatch, dimension_error".into(),
                 });
             }
-            let failure_type =
-                ExpectFailType::from_str(tag).ok_or_else(|| ParseDocError {
+            // Parse: name [type]
+            let (name, failure_type) = if let Some(bracket_pos) = rest.find('[') {
+                let name = rest[..bracket_pos].trim().to_string();
+                let type_str = rest[bracket_pos..].trim();
+                // Strip [ and ]
+                let inner = type_str
+                    .strip_prefix('[')
+                    .and_then(|s| s.strip_suffix(']'))
+                    .map(|s| s.trim())
+                    .ok_or_else(|| ParseDocError {
+                        line: i + 1,
+                        message: "expect_fail type must be in brackets: [symbolic], [dimension_mismatch], or [dimension_error]".into(),
+                    })?;
+                let ft = ExpectFailType::from_str(inner).ok_or_else(|| ParseDocError {
                     line: i + 1,
                     message: format!(
                         "unknown expect_fail type '{}'. Valid types: symbolic, dimension_mismatch, dimension_error",
-                        tag
+                        inner
                     ),
                 })?;
+                (name, ft)
+            } else {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: format!(
+                        "expect_fail '{}' missing failure type. Use: expect_fail {} [symbolic|dimension_mismatch|dimension_error]",
+                        rest, rest
+                    ),
+                });
+            };
+            if name.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: "expect_fail requires a name before the type bracket".into(),
+                });
+            }
             let ef_line = i + 1;
             i += 1;
 
@@ -537,6 +565,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             })?;
 
             blocks.push(Block::ExpectFail {
+                name,
                 failure_type,
                 blocks: inner_doc.blocks,
                 span: Span { line: ef_line },
@@ -2943,15 +2972,17 @@ More prose here.
 
     #[test]
     fn parse_expect_fail_basic() {
-        let src = "expect_fail dimension_mismatch\n  var v [L T^-1]\n  var a [L T^-2]\n  claim bad\n    v = a";
+        let src = "expect_fail bad_dim [dimension_mismatch]\n  var v [L T^-1]\n  var a [L T^-2]\n  claim bad\n    v = a";
         let doc = parse_document(src).unwrap();
         assert_eq!(doc.blocks.len(), 1);
         match &doc.blocks[0] {
             Block::ExpectFail {
+                name,
                 failure_type,
                 blocks,
                 ..
             } => {
+                assert_eq!(name, "bad_dim");
                 assert_eq!(*failure_type, ExpectFailType::DimensionMismatch);
                 assert_eq!(blocks.len(), 3); // var, var, claim
             }
@@ -2960,15 +2991,22 @@ More prose here.
     }
 
     #[test]
-    fn parse_expect_fail_missing_type() {
+    fn parse_expect_fail_missing_name_and_type() {
         let src = "expect_fail\n  claim bad\n    x = y";
         let err = parse_document(src).unwrap_err();
-        assert!(err.message.contains("expect_fail requires a failure type"));
+        assert!(err.message.contains("expect_fail requires"));
+    }
+
+    #[test]
+    fn parse_expect_fail_missing_type() {
+        let src = "expect_fail my_test\n  claim bad\n    x = y";
+        let err = parse_document(src).unwrap_err();
+        assert!(err.message.contains("missing failure type"));
     }
 
     #[test]
     fn parse_expect_fail_unknown_type() {
-        let src = "expect_fail bogus\n  claim bad\n    x = y";
+        let src = "expect_fail my_test [bogus]\n  claim bad\n    x = y";
         let err = parse_document(src).unwrap_err();
         assert!(err.message.contains("unknown expect_fail type"));
     }

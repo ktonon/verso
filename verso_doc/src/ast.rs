@@ -59,6 +59,7 @@ pub enum Block {
     /// Expect-fail block: succeeds only when inner verification fails
     /// with the specified failure type.
     ExpectFail {
+        name: String,
         failure_type: ExpectFailType,
         blocks: Vec<Block>,
         span: Span,

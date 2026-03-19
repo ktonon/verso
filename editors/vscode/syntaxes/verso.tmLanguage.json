@@ -168,11 +168,12 @@
     },
 
     "directive-expect-fail": {
-      "begin": "^(expect_fail)\\s+(symbolic|dimension_mismatch|dimension_error)\\s*$",
+      "begin": "^(expect_fail)\\s+(\\S+)\\s+(\\[(?:symbolic|dimension_mismatch|dimension_error)\\])\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.expect-fail.verso" },
-        "2": { "name": "support.type.expect-fail.verso" }
+        "2": { "name": "entity.name.function.expect-fail.verso" },
+        "3": { "name": "support.type.expect-fail.verso" }
       },
       "name": "meta.block.expect-fail.verso",
       "patterns": [

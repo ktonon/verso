@@ -113,11 +113,12 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
                 results.push(verify_proof(proof, &ctx));
             }
             Block::ExpectFail {
+                name,
                 failure_type,
                 blocks,
                 span,
             } => {
-                results.push(verify_expect_fail(failure_type, blocks, span, &ctx));
+                results.push(verify_expect_fail(name, failure_type, blocks, span, &ctx));
             }
             _ => {}
         }
@@ -129,6 +130,7 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
 /// Verify an expect_fail block. Runs the inner blocks in isolation.
 /// Succeeds only when at least one inner result fails with the specified type.
 fn verify_expect_fail(
+    name: &str,
     failure_type: &ExpectFailType,
     inner_blocks: &[Block],
     span: &Span,
@@ -157,7 +159,7 @@ fn verify_expect_fail(
         }
     };
     VerificationResult {
-        name: failure_type.to_string(),
+        name: name.to_string(),
         span: *span,
         outcome,
         dim_outcome: None,
@@ -244,11 +246,12 @@ fn verify_blocks(blocks: &[Block], parent_ctx: &Context) -> VerificationReport {
                 results.push(verify_proof(proof, &ctx));
             }
             Block::ExpectFail {
+                name,
                 failure_type,
                 blocks: inner,
                 span,
             } => {
-                results.push(verify_expect_fail(failure_type, inner, span, &ctx));
+                results.push(verify_expect_fail(name, failure_type, inner, span, &ctx));
             }
             _ => {}
         }
@@ -846,14 +849,14 @@ proof dim_bad
 var v [L T^-1]
 var a [L T^-2]
 
-expect_fail dimension_mismatch
+expect_fail wrong_dim [dimension_mismatch]
   claim bad
     v = a";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.results.len(), 1);
         let result = &report.results[0];
-        assert_eq!(result.name, "dimension_mismatch");
+        assert_eq!(result.name, "wrong_dim");
         assert!(
             result.passed(),
             "expect_fail should pass when inner claim fails with dim mismatch"
@@ -863,16 +866,16 @@ expect_fail dimension_mismatch
 
     #[test]
     fn expect_fail_fails_when_wrong_type() {
-        // claim x = x passes symbolically, so expect_fail symbolic should fail
+        // claim x = x passes symbolically, so expect_fail [symbolic] should fail
         let src = "\
-expect_fail symbolic
+expect_fail all_pass [symbolic]
   claim ok
     x = x";
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.results.len(), 1);
         let result = &report.results[0];
-        assert_eq!(result.name, "symbolic");
+        assert_eq!(result.name, "all_pass");
         assert!(
             !result.passed(),
             "expect_fail symbolic should fail when inner claim passes"
@@ -896,7 +899,7 @@ expect_fail symbolic
 def c := 3*10^8
 var v [L T^-1]
 
-expect_fail dimension_mismatch
+expect_fail dim_mismatch_with_const [dimension_mismatch]
   claim bad
     c = v";
         let doc = parse_document(src).unwrap();
