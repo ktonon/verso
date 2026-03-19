@@ -3024,7 +3024,7 @@ More prose here.
 
     #[test]
     fn parse_include_basic() {
-        let dir = std::env::temp_dir().join("erd_test_include_basic");
+        let dir = std::env::temp_dir().join("verso_test_include_basic");
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(
             dir.join("main.verso"),
@@ -3041,7 +3041,7 @@ More prose here.
 
     #[test]
     fn parse_include_circular_error() {
-        let dir = std::env::temp_dir().join("erd_test_include_circular");
+        let dir = std::env::temp_dir().join("verso_test_include_circular");
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("a.verso"), "!include b.verso").unwrap();
         std::fs::write(dir.join("b.verso"), "!include a.verso").unwrap();
@@ -3052,7 +3052,7 @@ More prose here.
 
     #[test]
     fn parse_include_missing_file_error() {
-        let dir = std::env::temp_dir().join("erd_test_include_missing");
+        let dir = std::env::temp_dir().join("verso_test_include_missing");
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("main.verso"), "!include nonexistent.verso").unwrap();
         let err = parse_document_from_file(&dir.join("main.verso")).unwrap_err();
@@ -3062,7 +3062,7 @@ More prose here.
 
     #[test]
     fn parse_include_nested() {
-        let dir = std::env::temp_dir().join("erd_test_include_nested");
+        let dir = std::env::temp_dir().join("verso_test_include_nested");
         let _ = std::fs::create_dir_all(dir.join("sub"));
         std::fs::write(dir.join("main.verso"), "!include sub/a.verso").unwrap();
         std::fs::write(dir.join("sub/a.verso"), "!include b.verso").unwrap();

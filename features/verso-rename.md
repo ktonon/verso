@@ -124,12 +124,11 @@ These components predate the paper-writing pivot and are no longer part of verso
 
 ## Implementation Notes
 
-- Phase 0 should be a separate commit so removed code is recoverable from git history
+- Phase 0 was a separate commit so removed code is recoverable from git history
 - The `before-verso` tag marks the last commit before any rename work
-- `Cargo.lock` will auto-regenerate after crate renames
-- After Phase 3, the old VSCode extension should be uninstalled before installing the new one
-- `verso_symbolic` is the core algebra engine — depended on by both `verso_doc` and `verso_training`, so it becomes `verso_symbolic`
-- `verso_training` provides the learned symbolic solver — it stays as `verso_training`
+- `Cargo.lock` auto-regenerated after crate renames
+- After Phase 3, the old VSCode extension was uninstalled before installing the new one
+- All phases completed. Crates are `verso_symbolic`, `verso_doc`, `verso_training`. Extension is `verso-lang`. File extension is `.verso`.
 
 ## Verification
 

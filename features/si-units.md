@@ -66,7 +66,7 @@ All values convert to canonical base SI form internally. Display chooses suitabl
 ## Verification
 
 ```bash
-cd /Users/ktonon/repos/erd && cargo test --release
+cd /Users/ktonon/repos/verso && cargo test --release
 ```
 
 All tests pass (723+). Integration tests verify:
