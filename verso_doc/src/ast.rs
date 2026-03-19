@@ -209,10 +209,11 @@ pub struct VarDecl {
     pub span: Span,
 }
 
-/// A definition: `def name := value_expr`
+/// A definition: `def name [dim] := value_expr`
 #[derive(Debug)]
 pub struct DefDecl {
     pub name: String,
+    pub dimension: Option<Dimension>,
     pub value: Expr,
     pub description: Option<String>,
     pub span: Span,

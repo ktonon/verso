@@ -146,12 +146,13 @@
     },
 
     "directive-def": {
-      "match": "^(def)\\s+(\\S+)\\s*(:=)\\s*(.+)$",
+      "match": "^(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=)\\s*(.+)$",
       "captures": {
         "1": { "name": "keyword.control.directive.def.verso" },
         "2": { "name": "variable.parameter.def.verso" },
-        "3": { "name": "keyword.operator.definition.verso" },
-        "4": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
+        "3": { "name": "storage.type.dimension.verso" },
+        "4": { "name": "keyword.operator.definition.verso" },
+        "5": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
       }
     },
 
@@ -193,12 +194,13 @@
     },
 
     "indented-def": {
-      "match": "^\\s+(def)\\s+(\\S+)\\s*(:=)\\s*(.+)$",
+      "match": "^\\s+(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=)\\s*(.+)$",
       "captures": {
         "1": { "name": "keyword.control.directive.def.verso" },
         "2": { "name": "variable.parameter.def.verso" },
-        "3": { "name": "keyword.operator.definition.verso" },
-        "4": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
+        "3": { "name": "storage.type.dimension.verso" },
+        "4": { "name": "keyword.operator.definition.verso" },
+        "5": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
       }
     },
 

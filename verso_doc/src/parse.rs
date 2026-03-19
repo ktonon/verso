@@ -568,14 +568,27 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Definition: def name := expr
+        // Definition: def name [dim] := expr
         if trimmed == "def" || trimmed.starts_with("def ") {
             let rest = trimmed.strip_prefix("def").unwrap().trim();
             let assign_pos = rest.find(":=").ok_or_else(|| ParseDocError {
                 line: i + 1,
                 message: "def requires name := expr, e.g. def c := 3*10^8".into(),
             })?;
-            let name = rest[..assign_pos].trim().to_string();
+            let before_assign = rest[..assign_pos].trim();
+            // Check for optional dimension annotation: `name [dim]`
+            let (name, dimension) = if let Some(bracket_pos) = before_assign.find('[') {
+                let name = before_assign[..bracket_pos].trim().to_string();
+                let dim_str = before_assign[bracket_pos..].trim();
+                let dimension =
+                    Dimension::parse(dim_str).map_err(|e| ParseDocError {
+                        line: i + 1,
+                        message: format!("def '{}': {}", name, e),
+                    })?;
+                (name, Some(dimension))
+            } else {
+                (before_assign.to_string(), None)
+            };
             if name.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
@@ -592,6 +605,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             let description = collect_description(&lines, &mut i);
             blocks.push(Block::Def(DefDecl {
                 name,
+                dimension,
                 value,
                 description,
                 span,
@@ -1813,6 +1827,33 @@ proof pythag
                     "expected numeric expr, got: {}",
                     formatted
                 );
+            }
+            _ => panic!("expected Def"),
+        }
+    }
+
+    #[test]
+    fn parse_def_with_dimension() {
+        let src = "def c_{s} [L T^-1] := sqrt(μ / ρ_{0})";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Def(d) => {
+                assert_eq!(d.name, "c_{s}");
+                assert!(d.dimension.is_some(), "expected dimension annotation");
+                let dim = d.dimension.as_ref().unwrap();
+                assert_eq!(*dim, Dimension::parse("[L T^-1]").unwrap());
+            }
+            _ => panic!("expected Def"),
+        }
+    }
+
+    #[test]
+    fn parse_def_without_dimension() {
+        let src = "def c := 3*10^8";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Def(d) => {
+                assert!(d.dimension.is_none());
             }
             _ => panic!("expected Def"),
         }

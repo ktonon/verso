@@ -89,6 +89,9 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
             }
             Block::Def(decl) => {
                 ctx.declare_const(&decl.name, decl.value.clone());
+                if let Some(ref dim) = decl.dimension {
+                    ctx.declare_var(&decl.name, Some(dim.clone()));
+                }
                 if let Some(result) = check_def_dim(decl, &ctx) {
                     results.push(result);
                 }
@@ -160,6 +163,9 @@ fn verify_blocks(blocks: &[Block], parent_ctx: &Context) -> VerificationReport {
             }
             Block::Def(decl) => {
                 ctx.declare_const(&decl.name, decl.value.clone());
+                if let Some(ref dim) = decl.dimension {
+                    ctx.declare_var(&decl.name, Some(dim.clone()));
+                }
                 if let Some(result) = check_def_dim(decl, &ctx) {
                     results.push(result);
                 }
@@ -598,6 +604,39 @@ claim trivial
             "rhs-only var should not panic: {:?}",
             report.results
         );
+    }
+
+    #[test]
+    fn verify_def_lhs_dim_registers_dimension() {
+        // def with LHS dimension should make the name participate in dim checks
+        let src = "\
+def c_{s} [L T^-1] := 5
+claim speed
+  c_{s} + c_{s} = 2 * c_{s}
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        let claim = report.results.iter().find(|r| r.name == "speed").unwrap();
+        assert!(claim.passed(), "claim should pass: {:?}", claim);
+        assert!(
+            claim.dim_outcome.is_some(),
+            "should have dim_outcome because def declared [L T^-1]"
+        );
+    }
+
+    #[test]
+    fn verify_def_lhs_dim_catches_mismatch() {
+        // def with [L T^-1] used in addition with [M] should fail dim check
+        let src = "\
+var m [M]
+def c_{s} [L T^-1] := 5
+claim bad
+  c_{s} = m
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        let claim = report.results.iter().find(|r| r.name == "bad").unwrap();
+        assert!(!claim.passed(), "adding velocity to mass should fail dim check");
     }
 
     #[test]
