@@ -176,4 +176,34 @@
 #          ^ source.verso meta.block.table.verso keyword.operator.table.verso
 #           ^^^^^^^^ source.verso meta.block.table.verso
 #                   ^ source.verso meta.block.table.verso keyword.operator.table.verso
+>expect_fail dim_mismatch
+#^^^^^^^^^^^ source.verso meta.block.expect-fail.verso keyword.control.directive.expect-fail.verso
+#           ^ source.verso meta.block.expect-fail.verso
+#            ^^^^^^^^^^^^ source.verso meta.block.expect-fail.verso entity.name.function.expect-fail.verso
+>  var v [L T^-1]
+#^^ source.verso meta.block.expect-fail.verso
+#  ^^^ source.verso meta.block.expect-fail.verso keyword.control.directive.var.verso
+#     ^ source.verso meta.block.expect-fail.verso
+#      ^ source.verso meta.block.expect-fail.verso variable.parameter.var.verso
+#       ^ source.verso meta.block.expect-fail.verso
+#        ^^^^^^^^ source.verso meta.block.expect-fail.verso storage.type.dimension.verso
+>  var a [L T^-2]
+#^^ source.verso meta.block.expect-fail.verso
+#  ^^^ source.verso meta.block.expect-fail.verso keyword.control.directive.var.verso
+#     ^ source.verso meta.block.expect-fail.verso
+#      ^ source.verso meta.block.expect-fail.verso variable.parameter.var.verso
+#       ^ source.verso meta.block.expect-fail.verso
+#        ^^^^^^^^ source.verso meta.block.expect-fail.verso storage.type.dimension.verso
+>  claim bad
+#^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#  ^^^^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso keyword.control.directive.claim.verso
+#       ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#        ^^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso entity.name.function.claim.verso
+>    v = a
+#^^^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#    ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso meta.expression.lhs.verso
+#     ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#      ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso keyword.operator.equals.verso
+#       ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#        ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso meta.expression.rhs.verso
 >

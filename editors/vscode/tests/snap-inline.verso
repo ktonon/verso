@@ -18,3 +18,8 @@ func KE(m, v) := (1/2)*m*v^2
   | Name | Status |
   |------|--------|
   | Alpha | active |
+expect_fail dim_mismatch
+  var v [L T^-1]
+  var a [L T^-2]
+  claim bad
+    v = a

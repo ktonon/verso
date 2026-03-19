@@ -173,7 +173,70 @@
         "1": { "name": "keyword.control.directive.expect-fail.verso" },
         "2": { "name": "entity.name.function.expect-fail.verso" }
       },
-      "name": "meta.block.expect-fail.verso"
+      "name": "meta.block.expect-fail.verso",
+      "patterns": [
+        { "include": "#indented-claim" },
+        { "include": "#indented-var" },
+        { "include": "#indented-def" },
+        { "include": "#indented-func" },
+        { "include": "#indented-proof" }
+      ]
+    },
+
+    "indented-var": {
+      "match": "^\\s+(var)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.var.verso" },
+        "2": { "name": "variable.parameter.var.verso" },
+        "3": { "name": "storage.type.dimension.verso" }
+      }
+    },
+
+    "indented-def": {
+      "match": "^\\s+(def)\\s+(\\S+)\\s*(:=)\\s*(.+)$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.def.verso" },
+        "2": { "name": "variable.parameter.def.verso" },
+        "3": { "name": "keyword.operator.definition.verso" },
+        "4": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
+      }
+    },
+
+    "indented-func": {
+      "match": "^\\s+(func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(:=)\\s*(.+)$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.func.verso" },
+        "2": { "name": "entity.name.function.verso" },
+        "3": { "name": "variable.parameter.func.verso" },
+        "4": { "name": "keyword.operator.assignment.verso" },
+        "5": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
+      }
+    },
+
+    "indented-claim": {
+      "begin": "^\\s+(claim)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\s{0,2}\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.claim.verso" },
+        "2": { "name": "entity.name.function.claim.verso" }
+      },
+      "name": "meta.block.claim.verso",
+      "patterns": [
+        { "include": "#claim-body" }
+      ]
+    },
+
+    "indented-proof": {
+      "begin": "^\\s+(proof)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\s{0,2}\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.directive.proof.verso" },
+        "2": { "name": "entity.name.function.proof.verso" }
+      },
+      "name": "meta.block.proof.verso",
+      "patterns": [
+        { "include": "#proof-step" }
+      ]
     },
 
     "directive-bibliography": {
