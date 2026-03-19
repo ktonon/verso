@@ -357,22 +357,37 @@ impl Parser {
         Ok(expr)
     }
 
-    /// If the next token is `[` and the expression is purely numeric,
-    /// parse a unit annotation and wrap in a Quantity node.
+    /// If the next token is `[`, parse a unit or dimension annotation.
+    /// - Numeric expressions get unit annotations: `3 [kg]`
+    /// - Expressions with variables get dimension annotations: `(a*a) [L^2]`
     /// Returns `(annotated_expr, was_annotated)`.
     fn try_unit_annotation(
         &mut self,
         mut expr: crate::expr::Expr,
         start: usize,
     ) -> Result<(crate::expr::Expr, bool), ParseError> {
-        if matches!(self.peek(), Some(Token::LBracket)) && !expr_has_vars(&expr) {
+        if !matches!(self.peek(), Some(Token::LBracket)) {
+            return Ok((expr, false));
+        }
+        if expr_has_vars(&expr) {
+            // Expressions with variables get dimension annotations (e.g. [L^2])
+            self.next(); // consume [
+            let dim = self.parse_dimension_bracket()?;
+            let unit = crate::unit::Unit {
+                display: format!("{}", dim),
+                scale: 1.0,
+                dimension: dim,
+            };
+            expr = quantity(expr, unit);
+            expr.span = Span::new(start, self.prev_end);
+            Ok((expr, true))
+        } else {
+            // Numeric expressions get unit annotations (e.g. [kg])
             self.next(); // consume [
             let unit = self.parse_unit_bracket()?;
             expr = quantity(expr, unit);
             expr.span = Span::new(start, self.prev_end);
             Ok((expr, true))
-        } else {
-            Ok((expr, false))
         }
     }
 
@@ -1317,6 +1332,21 @@ mod tests {
                 assert_eq!(dim.as_ref().unwrap(), &Dimension::parse("[T^-1]").unwrap());
             }
             _ => panic!("expected Var"),
+        }
+    }
+
+    #[test]
+    fn parse_expr_dim_annotation() {
+        use crate::dim::{BaseDim, Dimension};
+
+        // Dimension annotation on an expression with variables
+        let expr = parse_expr("(a * a) [L^2]").unwrap();
+        match &expr.kind {
+            ExprKind::Quantity(_, unit) => {
+                assert_eq!(unit.dimension, Dimension::single(BaseDim::L, 2));
+                assert!((unit.scale - 1.0).abs() < 1e-15);
+            }
+            _ => panic!("expected Quantity, got {:?}", expr),
         }
     }
 
