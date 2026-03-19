@@ -928,6 +928,7 @@ async fn cmd_lsp() {
                 if trimmed.starts_with("claim ")
                     || trimmed.starts_with("proof ")
                     || trimmed.starts_with("expect_fail ")
+                    || trimmed.starts_with("def ")
                 {
                     let rest = trimmed.split_whitespace().nth(1).unwrap_or("");
                     if rest == name {
@@ -984,6 +985,18 @@ async fn cmd_lsp() {
                         message: format!(
                             "'{}' step {} failed: {} \u{2260} {}. Residual: {}",
                             result.name, step_index, from, to, residual
+                        ),
+                        source: Some("verso".to_string()),
+                        ..Default::default()
+                    });
+                }
+                Outcome::DefDimError { error } => {
+                    diagnostics.push(Diagnostic {
+                        range: line_range(original_line),
+                        severity: Some(DiagnosticSeverity::ERROR),
+                        message: format!(
+                            "def '{}' dimension error: {}",
+                            result.name, error
                         ),
                         source: Some("verso".to_string()),
                         ..Default::default()

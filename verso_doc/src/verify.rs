@@ -1,4 +1,4 @@
-use crate::ast::{Block, Claim, Document, Proof, Span};
+use crate::ast::{Block, Claim, DefDecl, Document, Proof, Span};
 use crate::dim::{collect_units, DimOutcome};
 use verso_symbolic::{Context, Expr, ExprKind};
 
@@ -67,6 +67,10 @@ pub enum Outcome {
         residual: Expr,
         step_span: Span,
     },
+    /// A def whose RHS has a dimensional error.
+    DefDimError {
+        error: String,
+    },
     /// expect_fail block: inner verification had at least one failure (test passes).
     ExpectFailPass,
     /// expect_fail block: all inner checks passed unexpectedly (test fails).
@@ -85,6 +89,9 @@ pub fn verify_document(doc: &Document) -> VerificationReport {
             }
             Block::Def(decl) => {
                 ctx.declare_const(&decl.name, decl.value.clone());
+                if let Some(result) = check_def_dim(decl, &ctx) {
+                    results.push(result);
+                }
             }
             Block::Func(decl) => {
                 ctx.declare_func(&decl.name, decl.params.clone(), decl.body.clone());
@@ -153,6 +160,9 @@ fn verify_blocks(blocks: &[Block], parent_ctx: &Context) -> VerificationReport {
             }
             Block::Def(decl) => {
                 ctx.declare_const(&decl.name, decl.value.clone());
+                if let Some(result) = check_def_dim(decl, &ctx) {
+                    results.push(result);
+                }
             }
             Block::Func(decl) => {
                 ctx.declare_func(&decl.name, decl.params.clone(), decl.body.clone());
@@ -204,6 +214,23 @@ fn verify_claim(claim: &Claim, ctx: &Context) -> VerificationResult {
         outcome,
         dim_outcome,
         units,
+    }
+}
+
+/// Check dimensional consistency of a def's RHS expression.
+/// Returns a failing VerificationResult only if the RHS has a dim error.
+fn check_def_dim(decl: &DefDecl, ctx: &Context) -> Option<VerificationResult> {
+    match ctx.check_expr_dim(&decl.value) {
+        Some(Err(e)) => Some(VerificationResult {
+            name: decl.name.clone(),
+            span: decl.span,
+            outcome: Outcome::DefDimError {
+                error: e.to_string(),
+            },
+            dim_outcome: None,
+            units: vec![],
+        }),
+        _ => None,
     }
 }
 
@@ -583,6 +610,25 @@ claim wrong
         let doc = parse_document(src).unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.fail_count(), 1);
+    }
+
+    #[test]
+    fn verify_def_rhs_dim_error() {
+        // def whose RHS has a dimension error should be reported
+        let src = "\
+var μ [M L^-1 T^-2]
+var ρ_{0} [M L^-3]
+def bad := sqrt(μ / ρ_{0}) + 1
+claim trivial
+  μ = μ
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        // Should have 2 results: one for the def error, one for the claim
+        let def_result = report.results.iter().find(|r| r.name == "bad");
+        assert!(def_result.is_some(), "def dim error should produce a result");
+        let def_result = def_result.unwrap();
+        assert!(!def_result.passed(), "def with dim error should not pass");
     }
 
     #[test]

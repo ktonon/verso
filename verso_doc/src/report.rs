@@ -87,6 +87,14 @@ fn write_result(f: &mut fmt::Formatter<'_>, result: &VerificationResult) -> fmt:
             writeln!(f, "      to: {}", to)?;
             writeln!(f, "    residual: {}", residual)
         }
+        Outcome::DefDimError { error } => {
+            writeln!(
+                f,
+                "  \x1b[31m\u{2717}\x1b[0m def {} (line {})",
+                result.name, result.span.line
+            )?;
+            writeln!(f, "    dim: {}", error)
+        }
         Outcome::ExpectFailPass => {
             writeln!(
                 f,
