@@ -416,71 +416,13 @@ pub fn path_to_position(tokens: &[Token], target: &AstPath) -> Option<usize> {
 
 /// Get a reference to the sub-expression at the given AST path.
 pub fn subexpr_at<'a>(expr: &'a Expr, path: &AstPath) -> Option<&'a Expr> {
-    let mut current = expr;
-    for &child_idx in path {
-        current = match (&current.kind, child_idx) {
-            (ExprKind::Add(a, _) | ExprKind::Mul(a, _) | ExprKind::Pow(a, _), 0) => a,
-            (ExprKind::Add(_, b) | ExprKind::Mul(_, b) | ExprKind::Pow(_, b), 1) => b,
-            (ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a), 0) => a,
-            (ExprKind::FnN(_, args), i) => args.get(i)?,
-            _ => return None,
-        };
-    }
-    Some(current)
+    expr.subexpr_at(path)
 }
 
 /// Replace the sub-expression at the given AST path with a new expression.
 /// Returns the modified expression, or None if the path is invalid.
 pub fn replace_subexpr(expr: &Expr, path: &[usize], replacement: Expr) -> Option<Expr> {
-    if path.is_empty() {
-        return Some(replacement);
-    }
-    let child_idx = path[0];
-    let rest = &path[1..];
-    match (&expr.kind, child_idx) {
-        (ExprKind::Add(a, b), 0) => {
-            let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::new(ExprKind::Add(Box::new(new_a), b.clone())))
-        }
-        (ExprKind::Add(a, b), 1) => {
-            let new_b = replace_subexpr(b, rest, replacement)?;
-            Some(Expr::new(ExprKind::Add(a.clone(), Box::new(new_b))))
-        }
-        (ExprKind::Mul(a, b), 0) => {
-            let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::new(ExprKind::Mul(Box::new(new_a), b.clone())))
-        }
-        (ExprKind::Mul(a, b), 1) => {
-            let new_b = replace_subexpr(b, rest, replacement)?;
-            Some(Expr::new(ExprKind::Mul(a.clone(), Box::new(new_b))))
-        }
-        (ExprKind::Pow(a, b), 0) => {
-            let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::new(ExprKind::Pow(Box::new(new_a), b.clone())))
-        }
-        (ExprKind::Pow(a, b), 1) => {
-            let new_b = replace_subexpr(b, rest, replacement)?;
-            Some(Expr::new(ExprKind::Pow(a.clone(), Box::new(new_b))))
-        }
-        (ExprKind::Neg(a), 0) => {
-            let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::new(ExprKind::Neg(Box::new(new_a))))
-        }
-        (ExprKind::Inv(a), 0) => {
-            let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::new(ExprKind::Inv(Box::new(new_a))))
-        }
-        (ExprKind::Fn(kind, a), 0) => {
-            let new_a = replace_subexpr(a, rest, replacement)?;
-            Some(Expr::new(ExprKind::Fn(kind.clone(), Box::new(new_a))))
-        }
-        (ExprKind::FnN(kind, args), i) if i < args.len() => {
-            let mut new_args = args.clone();
-            new_args[i] = replace_subexpr(&args[i], rest, replacement)?;
-            Some(Expr::new(ExprKind::FnN(kind.clone(), new_args)))
-        }
-        _ => None,
-    }
+    expr.replace_subexpr_untyped(path, replacement)
 }
 
 #[cfg(test)]

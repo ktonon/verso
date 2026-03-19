@@ -92,115 +92,27 @@ impl BeamSearch {
             return results;
         }
 
-        // Recursively try rewrites in children (with reduced depth)
-        match &expr.kind {
+        if matches!(
+            &expr.kind,
             ExprKind::Rational(_)
-            | ExprKind::Named(_)
-            | ExprKind::FracPi(_)
-            | ExprKind::Var { .. }
-            | ExprKind::Quantity(_, _) => {}
+                | ExprKind::Named(_)
+                | ExprKind::FracPi(_)
+                | ExprKind::Var { .. }
+                | ExprKind::Quantity(_, _)
+        ) {
+            return results;
+        }
 
-            ExprKind::Add(a, b) => {
-                for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
+        for child_idx in 0..expr.child_count() {
+            let child = expr.child(child_idx).unwrap();
+            for rewrite in self.all_rewrites_depth(child, rules, depth - 1) {
+                if let Some(rewritten_expr) = expr.replace_child_derived(child_idx, rewrite.expr) {
                     results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Add(Box::new(rewrite.expr), b.clone())),
+                        expr: rewritten_expr,
                         from_rule: rewrite.from_rule,
                         rule_name: rewrite.rule_name,
                         rule_display: rewrite.rule_display,
                     });
-                }
-                for rewrite in self.all_rewrites_depth(b, rules, depth - 1) {
-                    results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Add(a.clone(), Box::new(rewrite.expr))),
-                        from_rule: rewrite.from_rule,
-                        rule_name: rewrite.rule_name,
-                        rule_display: rewrite.rule_display,
-                    });
-                }
-            }
-
-            ExprKind::Mul(a, b) => {
-                for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
-                    results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Mul(Box::new(rewrite.expr), b.clone())),
-                        from_rule: rewrite.from_rule,
-                        rule_name: rewrite.rule_name,
-                        rule_display: rewrite.rule_display,
-                    });
-                }
-                for rewrite in self.all_rewrites_depth(b, rules, depth - 1) {
-                    results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Mul(a.clone(), Box::new(rewrite.expr))),
-                        from_rule: rewrite.from_rule,
-                        rule_name: rewrite.rule_name,
-                        rule_display: rewrite.rule_display,
-                    });
-                }
-            }
-
-            ExprKind::Pow(base, exp) => {
-                for rewrite in self.all_rewrites_depth(base, rules, depth - 1) {
-                    results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Pow(Box::new(rewrite.expr), exp.clone())),
-                        from_rule: rewrite.from_rule,
-                        rule_name: rewrite.rule_name,
-                        rule_display: rewrite.rule_display,
-                    });
-                }
-                for rewrite in self.all_rewrites_depth(exp, rules, depth - 1) {
-                    results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Pow(base.clone(), Box::new(rewrite.expr))),
-                        from_rule: rewrite.from_rule,
-                        rule_name: rewrite.rule_name,
-                        rule_display: rewrite.rule_display,
-                    });
-                }
-            }
-
-            ExprKind::Neg(a) => {
-                for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
-                    results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Neg(Box::new(rewrite.expr))),
-                        from_rule: rewrite.from_rule,
-                        rule_name: rewrite.rule_name,
-                        rule_display: rewrite.rule_display,
-                    });
-                }
-            }
-
-            ExprKind::Inv(a) => {
-                for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
-                    results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Inv(Box::new(rewrite.expr))),
-                        from_rule: rewrite.from_rule,
-                        rule_name: rewrite.rule_name,
-                        rule_display: rewrite.rule_display,
-                    });
-                }
-            }
-
-            ExprKind::Fn(kind, a) => {
-                for rewrite in self.all_rewrites_depth(a, rules, depth - 1) {
-                    results.push(Rewrite {
-                        expr: Expr::derived(ExprKind::Fn(kind.clone(), Box::new(rewrite.expr))),
-                        from_rule: rewrite.from_rule,
-                        rule_name: rewrite.rule_name,
-                        rule_display: rewrite.rule_display,
-                    });
-                }
-            }
-            ExprKind::FnN(kind, args) => {
-                for (idx, arg) in args.iter().enumerate() {
-                    for rewrite in self.all_rewrites_depth(arg, rules, depth - 1) {
-                        let mut new_args = args.clone();
-                        new_args[idx] = rewrite.expr;
-                        results.push(Rewrite {
-                            expr: Expr::derived(ExprKind::FnN(kind.clone(), new_args)),
-                            from_rule: rewrite.from_rule,
-                            rule_name: rewrite.rule_name,
-                            rule_display: rewrite.rule_display,
-                        });
-                    }
                 }
             }
         }

@@ -45,6 +45,10 @@ coverage.
 - 2026-03-19: Phase 3 then moved the large `compile_tex` unit-test block into
   `verso_doc/src/compile_tex/tests.rs`, so the runtime module stays focused on
   orchestration while preserving the existing compiler test coverage.
+- 2026-03-19: Phase 4 started by adding path-based child traversal and
+  replacement helpers on `verso_symbolic::Expr`, then migrating `search.rs`
+  and `token.rs` to reuse that transform API instead of open-coded
+  `match ExprKind` rebuilding.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -146,6 +150,7 @@ Success criteria:
 
 - Fewer repeated `match ExprKind` traversal blocks across modules.
 - New symbolic features can reuse shared traversal primitives.
+- Status: started on 2026-03-19.
 
 ### Phase 5 - Close Testing and Tooling Gaps
 

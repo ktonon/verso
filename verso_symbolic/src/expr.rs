@@ -400,6 +400,107 @@ impl Expr {
         }
     }
 
+    /// Return the number of direct expression children owned by this node.
+    pub fn child_count(&self) -> usize {
+        match &self.kind {
+            ExprKind::Add(_, _) | ExprKind::Mul(_, _) | ExprKind::Pow(_, _) => 2,
+            ExprKind::Neg(_)
+            | ExprKind::Inv(_)
+            | ExprKind::Fn(_, _)
+            | ExprKind::Quantity(_, _) => 1,
+            ExprKind::FnN(_, args) => args.len(),
+            ExprKind::Rational(_)
+            | ExprKind::Named(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Var { .. } => 0,
+        }
+    }
+
+    /// Return a direct child by index.
+    pub fn child(&self, index: usize) -> Option<&Expr> {
+        match (&self.kind, index) {
+            (ExprKind::Add(a, _) | ExprKind::Mul(a, _) | ExprKind::Pow(a, _), 0) => Some(a),
+            (ExprKind::Add(_, b) | ExprKind::Mul(_, b) | ExprKind::Pow(_, b), 1) => Some(b),
+            (ExprKind::Neg(inner) | ExprKind::Inv(inner) | ExprKind::Fn(_, inner), 0) => {
+                Some(inner)
+            }
+            (ExprKind::FnN(_, args), idx) => args.get(idx),
+            (ExprKind::Quantity(inner, _), 0) => Some(inner),
+            _ => None,
+        }
+    }
+
+    /// Return the sub-expression at the given AST path.
+    pub fn subexpr_at(&self, path: &[usize]) -> Option<&Expr> {
+        let mut current = self;
+        for &child_idx in path {
+            current = current.child(child_idx)?;
+        }
+        Some(current)
+    }
+
+    /// Replace a direct child and rebuild with inferred types.
+    pub fn replace_child_derived(&self, index: usize, replacement: Expr) -> Option<Expr> {
+        self.replace_child_with(index, replacement, Expr::derived)
+    }
+
+    /// Replace a direct child and rebuild as an untyped expression.
+    pub fn replace_child_untyped(&self, index: usize, replacement: Expr) -> Option<Expr> {
+        self.replace_child_with(index, replacement, Expr::new)
+    }
+
+    /// Replace a sub-expression by AST path and rebuild with inferred types.
+    pub fn replace_subexpr_derived(&self, path: &[usize], replacement: Expr) -> Option<Expr> {
+        self.replace_subexpr_with(path, replacement, Expr::derived)
+    }
+
+    /// Replace a sub-expression by AST path and rebuild as an untyped expression.
+    pub fn replace_subexpr_untyped(&self, path: &[usize], replacement: Expr) -> Option<Expr> {
+        self.replace_subexpr_with(path, replacement, Expr::new)
+    }
+
+    fn replace_child_with<F>(&self, index: usize, replacement: Expr, build: F) -> Option<Expr>
+    where
+        F: Copy + Fn(ExprKind) -> Expr,
+    {
+        match (&self.kind, index) {
+            (ExprKind::Add(_, b), 0) => Some(build(ExprKind::Add(Box::new(replacement), b.clone()))),
+            (ExprKind::Add(a, _), 1) => Some(build(ExprKind::Add(a.clone(), Box::new(replacement)))),
+            (ExprKind::Mul(_, b), 0) => Some(build(ExprKind::Mul(Box::new(replacement), b.clone()))),
+            (ExprKind::Mul(a, _), 1) => Some(build(ExprKind::Mul(a.clone(), Box::new(replacement)))),
+            (ExprKind::Pow(_, b), 0) => Some(build(ExprKind::Pow(Box::new(replacement), b.clone()))),
+            (ExprKind::Pow(a, _), 1) => Some(build(ExprKind::Pow(a.clone(), Box::new(replacement)))),
+            (ExprKind::Neg(_), 0) => Some(build(ExprKind::Neg(Box::new(replacement)))),
+            (ExprKind::Inv(_), 0) => Some(build(ExprKind::Inv(Box::new(replacement)))),
+            (ExprKind::Fn(kind, _), 0) => {
+                Some(build(ExprKind::Fn(kind.clone(), Box::new(replacement))))
+            }
+            (ExprKind::FnN(kind, args), idx) if idx < args.len() => {
+                let mut new_args = args.clone();
+                new_args[idx] = replacement;
+                Some(build(ExprKind::FnN(kind.clone(), new_args)))
+            }
+            (ExprKind::Quantity(_, unit), 0) => {
+                Some(build(ExprKind::Quantity(Box::new(replacement), unit.clone())))
+            }
+            _ => None,
+        }
+    }
+
+    fn replace_subexpr_with<F>(&self, path: &[usize], replacement: Expr, build: F) -> Option<Expr>
+    where
+        F: Copy + Fn(ExprKind) -> Expr,
+    {
+        if path.is_empty() {
+            return Some(replacement);
+        }
+
+        let child_idx = path[0];
+        let child = self.child(child_idx)?;
+        let rewritten = child.replace_subexpr_with(&path[1..], replacement, build)?;
+        self.replace_child_with(child_idx, rewritten, build)
+    }
+
     /// Visit every node in the tree, calling `f` on each.
     pub fn walk(&self, f: &mut impl FnMut(&Expr)) {
         f(self);
@@ -808,6 +909,36 @@ mod tests {
     fn collect_units_no_units() {
         let e = add(scalar("x"), constant(1.0));
         assert!(e.collect_units().is_empty());
+    }
+
+    #[test]
+    fn child_and_subexpr_at_follow_ast_paths() {
+        let product = mul(scalar("x"), scalar("y"));
+        let expr = add(product.clone(), scalar("z"));
+        assert_eq!(expr.child_count(), 2);
+        assert_eq!(expr.child(0), Some(&product));
+        assert_eq!(expr.subexpr_at(&[0, 1]), Some(&scalar("y")));
+        assert_eq!(expr.subexpr_at(&[2]), None);
+    }
+
+    #[test]
+    fn replace_child_derived_rebuilds_parent() {
+        let expr = add(scalar("x"), scalar("y"));
+        let replaced = expr.replace_child_derived(1, constant(2.0)).unwrap();
+        assert_eq!(replaced, add(scalar("x"), constant(2.0)));
+    }
+
+    #[test]
+    fn replace_subexpr_untyped_rebuilds_nested_path() {
+        let expr = add(mul(scalar("x"), scalar("y")), scalar("z"));
+        let replaced = expr.replace_subexpr_untyped(&[0, 1], scalar("w")).unwrap();
+        assert_eq!(replaced, add(mul(scalar("x"), scalar("w")), scalar("z")));
+    }
+
+    #[test]
+    fn replace_subexpr_returns_none_for_invalid_paths() {
+        let expr = scalar("x");
+        assert!(expr.replace_subexpr_derived(&[0], scalar("y")).is_none());
     }
 
     // --- first_unit ---
