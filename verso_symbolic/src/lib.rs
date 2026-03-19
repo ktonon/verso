@@ -18,7 +18,8 @@ pub mod unit;
 pub mod validate;
 
 pub use context::{
-    format_dim_error, is_zero, Context, DimEnv, DimError, DimOutcome, EqualityResult,
+    format_dim_error, is_zero, subscript_base, Context, DimEnv, DimError, DimOutcome,
+    EqualityResult,
 };
 pub use dim::{BaseDim, Dimension};
 pub use eval::{eval_f64, free_vars, spot_check, SpotCheckFailure};

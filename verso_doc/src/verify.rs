@@ -1,6 +1,6 @@
 use crate::ast::{Block, Claim, DefDecl, Document, Proof, Span};
 use crate::dim::{collect_units, DimOutcome};
-use verso_symbolic::{Context, Expr, ExprKind};
+use verso_symbolic::{subscript_base, Context, Expr, ExprKind};
 
 #[derive(Debug)]
 pub struct VerificationReport {
@@ -224,7 +224,9 @@ fn verify_claim(claim: &Claim, ctx: &Context) -> VerificationResult {
 }
 
 /// Check dimensional consistency of a def's RHS expression.
-/// Returns a failing VerificationResult only if the RHS has a dim error.
+/// Returns a failing VerificationResult if the RHS has a dim error or if
+/// the RHS dimension doesn't match the declared dimension for the def's
+/// base name (e.g. `var c_{mode} [L T^-1]` constrains all `c_{*}` defs).
 fn check_def_dim(decl: &DefDecl, ctx: &Context) -> Option<VerificationResult> {
     match ctx.check_expr_dim(&decl.value) {
         Some(Err(e)) => Some(VerificationResult {
@@ -236,6 +238,27 @@ fn check_def_dim(decl: &DefDecl, ctx: &Context) -> Option<VerificationResult> {
             dim_outcome: None,
             units: vec![],
         }),
+        Some(Ok(rhs_dim)) => {
+            // Check that the RHS dimension matches the declared base-name dimension
+            let base = subscript_base(&decl.name);
+            if let Some(declared) = ctx.dims.get(base) {
+                if !rhs_dim.is_dimensionless() && declared != &rhs_dim {
+                    return Some(VerificationResult {
+                        name: decl.name.clone(),
+                        span: decl.span,
+                        outcome: Outcome::DefDimError {
+                            error: format!(
+                                "expected {} (from {}), got {}",
+                                declared, base, rhs_dim
+                            ),
+                        },
+                        dim_outcome: None,
+                        units: vec![],
+                    });
+                }
+            }
+            None
+        }
         _ => None,
     }
 }
@@ -637,6 +660,31 @@ claim bad
         let report = verify_document(&doc);
         let claim = report.results.iter().find(|r| r.name == "bad").unwrap();
         assert!(!claim.passed(), "adding velocity to mass should fail dim check");
+    }
+
+    #[test]
+    fn verify_def_rhs_dim_must_match_base_var() {
+        // var c_{mode} declares base "c" as [L T^-1].
+        // def c_{p} := expr should error if expr has a different dimension.
+        let src = "\
+var ρ_{0} [M L^-3]
+var K [M L^-1 T^-2]
+var c_{mode} [L^2 T^-1]
+def c_{p} := sqrt(K / ρ_{0})
+claim trivial
+  K = K
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        let def_result = report.results.iter().find(|r| r.name == "c_{p}");
+        assert!(
+            def_result.is_some(),
+            "def c_{{p}} should produce a dim error result"
+        );
+        assert!(
+            !def_result.unwrap().passed(),
+            "def c_{{p}} RHS is [L T^-1] but base c is declared [L^2 T^-1]"
+        );
     }
 
     #[test]
