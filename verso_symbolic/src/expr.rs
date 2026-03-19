@@ -459,6 +459,63 @@ impl Expr {
         self.replace_subexpr_with(path, replacement, Expr::new)
     }
 
+    /// Rebuild the tree bottom-up, giving `f` a chance to rewrite each node
+    /// after its children have already been transformed.
+    pub fn rewrite_bottom_up_derived(&self, f: &mut impl FnMut(&Expr) -> Option<Expr>) -> Expr {
+        let rebuilt = match &self.kind {
+            ExprKind::Add(a, b) => Expr::spanned_derived(
+                ExprKind::Add(
+                    Box::new(a.rewrite_bottom_up_derived(f)),
+                    Box::new(b.rewrite_bottom_up_derived(f)),
+                ),
+                self.span,
+            ),
+            ExprKind::Mul(a, b) => Expr::spanned_derived(
+                ExprKind::Mul(
+                    Box::new(a.rewrite_bottom_up_derived(f)),
+                    Box::new(b.rewrite_bottom_up_derived(f)),
+                ),
+                self.span,
+            ),
+            ExprKind::Pow(a, b) => Expr::spanned_derived(
+                ExprKind::Pow(
+                    Box::new(a.rewrite_bottom_up_derived(f)),
+                    Box::new(b.rewrite_bottom_up_derived(f)),
+                ),
+                self.span,
+            ),
+            ExprKind::Neg(inner) => Expr::spanned_derived(
+                ExprKind::Neg(Box::new(inner.rewrite_bottom_up_derived(f))),
+                self.span,
+            ),
+            ExprKind::Inv(inner) => Expr::spanned_derived(
+                ExprKind::Inv(Box::new(inner.rewrite_bottom_up_derived(f))),
+                self.span,
+            ),
+            ExprKind::Fn(kind, inner) => Expr::spanned_derived(
+                ExprKind::Fn(kind.clone(), Box::new(inner.rewrite_bottom_up_derived(f))),
+                self.span,
+            ),
+            ExprKind::FnN(kind, args) => Expr::spanned_derived(
+                ExprKind::FnN(
+                    kind.clone(),
+                    args.iter().map(|arg| arg.rewrite_bottom_up_derived(f)).collect(),
+                ),
+                self.span,
+            ),
+            ExprKind::Quantity(inner, unit) => Expr::spanned_derived(
+                ExprKind::Quantity(Box::new(inner.rewrite_bottom_up_derived(f)), unit.clone()),
+                self.span,
+            ),
+            ExprKind::Rational(_)
+            | ExprKind::Named(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Var { .. } => self.clone(),
+        };
+
+        f(&rebuilt).unwrap_or(rebuilt)
+    }
+
     fn replace_child_with<F>(&self, index: usize, replacement: Expr, build: F) -> Option<Expr>
     where
         F: Copy + Fn(ExprKind) -> Expr,
@@ -939,6 +996,25 @@ mod tests {
     fn replace_subexpr_returns_none_for_invalid_paths() {
         let expr = scalar("x");
         assert!(expr.replace_subexpr_derived(&[0], scalar("y")).is_none());
+    }
+
+    #[test]
+    fn rewrite_bottom_up_derived_visits_children_before_parents() {
+        let expr = neg(add(constant(1.0), constant(2.0)));
+        let rewritten = expr.rewrite_bottom_up_derived(&mut |node| match &node.kind {
+            ExprKind::Add(a, b) => match (&a.kind, &b.kind) {
+                (ExprKind::Rational(a), ExprKind::Rational(b)) => {
+                    Some(Expr::derived(ExprKind::Rational(*a + *b)))
+                }
+                _ => None,
+            },
+            ExprKind::Neg(inner) => match &inner.kind {
+                ExprKind::Rational(r) => Some(Expr::derived(ExprKind::Rational(-*r))),
+                _ => None,
+            },
+            _ => None,
+        });
+        assert_eq!(rewritten, constant(-3.0));
     }
 
     // --- first_unit ---

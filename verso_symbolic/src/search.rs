@@ -391,110 +391,94 @@ fn isqrt(n: i64) -> Option<i64> {
 /// No normalization (no factor sorting, no mul shortcuts). This is mathematical evaluation,
 /// not a search strategy choice.
 pub fn eval_constants(expr: &Expr) -> Expr {
-    match &expr.kind {
-        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) | ExprKind::Var { .. } => {
-            expr.clone()
-        }
+    expr.rewrite_bottom_up_derived(&mut |node| match &node.kind {
+        ExprKind::Rational(_)
+        | ExprKind::FracPi(_)
+        | ExprKind::Named(_)
+        | ExprKind::Var { .. }
+        | ExprKind::FnN(_, _) => None,
         ExprKind::Quantity(inner, unit) => {
-            let inner = eval_constants(inner);
             if let ExprKind::Rational(r) = &inner.kind {
                 let val = r.value() * unit.scale;
-                // Try integer
                 let rounded = val.round();
                 if (val - rounded).abs() < 1e-9 && rounded.abs() < i64::MAX as f64 {
-                    return Expr::derived(ExprKind::Rational(Rational::from_i64(rounded as i64)));
+                    return Some(Expr::derived(ExprKind::Rational(Rational::from_i64(
+                        rounded as i64,
+                    ))));
                 }
-                // Try common denominators for SI scales (handles gram = 0.001, etc.)
                 for den in [10i64, 100, 1000, 1_000_000, 1_000_000_000] {
                     let num_f64 = val * den as f64;
                     let num_rounded = num_f64.round();
-                    if (num_f64 - num_rounded).abs() < 1e-6 && num_rounded.abs() < i64::MAX as f64 {
-                        return Expr::derived(ExprKind::Rational(Rational::new(
+                    if (num_f64 - num_rounded).abs() < 1e-6 && num_rounded.abs() < i64::MAX as f64
+                    {
+                        return Some(Expr::derived(ExprKind::Rational(Rational::new(
                             num_rounded as i64,
                             den,
-                        )));
+                        ))));
                     }
                 }
             }
-            Expr::derived(ExprKind::Quantity(Box::new(inner), unit.clone()))
+            None
         }
-        ExprKind::Neg(a) => {
-            let inner = eval_constants(a);
-            match &inner.kind {
-                ExprKind::Rational(r) => Expr::derived(ExprKind::Rational(-*r)),
-                ExprKind::FracPi(r) => Expr::derived(ExprKind::FracPi(-*r)),
-                _ => Expr::derived(ExprKind::Neg(Box::new(inner))),
+        ExprKind::Neg(inner) => match &inner.kind {
+            ExprKind::Rational(r) => Some(Expr::derived(ExprKind::Rational(-*r))),
+            ExprKind::FracPi(r) => Some(Expr::derived(ExprKind::FracPi(-*r))),
+            _ => None,
+        },
+        ExprKind::Inv(inner) => match &inner.kind {
+            ExprKind::Rational(r) if !r.is_zero() => {
+                Some(Expr::derived(ExprKind::Rational(Rational::ONE / *r)))
             }
-        }
-        ExprKind::Inv(a) => {
-            let inner = eval_constants(a);
-            match &inner.kind {
-                ExprKind::Rational(r) if !r.is_zero() => {
-                    Expr::derived(ExprKind::Rational(Rational::ONE / *r))
-                }
-                _ => Expr::derived(ExprKind::Inv(Box::new(inner))),
-            }
-        }
-        ExprKind::Add(a, b) => {
-            let left = eval_constants(a);
-            let right = eval_constants(b);
-            // Rational + Rational → Rational
+            _ => None,
+        },
+        ExprKind::Add(left, right) => {
             if let (ExprKind::Rational(a), ExprKind::Rational(b)) = (&left.kind, &right.kind) {
-                return Expr::derived(ExprKind::Rational(*a + *b));
+                return Some(Expr::derived(ExprKind::Rational(*a + *b)));
             }
-            // FracPi + FracPi → FracPi
             if let (ExprKind::FracPi(a), ExprKind::FracPi(b)) = (&left.kind, &right.kind) {
                 let sum = *a + *b;
-                return if sum.is_zero() {
+                return Some(if sum.is_zero() {
                     Expr::derived(ExprKind::Rational(Rational::ZERO))
                 } else {
                     Expr::derived(ExprKind::FracPi(sum))
-                };
+                });
             }
-            Expr::derived(ExprKind::Add(Box::new(left), Box::new(right)))
+            None
         }
-        ExprKind::Mul(a, b) => {
-            // Check for Quantity * Quantity before recursing (recursion strips wrappers)
+        ExprKind::Mul(left, right) => {
             if let (ExprKind::Quantity(a_inner, u1), ExprKind::Quantity(b_inner, u2)) =
-                (&a.kind, &b.kind)
+                (&left.kind, &right.kind)
             {
                 let inner = eval_constants(&Expr::derived(ExprKind::Mul(
-                    Box::new(eval_constants(a_inner)),
-                    Box::new(eval_constants(b_inner)),
+                    a_inner.clone(),
+                    b_inner.clone(),
                 )));
-                return Expr::derived(ExprKind::Quantity(Box::new(inner), u1.mul(u2)));
+                return Some(Expr::derived(ExprKind::Quantity(Box::new(inner), u1.mul(u2))));
             }
-            let left = eval_constants(a);
-            let right = eval_constants(b);
-            // Rational * Rational → Rational
             if let (ExprKind::Rational(a), ExprKind::Rational(b)) = (&left.kind, &right.kind) {
-                return Expr::derived(ExprKind::Rational(*a * *b));
+                return Some(Expr::derived(ExprKind::Rational(*a * *b)));
             }
-            // Rational * FracPi → FracPi
             if let (ExprKind::Rational(a), ExprKind::FracPi(b))
             | (ExprKind::FracPi(b), ExprKind::Rational(a)) = (&left.kind, &right.kind)
             {
                 let prod = *a * *b;
-                return if prod.is_zero() {
+                return Some(if prod.is_zero() {
                     Expr::derived(ExprKind::Rational(Rational::ZERO))
                 } else {
                     Expr::derived(ExprKind::FracPi(prod))
-                };
+                });
             }
-            // Collect x * x → x^2 (for non-constant expressions)
             if left == right && !matches!(left.kind, ExprKind::Rational(_) | ExprKind::FracPi(_)) {
-                return Expr::derived(ExprKind::Pow(
-                    Box::new(left),
+                return Some(Expr::derived(ExprKind::Pow(
+                    Box::new((**left).clone()),
                     Box::new(Expr::derived(ExprKind::Rational(Rational::TWO))),
-                ));
+                )));
             }
-            Expr::derived(ExprKind::Mul(Box::new(left), Box::new(right)))
+            None
         }
         ExprKind::Pow(base, exp) => {
-            let b = eval_constants(base);
-            let e = eval_constants(exp);
-            // Rational ^ Rational (integer exponent) → Rational
-            if let (ExprKind::Rational(base_r), ExprKind::Rational(exp_r)) = (&b.kind, &e.kind) {
+            if let (ExprKind::Rational(base_r), ExprKind::Rational(exp_r)) = (&base.kind, &exp.kind)
+            {
                 if exp_r.is_integer() && exp_r.num().abs() <= 20 {
                     let n = exp_r.num();
                     if n >= 0 {
@@ -502,48 +486,48 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                         for _ in 0..n {
                             result = result * *base_r;
                         }
-                        return Expr::derived(ExprKind::Rational(result));
+                        return Some(Expr::derived(ExprKind::Rational(result)));
                     }
-                    // Negative exponent: compute positive power then invert
                     if !base_r.is_zero() {
                         let mut result = Rational::ONE;
                         for _ in 0..(-n) {
                             result = result * *base_r;
                         }
-                        return Expr::derived(ExprKind::Rational(Rational::ONE / result));
+                        return Some(Expr::derived(ExprKind::Rational(Rational::ONE / result)));
                     }
                 }
-                // sqrt: exponent = 1/2, non-negative base with perfect square num/den
                 if *exp_r == Rational::new(1, 2) && !base_r.is_negative() {
                     let ns = isqrt(base_r.num());
                     let ds = isqrt(base_r.den());
                     if let (Some(n), Some(d)) = (ns, ds) {
-                        return Expr::derived(ExprKind::Rational(Rational::new(n, d)));
+                        return Some(Expr::derived(ExprKind::Rational(Rational::new(n, d))));
                     }
                 }
             }
-            // (-x)^(even integer) → x^(even integer)
-            if let ExprKind::Neg(inner) = &b.kind {
-                if let ExprKind::Rational(exp_r) = &e.kind {
+            if let ExprKind::Neg(inner) = &base.kind {
+                if let ExprKind::Rational(exp_r) = &exp.kind {
                     if exp_r.is_even() {
-                        return Expr::derived(ExprKind::Pow(inner.clone(), Box::new(e)));
+                        return Some(Expr::derived(ExprKind::Pow(
+                            inner.clone(),
+                            Box::new((**exp).clone()),
+                        )));
                     }
                 }
             }
-            Expr::derived(ExprKind::Pow(Box::new(b), Box::new(e)))
+            None
         }
-        ExprKind::Fn(kind, a) => {
-            let arg = eval_constants(a);
-            // Evaluate numeric functions on rational arguments
+        ExprKind::Fn(kind, arg) => {
             if let ExprKind::Rational(r) = &arg.kind {
                 match kind {
                     FnKind::Floor => {
-                        return Expr::derived(ExprKind::Rational(Rational::from_i64(r.floor())));
+                        return Some(Expr::derived(ExprKind::Rational(Rational::from_i64(
+                            r.floor(),
+                        ))));
                     }
                     FnKind::Ceil => {
                         let f = r.floor();
                         let c = if r.fract().is_zero() { f } else { f + 1 };
-                        return Expr::derived(ExprKind::Rational(Rational::from_i64(c)));
+                        return Some(Expr::derived(ExprKind::Rational(Rational::from_i64(c))));
                     }
                     FnKind::Round => {
                         let f = r.floor();
@@ -552,7 +536,7 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                         } else {
                             f
                         };
-                        return Expr::derived(ExprKind::Rational(Rational::from_i64(c)));
+                        return Some(Expr::derived(ExprKind::Rational(Rational::from_i64(c))));
                     }
                     FnKind::Sign => {
                         let v = if r.is_positive() {
@@ -562,37 +546,34 @@ pub fn eval_constants(expr: &Expr) -> Expr {
                         } else {
                             0
                         };
-                        return Expr::derived(ExprKind::Rational(Rational::from_i64(v)));
+                        return Some(Expr::derived(ExprKind::Rational(Rational::from_i64(v))));
                     }
                     FnKind::Custom(name) if name == "abs" => {
-                        return Expr::derived(ExprKind::Rational(r.abs()));
+                        return Some(Expr::derived(ExprKind::Rational(r.abs())));
                     }
                     _ => {}
                 }
             }
-            let arg = match (&arg.kind, kind) {
-                // Normalize FracPi mod 2 for trig functions
+            match (&arg.kind, kind) {
                 (ExprKind::FracPi(r), FnKind::Sin | FnKind::Cos | FnKind::Tan) => {
                     let normalized = r.rem_euclid(Rational::TWO);
                     if &normalized != r {
-                        if normalized.is_zero() {
-                            Expr::derived(ExprKind::FracPi(Rational::ZERO))
-                        } else {
-                            Expr::derived(ExprKind::FracPi(normalized))
-                        }
+                        Some(Expr::derived(ExprKind::Fn(
+                            kind.clone(),
+                            Box::new(if normalized.is_zero() {
+                                Expr::derived(ExprKind::FracPi(Rational::ZERO))
+                            } else {
+                                Expr::derived(ExprKind::FracPi(normalized))
+                            }),
+                        )))
                     } else {
-                        arg
+                        None
                     }
                 }
-                _ => arg,
-            };
-            Expr::derived(ExprKind::Fn(kind.clone(), Box::new(arg)))
+                _ => None,
+            }
         }
-        ExprKind::FnN(kind, args) => Expr::derived(ExprKind::FnN(
-            kind.clone(),
-            args.iter().map(eval_constants).collect(),
-        )),
-    }
+    })
 }
 
 /// Collect all indices from an expression.
@@ -3262,6 +3243,35 @@ mod tests {
         let expr = Expr::new(ExprKind::Quantity(Box::new(rational(5, 1)), g));
         let result = eval_constants(&expr);
         assert_eq!(result, rational(1, 200));
+    }
+
+    #[test]
+    fn eval_constants_multiplies_symbolic_quantities_after_child_folding() {
+        use crate::dim::{BaseDim, Dimension};
+        use crate::unit::Unit;
+
+        let meters = Unit {
+            dimension: Dimension::single(BaseDim::L, 1),
+            scale: 1.0,
+            display: "m".to_string(),
+        };
+        let seconds = Unit {
+            dimension: Dimension::single(BaseDim::T, 1),
+            scale: 1.0,
+            display: "s".to_string(),
+        };
+        let expr = mul(
+            Expr::new(ExprKind::Quantity(Box::new(scalar("x")), meters.clone())),
+            Expr::new(ExprKind::Quantity(Box::new(scalar("y")), seconds.clone())),
+        );
+
+        let result = eval_constants(&expr);
+        let expected = Expr::derived(ExprKind::Quantity(
+            Box::new(mul(scalar("x"), scalar("y"))),
+            meters.mul(&seconds),
+        ));
+
+        assert_eq!(result, expected);
     }
 
     #[test]

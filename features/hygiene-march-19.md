@@ -49,6 +49,11 @@ coverage.
   replacement helpers on `verso_symbolic::Expr`, then migrating `search.rs`
   and `token.rs` to reuse that transform API instead of open-coded
   `match ExprKind` rebuilding.
+- 2026-03-19: Phase 4 continued by adding a bottom-up
+  `Expr::rewrite_bottom_up_derived` helper, then migrating
+  `verso_symbolic/src/search.rs::eval_constants` to that shared traversal and
+  adding focused regression coverage for child-first rewrites and quantity
+  multiplication folding.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
