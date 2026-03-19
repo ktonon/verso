@@ -35,6 +35,9 @@ coverage.
 - 2026-03-19: Phase 3 continued by extracting prose escaping, inline rendering,
   and TeX render context helpers from `verso_doc/src/compile_tex.rs` into
   `verso_doc/src/tex_prose.rs`.
+- 2026-03-19: Phase 3 then moved list, table, figure, quote, math-block, and
+  environment emitters into `verso_doc/src/tex_blocks.rs`, leaving
+  `verso_doc/src/compile_tex.rs` more focused on document orchestration.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.

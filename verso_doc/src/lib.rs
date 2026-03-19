@@ -18,6 +18,7 @@ pub mod eval;
 pub mod parse;
 pub mod report;
 mod source;
+mod tex_blocks;
 mod tex_preamble;
 mod tex_prose;
 mod tex_queries;
