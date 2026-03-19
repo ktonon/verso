@@ -1,6 +1,7 @@
 use crate::dim::Dimension;
 use crate::eval::{free_vars, spot_check};
-use crate::expr::{Expr, ExprKind, Span, Ty};
+use crate::expr::{Expr, ExprKind, Index, IndexPosition, Span, Ty};
+use crate::rational::Rational;
 use crate::rule::{self, Pattern, Rule, RuleSet};
 use crate::search;
 use std::collections::{HashMap, HashSet};
@@ -106,13 +107,17 @@ impl Context {
     }
 
     /// Register a verified claim as a rewrite rule.
-    /// Only free variables present in the LHS become pattern wildcards;
-    /// variables appearing only in the RHS stay concrete so that
-    /// `substitute` never encounters an unbound wildcard.
+    /// Constants are substituted first so that defined names (e.g. `Λ`)
+    /// don't become spurious wildcards.  Only free variables present in
+    /// the LHS become pattern wildcards; variables appearing only in the
+    /// RHS stay concrete so that `substitute` never encounters an unbound
+    /// wildcard.
     pub fn add_claim_as_rule(&mut self, name: &str, lhs: &Expr, rhs: &Expr) {
-        let wildcards: HashSet<String> = free_vars(lhs).into_iter().collect();
-        let lhs_pat = expr_to_pattern(lhs, &wildcards);
-        let rhs_pat = expr_to_pattern(rhs, &wildcards);
+        let lhs = self.apply_consts(lhs);
+        let rhs = self.apply_consts(rhs);
+        let wildcards: HashSet<String> = free_vars(&lhs).into_iter().collect();
+        let lhs_pat = expr_to_pattern(&lhs, &wildcards);
+        let rhs_pat = expr_to_pattern(&rhs, &wildcards);
         self.rules.add(Rule {
             name: format!("claim:{}", name),
             lhs: lhs_pat,
@@ -523,8 +528,22 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
                     Ty::Concrete(Dimension::dimensionless())
                 }
                 (Some(db), Some(_)) => {
-                    let n = expr_as_integer(&exp).ok_or(DimError::NonIntegerPower(exp.span))?;
-                    Ty::Concrete(db.pow(n))
+                    if let Some(n) = expr_as_integer(&exp) {
+                        Ty::Concrete(db.pow(n))
+                    } else if let Some(r) = expr_as_rational(&exp) {
+                        // Handle rational exponents like 1/2 (sqrt) on dimensional
+                        // quantities. Compute dim^(p/q) by raising to p and taking
+                        // the q-th root, requiring all intermediate exponents to
+                        // be divisible by q.
+                        let raised = if r.num() == 1 { db.clone() } else {
+                            db.pow(r.num() as i32)
+                        };
+                        let result = raised.nth_root(r.den() as u32)
+                            .ok_or(DimError::NonIntegerPower(exp.span))?;
+                        Ty::Concrete(result)
+                    } else {
+                        return Err(DimError::NonIntegerPower(exp.span));
+                    }
                 }
                 _ => Ty::Unresolved,
             };
@@ -708,6 +727,14 @@ fn expr_as_integer(expr: &Expr) -> Option<i32> {
     }
 }
 
+fn expr_as_rational(expr: &Expr) -> Option<Rational> {
+    match &expr.kind {
+        ExprKind::Rational(r) => Some(*r),
+        ExprKind::Neg(inner) => expr_as_rational(inner).map(|r| Rational::new(-r.num(), r.den())),
+        _ => None,
+    }
+}
+
 fn respan_tree(expr: &Expr, span: Span) -> Expr {
     let ty = expr.ty.clone();
     let kind = match &expr.kind {
@@ -785,19 +812,45 @@ fn expr_to_pattern(expr: &Expr, wildcards: &HashSet<String>) -> Pattern {
     }
 }
 
+/// Reconstruct the full subscripted name from a Var's base name and indices.
+/// For example, base `"c"` with lower index `"t"` → `"c_{t}"`.
+/// Returns `None` if there are no indices (bare name already tried).
+fn subscripted_name(name: &str, indices: &[Index]) -> Option<String> {
+    if indices.is_empty() {
+        return None;
+    }
+    let lowers: Vec<&str> = indices
+        .iter()
+        .filter(|i| i.position == IndexPosition::Lower)
+        .map(|i| i.name.as_str())
+        .collect();
+    if lowers.is_empty() {
+        return None;
+    }
+    Some(format!("{}_{{{}}}", name, lowers.join(",")))
+}
+
 /// Substitute all constants in an expression.
 /// Replaces `Var { name, .. }` nodes whose name appears in `consts` with the constant value.
+/// For subscripted variables like `c_{t}`, tries both the bare name and the full
+/// subscripted name (e.g. `"c_{t}"`) since defs store the full notation string.
 pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
     if consts.is_empty() {
         return expr.clone();
     }
     let span = expr.span;
     match &expr.kind {
-        ExprKind::Var { name, .. } => {
+        ExprKind::Var { name, indices, .. } => {
             if let Some(value) = consts.get(name) {
-                // Preserve the call-site span recursively so nested errors
-                // point at the user's input, not the const definition site.
-                respan_tree(value, span)
+                // Recursively substitute so chained defs resolve fully
+                // (e.g. def c_{t} := c_{s}, def c_{s} := sqrt(μ / ρ_{0}))
+                respan_tree(&substitute_consts(value, consts), span)
+            } else if let Some(full) = subscripted_name(name, indices) {
+                if let Some(value) = consts.get(&full) {
+                    respan_tree(&substitute_consts(value, consts), span)
+                } else {
+                    expr.clone()
+                }
             } else {
                 expr.clone()
             }
@@ -1495,6 +1548,30 @@ mod tests {
         let expr = parse_expr("x^3").unwrap();
         let dim = check_dim(&expr, &env).unwrap();
         assert_eq!(dim, Dimension::single(BaseDim::L, 3));
+    }
+
+    #[test]
+    fn check_dim_sqrt_even_exponents() {
+        // sqrt([L^2 T^-2]) = [L T^-1]
+        let mut env = DimEnv::new();
+        let dim_l2t2 = Dimension::single(BaseDim::L, 2)
+            .mul(&Dimension::single(BaseDim::T, -2));
+        env.insert("x".into(), dim_l2t2);
+        let expr = parse_expr("sqrt(x)").unwrap();
+        let dim = check_dim(&expr, &env).unwrap();
+        let expected = Dimension::single(BaseDim::L, 1)
+            .mul(&Dimension::single(BaseDim::T, -1));
+        assert_eq!(dim, expected);
+    }
+
+    #[test]
+    fn check_dim_sqrt_odd_exponent_error() {
+        // sqrt([L]) — L has exponent 1 (odd), can't halve
+        let mut env = DimEnv::new();
+        env.insert("x".into(), Dimension::single(BaseDim::L, 1));
+        let expr = parse_expr("sqrt(x)").unwrap();
+        let result = check_dim(&expr, &env);
+        assert!(matches!(result, Err(DimError::NonIntegerPower(_))));
     }
 
     #[test]

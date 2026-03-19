@@ -404,6 +404,73 @@ claim double
     }
 
     #[test]
+    fn verify_subscripted_def_substitution() {
+        let src = "\
+var c_{s} [L T^-1]
+def c_{t} := c_{s}
+claim torsion_matches_shear
+  c_{t} = c_{s}
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(
+            report.all_passed(),
+            "subscripted def substitution should pass symbolically: {:?}",
+            report.results
+        );
+        // Must be symbolic, not just numerical
+        assert!(
+            matches!(report.results[0].outcome, Outcome::Pass),
+            "expected symbolic Pass, got {:?}",
+            report.results[0].outcome
+        );
+    }
+
+    #[test]
+    fn verify_chained_subscripted_def() {
+        // c_{t} := c_{s} := sqrt(μ / ρ_{0}), both should resolve fully
+        let src = "\
+var μ [M L^-1 T^-2]
+var ρ_{0} [M L^-3]
+def c_{s} := sqrt(μ / ρ_{0})
+def c_{t} := c_{s}
+claim torsion_matches_shear
+  c_{t} = c_{s}
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(
+            report.all_passed(),
+            "chained subscripted def should pass symbolically: {:?}",
+            report.results
+        );
+        assert!(
+            matches!(report.results[0].outcome, Outcome::Pass),
+            "expected symbolic Pass, got {:?}",
+            report.results[0].outcome
+        );
+    }
+
+    #[test]
+    fn verify_subscripted_def_in_expression() {
+        // def with subscripted name used in a more complex expression
+        let src = "\
+var P_{in} [M L^-1 T^-2]
+var P_{el} [M L^-1 T^-2]
+def L := P_{in} / P_{el}
+claim roundtrip
+  L * P_{el} = P_{in}
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert!(
+            report.all_passed(),
+            "subscripted def in expression should pass: {:?}",
+            report.results
+        );
+    }
+
+    #[test]
     fn verify_const_in_proof() {
         let src = "\
 def a := 3

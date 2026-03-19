@@ -104,6 +104,23 @@ impl Dimension {
         Dimension { exponents }
     }
 
+    /// Take the n-th root of a dimension: divide all exponents by n.
+    /// Returns `None` if any exponent is not divisible by n.
+    pub fn nth_root(&self, n: u32) -> Option<Dimension> {
+        let n = n as i32;
+        let mut result = BTreeMap::new();
+        for (&b, &e) in &self.exponents {
+            if e % n != 0 {
+                return None;
+            }
+            let divided = e / n;
+            if divided != 0 {
+                result.insert(b, divided);
+            }
+        }
+        Some(Dimension { exponents: result })
+    }
+
     /// Parse a dimension from bracket notation: `[M L T^-2]`
     pub fn parse(s: &str) -> Result<Dimension, String> {
         let s = s.trim();
