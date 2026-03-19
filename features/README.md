@@ -18,3 +18,4 @@
 | [statement-syntax.md](statement-syntax.md) | Statement Syntax Overhaul | 2026-03-17 | 2026-03-17 | completed |
 | [fix-training-build.md](fix-training-build.md) | Fix Training Build | 2026-03-18 | 2026-03-18 | planned |
 | [semantic-regression-tests.md](semantic-regression-tests.md) | Semantic Regression Test Roots | 2026-03-18 | 2026-03-18 | completed |
+| [inequality-threshold-claims.md](inequality-threshold-claims.md) | Inequality and Threshold Claims | 2026-03-18 | 2026-03-18 | planned |
