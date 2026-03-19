@@ -530,7 +530,9 @@ async fn cmd_lsp() {
         find_unresolved_refs_against,
     };
     use verso_doc::dim::DimOutcome;
-    use verso_doc::parse::{collect_dependencies, parse_document, parse_document_from_file};
+    use verso_doc::parse::{
+        collect_dependencies, parse_document, parse_document_from_file, resolve_includes,
+    };
     use verso_doc::verify::{verify_document, Outcome};
 
     struct VersoServer {
@@ -595,7 +597,8 @@ async fn cmd_lsp() {
                     .write()
                     .unwrap()
                     .insert(params.text_document.uri.clone(), change.text.clone());
-                let diagnostics = compute_diagnostics(&change.text, None);
+                let file_path = params.text_document.uri.to_file_path().ok();
+                let diagnostics = compute_diagnostics(&change.text, file_path.as_deref());
                 self.client
                     .publish_diagnostics(params.text_document.uri, diagnostics, None)
                     .await;
@@ -845,7 +848,36 @@ async fn cmd_lsp() {
     fn compute_diagnostics(text: &str, file_path: Option<&Path>) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
 
-        let doc = match parse_document(text) {
+        // Resolve !include and use directives when we know the file path,
+        // so that imported symbols are available for verification.
+        let resolved;
+        let src = if let Some(path) = file_path {
+            let base_dir = path.parent().unwrap_or(Path::new("."));
+            let mut seen = path
+                .canonicalize()
+                .map(|p| vec![p])
+                .unwrap_or_default();
+            match resolve_includes(text, base_dir, &mut seen) {
+                Ok(r) => {
+                    resolved = r;
+                    resolved.as_str()
+                }
+                Err(e) => {
+                    diagnostics.push(Diagnostic {
+                        range: line_range(e.line),
+                        severity: Some(DiagnosticSeverity::WARNING),
+                        message: e.message,
+                        source: Some("verso".to_string()),
+                        ..Default::default()
+                    });
+                    text
+                }
+            }
+        } else {
+            text
+        };
+
+        let doc = match parse_document(src) {
             Ok(d) => d,
             Err(e) => {
                 diagnostics.push(Diagnostic {
@@ -880,14 +912,47 @@ async fn cmd_lsp() {
             }
         };
 
+        // When includes were resolved, line numbers in the report refer to the
+        // expanded document.  Map each result back to the original file by
+        // searching for the block name in the original text.  Results that
+        // originated from a `use` import won't appear in the original text and
+        // are silently skipped — they belong to the imported file, not this one.
+        let find_original_line = |name: &str| -> Option<usize> {
+            if std::ptr::eq(src, text) {
+                // No resolution happened — line numbers are already correct.
+                return None; // sentinel: use result.span.line as-is
+            }
+            for (i, line) in text.lines().enumerate() {
+                let trimmed = line.trim();
+                // Match claim/proof/expect_fail name (keyword + space + name)
+                if trimmed.starts_with("claim ")
+                    || trimmed.starts_with("proof ")
+                    || trimmed.starts_with("expect_fail ")
+                {
+                    let rest = trimmed.split_whitespace().nth(1).unwrap_or("");
+                    if rest == name {
+                        return Some(i + 1);
+                    }
+                }
+            }
+            // Not found in original text — came from a `use` import.
+            Some(0)
+        };
+
         for result in &report.results {
+            let original_line = match find_original_line(&result.name) {
+                None => result.span.line,  // no resolution, use as-is
+                Some(0) => continue,       // from an import, skip
+                Some(n) => n,
+            };
+
             match &result.outcome {
                 Outcome::Pass | Outcome::ProofPass { .. } | Outcome::ExpectFailPass => {}
                 Outcome::NumericalPass {
                     samples, residual, ..
                 } => {
                     diagnostics.push(Diagnostic {
-                        range: line_range(result.span.line),
+                        range: line_range(original_line),
                         severity: Some(DiagnosticSeverity::WARNING),
                         message: format!(
                             "'{}' passed numerically ({} samples) but not symbolically. Residual: {}",
@@ -899,7 +964,7 @@ async fn cmd_lsp() {
                 }
                 Outcome::Fail { residual } => {
                     diagnostics.push(Diagnostic {
-                        range: line_range(result.span.line),
+                        range: line_range(original_line),
                         severity: Some(DiagnosticSeverity::ERROR),
                         message: format!("'{}' failed. Residual: {}", result.name, residual),
                         source: Some("verso".to_string()),
@@ -911,10 +976,10 @@ async fn cmd_lsp() {
                     from,
                     to,
                     residual,
-                    step_span,
+                    ..
                 } => {
                     diagnostics.push(Diagnostic {
-                        range: line_range(step_span.line),
+                        range: line_range(original_line),
                         severity: Some(DiagnosticSeverity::ERROR),
                         message: format!(
                             "'{}' step {} failed: {} \u{2260} {}. Residual: {}",
@@ -926,7 +991,7 @@ async fn cmd_lsp() {
                 }
                 Outcome::ExpectFailFail => {
                     diagnostics.push(Diagnostic {
-                        range: line_range(result.span.line),
+                        range: line_range(original_line),
                         severity: Some(DiagnosticSeverity::ERROR),
                         message: format!(
                             "expect_fail '{}': all checks passed unexpectedly",
@@ -943,7 +1008,7 @@ async fn cmd_lsp() {
                     DimOutcome::Pass | DimOutcome::Skipped { .. } => {}
                     DimOutcome::LhsRhsMismatch { lhs, rhs } => {
                         diagnostics.push(Diagnostic {
-                            range: line_range(result.span.line),
+                            range: line_range(original_line),
                             severity: Some(DiagnosticSeverity::ERROR),
                             message: format!(
                                 "'{}' dimension mismatch: lhs {}, rhs {}",
@@ -955,7 +1020,7 @@ async fn cmd_lsp() {
                     }
                     DimOutcome::ExprError { side, error } => {
                         diagnostics.push(Diagnostic {
-                            range: line_range(result.span.line),
+                            range: line_range(original_line),
                             severity: Some(DiagnosticSeverity::ERROR),
                             message: format!(
                                 "'{}' dimension error in {}: {}",

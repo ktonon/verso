@@ -29,12 +29,13 @@ Front matter directives define the document's title, authors, date, and
 abstract. These can appear anywhere in the source but always compile to
 the LaTeX preamble and front matter.
 
-| Directive | Purpose |
-|-----------|---------|
-| !title | Document title (single-line or multiline with indented body) |
-| !author | Author name (use multiple directives for multiple authors) |
-| !date | Date in ISO format, or empty for today's date |
-| !abstract | Abstract section with indented body |
+!table Metadata
+  | Directive | Purpose |
+  |-----------|---------|
+  | !title | Document title (single-line or multiline with indented body) |
+  | !author | Author name (use multiple directives for multiple authors) |
+  | !date | Date in ISO format, or empty for today's date |
+  | !abstract | Abstract section with indented body |
 
 When any of !title, !author, or !date is present, the LaTeX output includes
 a title block. If !date is omitted entirely, no date is shown.
@@ -355,8 +356,8 @@ Verso file without pulling in prose, claims, sections, or other content.
 This is useful for sharing a notation file across multiple documents
 or test files.
 
-The path is relative to the current file's directory, the same as
-!include. Circular imports are detected. Imported symbols are available
+The path is relative to the current file's directory, the same as !include.
+Circular imports are detected. Imported symbols are available
 for claims and proofs in the importing document.
 
 # Semantic Regression Tests
@@ -406,15 +407,16 @@ syntax, not LaTeX. Key elements:
 
 Variable dimensions use uppercase symbols in brackets:
 
-| Symbol | Dimension |
-|--------|-----------|
-| L | Length |
-| M | Mass |
-| T | Time |
-| Theta | Temperature |
-| I | Current |
-| N | Amount |
-| J | Luminosity |
+!table Base Dimensions
+  | Symbol | Dimension |
+  |--------|-----------|
+  | L | Length |
+  | M | Mass |
+  | T | Time |
+  | Theta | Temperature |
+  | I | Current |
+  | N | Amount |
+  | J | Luminosity |
 
 Exponents and products: a velocity has dimension L T^-1, a force has
 dimension M L T^-2. Dimensionless quantities use 1.
