@@ -249,6 +249,30 @@ are present, Verso still checks dimensional consistency.
 def v_eq := a * t
   Velocity from constant acceleration.
 
+### Dimension Annotations on Definitions
+
+A definition may include an explicit dimension annotation between the name
+and the := operator. This registers the name in the dimensional environment,
+just as a var declaration would.
+
+var w_{mode} [L T^-1]
+  Generic wave speed.
+
+def w_{p} [L T^-1] := v
+  Pressure-wave speed annotated with its dimension.
+
+When a variable family is declared with a subscript (e.g. math`w_{mode}`)
+and a dimension, all definitions sharing the same base name must produce
+an expression whose dimension matches the declared one. Verso extracts
+the base name by stripping the subscript and checks the definition's
+right-hand side against the declared dimension.
+
+expect_fail def_dim_base_name_mismatch
+  var q_{any} [M]
+  def q_{bad} := v
+    Defining a member of the q family as a velocity should fail
+    because q is declared with dimension M, not L T^-1.
+
 ## Math Blocks
 
 For displayed math that is not a claim or proof, use fenced math blocks.
