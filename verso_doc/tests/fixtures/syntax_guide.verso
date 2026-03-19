@@ -164,6 +164,12 @@ Verso treats subscripts as part of the variable name. A declaration of
 math`v_{0}` creates a variable named "v_{0}" and does not imply any
 relationship with math`v_{f}` or plain math`v`.
 
+However, dimensions are registered by **base name** (the part before the
+subscript). Declaring math`φ_{branch} [1]` registers the base name
+math`φ` with dimension 1. Any other indexed member of the family —
+math`φ_{lead}`, math`φ_{lag}`, etc. — automatically inherits that
+dimension and must be consistent with it.
+
 ## Definitions
 
 Definitions bind a name to an expression using the := operator. The name is
@@ -261,11 +267,17 @@ var w_{mode} [L T^-1]
 def w_{p} [L T^-1] := v
   Pressure-wave speed annotated with its dimension.
 
-When a variable family is declared with a subscript (e.g. math`w_{mode}`)
-and a dimension, all definitions sharing the same base name must produce
-an expression whose dimension matches the declared one. Verso extracts
-the base name by stripping the subscript and checks the definition's
-right-hand side against the declared dimension.
+A dimension-annotated def on an indexed name also establishes the dimension
+of that symbol family by base name. For example, writing
+tex`\texttt{def}\;\ell_n\;[L] := \ldots` constrains math`ℓ_{n-1}`,
+math`ℓ_{n+1}`, and any other member of the math`ℓ` family to have
+dimension L, even without a prior var declaration.
+
+When any declaration (var or def) establishes a base-name dimension, all
+definitions sharing that base name must produce an expression whose
+dimension matches the declared one. Verso extracts the base name by
+stripping the subscript and checks the definition's right-hand side against
+the declared dimension.
 
 expect_fail dimension_error
   var q_{any} [M]
