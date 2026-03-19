@@ -15,61 +15,49 @@ pub fn free_vars(expr: &Expr) -> HashSet<String> {
 /// Evaluate an expression to f64 given variable bindings.
 /// Returns None if evaluation fails (e.g., unbound variable, division by zero).
 pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
-    match &expr.kind {
-        ExprKind::Rational(r) => Some(r.num() as f64 / r.den() as f64),
-        ExprKind::FracPi(r) => Some((r.num() as f64 / r.den() as f64) * std::f64::consts::PI),
-        ExprKind::Named(nc) => Some(nc.value()),
-        ExprKind::Var { name, .. } => bindings.get(name).copied(),
-        ExprKind::Add(a, b) => {
-            let va = eval_f64(a, bindings)?;
-            let vb = eval_f64(b, bindings)?;
-            Some(va + vb)
-        }
-        ExprKind::Mul(a, b) => {
-            let va = eval_f64(a, bindings)?;
-            let vb = eval_f64(b, bindings)?;
-            Some(va * vb)
-        }
-        ExprKind::Neg(a) => Some(-eval_f64(a, bindings)?),
-        ExprKind::Inv(a) => {
-            let v = eval_f64(a, bindings)?;
-            if v == 0.0 {
+    expr.try_fold_post_order(&mut |node, children: Vec<f64>| match (&node.kind, children.as_slice()) {
+        (ExprKind::Rational(r), []) => Some(r.num() as f64 / r.den() as f64),
+        (ExprKind::FracPi(r), []) => Some((r.num() as f64 / r.den() as f64) * std::f64::consts::PI),
+        (ExprKind::Named(nc), []) => Some(nc.value()),
+        (ExprKind::Var { name, .. }, []) => bindings.get(name).copied(),
+        (ExprKind::Add(_, _), [a, b]) => Some(*a + *b),
+        (ExprKind::Mul(_, _), [a, b]) => Some(*a * *b),
+        (ExprKind::Neg(_), [value]) => Some(-*value),
+        (ExprKind::Inv(_), [value]) => {
+            if *value == 0.0 {
                 None
             } else {
-                Some(1.0 / v)
+                Some(1.0 / *value)
             }
         }
-        ExprKind::Pow(base, exp) => {
-            let vb = eval_f64(base, bindings)?;
-            let ve = eval_f64(exp, bindings)?;
-            let result = vb.powf(ve);
+        (ExprKind::Pow(_, _), [base, exp]) => {
+            let result = base.powf(*exp);
             if result.is_finite() {
                 Some(result)
             } else {
                 None
             }
         }
-        ExprKind::Fn(kind, arg) => {
-            let v = eval_f64(arg, bindings)?;
+        (ExprKind::Fn(kind, _), [value]) => {
             let result = match kind {
-                FnKind::Sin => v.sin(),
-                FnKind::Cos => v.cos(),
-                FnKind::Tan => v.tan(),
-                FnKind::Asin => v.asin(),
-                FnKind::Acos => v.acos(),
-                FnKind::Atan => v.atan(),
-                FnKind::Sinh => v.sinh(),
-                FnKind::Cosh => v.cosh(),
-                FnKind::Tanh => v.tanh(),
-                FnKind::Exp => v.exp(),
-                FnKind::Ln => v.ln(),
-                FnKind::Floor => v.floor(),
-                FnKind::Ceil => v.ceil(),
-                FnKind::Round => v.round(),
+                FnKind::Sin => value.sin(),
+                FnKind::Cos => value.cos(),
+                FnKind::Tan => value.tan(),
+                FnKind::Asin => value.asin(),
+                FnKind::Acos => value.acos(),
+                FnKind::Atan => value.atan(),
+                FnKind::Sinh => value.sinh(),
+                FnKind::Cosh => value.cosh(),
+                FnKind::Tanh => value.tanh(),
+                FnKind::Exp => value.exp(),
+                FnKind::Ln => value.ln(),
+                FnKind::Floor => value.floor(),
+                FnKind::Ceil => value.ceil(),
+                FnKind::Round => value.round(),
                 FnKind::Sign => {
-                    if v > 0.0 {
+                    if *value > 0.0 {
                         1.0
-                    } else if v < 0.0 {
+                    } else if *value < 0.0 {
                         -1.0
                     } else {
                         0.0
@@ -83,21 +71,15 @@ pub fn eval_f64(expr: &Expr, bindings: &HashMap<String, f64>) -> Option<f64> {
                 None
             }
         }
-        ExprKind::FnN(kind, args) => {
-            let vals: Option<Vec<f64>> = args.iter().map(|a| eval_f64(a, bindings)).collect();
-            let vals = vals?;
-            match kind {
-                FnKind::Min if vals.len() == 2 => Some(vals[0].min(vals[1])),
-                FnKind::Max if vals.len() == 2 => Some(vals[0].max(vals[1])),
-                FnKind::Clamp if vals.len() == 3 => Some(vals[0].clamp(vals[1], vals[2])),
-                _ => None,
-            }
-        }
-        ExprKind::Quantity(inner, unit) => {
-            let v = eval_f64(inner, bindings)?;
-            Some(v * unit.scale)
-        }
-    }
+        (ExprKind::FnN(kind, _), values) => match kind {
+            FnKind::Min if values.len() == 2 => Some(values[0].min(values[1])),
+            FnKind::Max if values.len() == 2 => Some(values[0].max(values[1])),
+            FnKind::Clamp if values.len() == 3 => Some(values[0].clamp(values[1], values[2])),
+            _ => None,
+        },
+        (ExprKind::Quantity(_, unit), [value]) => Some(*value * unit.scale),
+        _ => None,
+    })
 }
 
 /// Numerically spot-check that two expressions are equal at random points.

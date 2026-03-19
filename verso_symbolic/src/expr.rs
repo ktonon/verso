@@ -516,6 +516,36 @@ impl Expr {
         f(&rebuilt).unwrap_or(rebuilt)
     }
 
+    /// Fold the tree bottom-up, computing child results before visiting each
+    /// parent. Returning `None` from either a child or `f` aborts the fold.
+    pub fn try_fold_post_order<T>(
+        &self,
+        f: &mut impl FnMut(&Expr, Vec<T>) -> Option<T>,
+    ) -> Option<T> {
+        let children = match &self.kind {
+            ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
+                vec![a.try_fold_post_order(f)?, b.try_fold_post_order(f)?]
+            }
+            ExprKind::Neg(inner)
+            | ExprKind::Inv(inner)
+            | ExprKind::Fn(_, inner)
+            | ExprKind::Quantity(inner, _) => vec![inner.try_fold_post_order(f)?],
+            ExprKind::FnN(_, args) => {
+                let mut folded = Vec::with_capacity(args.len());
+                for arg in args {
+                    folded.push(arg.try_fold_post_order(f)?);
+                }
+                folded
+            }
+            ExprKind::Rational(_)
+            | ExprKind::Named(_)
+            | ExprKind::FracPi(_)
+            | ExprKind::Var { .. } => Vec::new(),
+        };
+
+        f(self, children)
+    }
+
     fn replace_child_with<F>(&self, index: usize, replacement: Expr, build: F) -> Option<Expr>
     where
         F: Copy + Fn(ExprKind) -> Expr,
@@ -1015,6 +1045,23 @@ mod tests {
             _ => None,
         });
         assert_eq!(rewritten, constant(-3.0));
+    }
+
+    #[test]
+    fn try_fold_post_order_combines_child_results() {
+        let expr = add(neg(scalar("x")), mul(constant(2.0), scalar("y")));
+        let folded = expr.try_fold_post_order(&mut |node, children: Vec<String>| {
+            Some(match &node.kind {
+                ExprKind::Var { name, .. } => name.clone(),
+                ExprKind::Rational(r) => r.num().to_string(),
+                ExprKind::Neg(_) => format!("neg({})", children[0]),
+                ExprKind::Mul(_, _) => format!("mul({}, {})", children[0], children[1]),
+                ExprKind::Add(_, _) => format!("add({}, {})", children[0], children[1]),
+                other => panic!("unexpected node in fold test: {:?}", other),
+            })
+        });
+
+        assert_eq!(folded.as_deref(), Some("add(neg(x), mul(2, y))"));
     }
 
     // --- first_unit ---

@@ -54,6 +54,10 @@ coverage.
   `verso_symbolic/src/search.rs::eval_constants` to that shared traversal and
   adding focused regression coverage for child-first rewrites and quantity
   multiplication folding.
+- 2026-03-19: Phase 4 then added `Expr::try_fold_post_order` for shared
+  read-only tree folds, used it to replace the recursive `eval_f64`
+  implementation in `verso_symbolic/src/eval.rs`, and added a focused
+  post-order fold regression test in `verso_symbolic/src/expr.rs`.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
