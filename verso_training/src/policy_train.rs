@@ -78,6 +78,55 @@ impl PolicyTrainConfig {
     }
 }
 
+#[derive(Debug, PartialEq)]
+struct TrainingSchedule {
+    batches_per_epoch: usize,
+    total_steps: usize,
+}
+
+fn training_schedule(num_train_items: usize, batch_size: usize, max_epochs: usize) -> TrainingSchedule {
+    let batches_per_epoch = num_train_items.div_ceil(batch_size);
+    TrainingSchedule {
+        batches_per_epoch,
+        total_steps: batches_per_epoch * max_epochs,
+    }
+}
+
+fn average_epoch_loss(total_loss: f64, num_batches: usize) -> f64 {
+    if num_batches > 0 {
+        total_loss / num_batches as f64
+    } else {
+        0.0
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum ValidationDecision {
+    NewBest,
+    Continue { epochs_without_improvement: usize },
+    StopEarly,
+}
+
+fn validation_decision(
+    best_val_loss: f64,
+    epochs_without_improvement: usize,
+    val_loss: f64,
+    patience: usize,
+) -> ValidationDecision {
+    if val_loss < best_val_loss {
+        ValidationDecision::NewBest
+    } else {
+        let epochs_without_improvement = epochs_without_improvement + 1;
+        if epochs_without_improvement >= patience {
+            ValidationDecision::StopEarly
+        } else {
+            ValidationDecision::Continue {
+                epochs_without_improvement,
+            }
+        }
+    }
+}
+
 /// Run supervised training for the policy model.
 pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, device: B::Device) {
     println!("Loading data from {}...", config.data_dir);
@@ -135,8 +184,7 @@ pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, de
     let pos_criterion: CrossEntropyLoss<B> = CrossEntropyLossConfig::new().init(&device);
 
     // Schedule
-    let batches_per_epoch = (num_train_items + config.batch_size - 1) / config.batch_size;
-    let total_steps = batches_per_epoch * config.max_epochs;
+    let schedule = training_schedule(num_train_items, config.batch_size, config.max_epochs);
 
     let mut best_val_loss = f64::INFINITY;
     let mut epochs_without_improvement = 0;
@@ -144,7 +192,7 @@ pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, de
 
     println!(
         "\nTraining for up to {} epochs ({} batches/epoch, {} total steps)...",
-        config.max_epochs, batches_per_epoch, total_steps
+        config.max_epochs, schedule.batches_per_epoch, schedule.total_steps
     );
 
     for epoch in 0..config.max_epochs {
@@ -155,7 +203,12 @@ pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, de
         let mut num_batches = 0usize;
 
         for batch in train_dl.iter() {
-            let lr = cosine_lr(global_step, config.warmup_steps, total_steps, config.lr);
+            let lr = cosine_lr(
+                global_step,
+                config.warmup_steps,
+                schedule.total_steps,
+                config.lr,
+            );
 
             let (rule_logits, pos_logits) = model.forward(batch.enc_ids, batch.enc_pad_mask);
 
@@ -186,7 +239,7 @@ pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, de
                     "  epoch {} batch {}/{}: loss={:.4} (rule={:.4} pos={:.4}) lr={:.2e}",
                     epoch + 1,
                     num_batches,
-                    batches_per_epoch,
+                    schedule.batches_per_epoch,
                     epoch_loss / num_batches as f64,
                     epoch_rule_loss / num_batches as f64,
                     epoch_pos_loss / num_batches as f64,
@@ -195,11 +248,7 @@ pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, de
             }
         }
 
-        let avg_train_loss = if num_batches > 0 {
-            epoch_loss / num_batches as f64
-        } else {
-            0.0
-        };
+        let avg_train_loss = average_epoch_loss(epoch_loss, num_batches);
 
         // Validate
         let (val_loss, val_rule, val_pos) =
@@ -216,19 +265,29 @@ pub fn policy_supervised_train<B: AutodiffBackend>(config: PolicyTrainConfig, de
             elapsed.as_secs_f64()
         );
 
-        if val_loss < best_val_loss {
-            best_val_loss = val_loss;
-            epochs_without_improvement = 0;
-            save_policy_checkpoint(
-                &model,
-                epoch,
-                val_loss,
-                &config.checkpoint_dir,
-                "policy_best",
-            );
-        } else {
-            epochs_without_improvement += 1;
-            if epochs_without_improvement >= config.patience {
+        match validation_decision(
+            best_val_loss,
+            epochs_without_improvement,
+            val_loss,
+            config.patience,
+        ) {
+            ValidationDecision::NewBest => {
+                best_val_loss = val_loss;
+                epochs_without_improvement = 0;
+                save_policy_checkpoint(
+                    &model,
+                    epoch,
+                    val_loss,
+                    &config.checkpoint_dir,
+                    "policy_best",
+                );
+            }
+            ValidationDecision::Continue {
+                epochs_without_improvement: next_epochs_without_improvement,
+            } => {
+                epochs_without_improvement = next_epochs_without_improvement;
+            }
+            ValidationDecision::StopEarly => {
                 println!(
                     "Early stopping after {} epochs (no improvement for {})",
                     epoch + 1,
@@ -393,5 +452,47 @@ mod tests {
         assert_eq!(metadata["epoch"], 12);
         assert_eq!(metadata["val_loss"], 0.375);
         assert_eq!(metadata["model_type"], "policy");
+    }
+
+    #[test]
+    fn training_schedule_uses_ceiling_batches() {
+        assert_eq!(
+            training_schedule(65, 64, 10),
+            TrainingSchedule {
+                batches_per_epoch: 2,
+                total_steps: 20,
+            }
+        );
+    }
+
+    #[test]
+    fn average_epoch_loss_returns_zero_for_empty_epoch() {
+        assert_eq!(average_epoch_loss(12.0, 0), 0.0);
+    }
+
+    #[test]
+    fn validation_decision_resets_on_new_best() {
+        assert_eq!(
+            validation_decision(1.0, 3, 0.75, 5),
+            ValidationDecision::NewBest
+        );
+    }
+
+    #[test]
+    fn validation_decision_increments_before_patience_limit() {
+        assert_eq!(
+            validation_decision(1.0, 1, 1.25, 4),
+            ValidationDecision::Continue {
+                epochs_without_improvement: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn validation_decision_stops_at_patience_limit() {
+        assert_eq!(
+            validation_decision(1.0, 1, 1.25, 2),
+            ValidationDecision::StopEarly
+        );
     }
 }
