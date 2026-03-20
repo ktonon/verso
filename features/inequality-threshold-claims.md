@@ -6,6 +6,8 @@ Add first-class support for inequality-style claims in Verso so papers can state
 
 The immediate motivating case is ERD, where the next kernel step wants statements like `Λ > 1` and `Π_{in} >= Π_{el}`. These are not full PDE claims; they are constitutive or regime-defining inequalities that should be expressible and checkable in the same document workflow as equality claims.
 
+This first slice should be conservative. Verso should reject nonsense, preserve the comparison operator in diagnostics, and prove comparisons only when it can do so honestly. It should not overstate what has been established.
+
 ## Plan
 
 ### Phase 1: Comparison syntax in claims
@@ -33,45 +35,22 @@ claim persistence_floor
 
 Represent comparison claims explicitly in the AST rather than encoding them as special equality cases. Diagnostics and check output should preserve the operator used in the source so failures are easy to interpret.
 
-Expected failure kinds should distinguish at least:
+Expected outcomes should distinguish at least:
 
 - `comparison_false`
 - `dimension_mismatch`
 - `dimension_error`
+- `comparison_unknown`
 
-### Phase 3: Verification strategy
+### Phase 3: Conservative verification strategy
 
 Verification should proceed in this order:
 
 1. Dimension check both sides exactly as for equality claims
-2. If both sides reduce to comparable constants, decide the comparison symbolically
-3. Otherwise fall back to numerical sampling, similar to current equality verification
+2. If both sides reduce to comparable constants, decide the comparison exactly
+3. Otherwise report the comparison as unknown rather than guessing
 
-For numerical fallback, the check should succeed only if all samples satisfy the requested inequality. Output should still indicate when the result was numerical rather than symbolic.
-
-### Phase 4: Minimal domain constraints
-
-Inequalities become much more useful once variables can be constrained to a domain. The initial domain feature should stay narrow:
-
-- positive-only variables
-- nonnegative variables
-- optional closed intervals for scalar quantities
-
-Possible surfaces:
-
-```verso
-var x [1]
-  domain: x > 0
-```
-
-or
-
-```verso
-assume positive_x
-  x > 0
-```
-
-The exact syntax can be decided separately, but inequality verification will need some notion of admissible sample region.
+This v1 should explicitly avoid numerical sampling and variable-domain syntax. Those can be added later once Verso has a principled assumption model.
 
 ## Implementation Notes
 
@@ -82,14 +61,19 @@ This should not be blocked on derivatives, vector calculus, or integrals. A usef
 Design constraints:
 
 - keep comparison claims close to existing `claim` semantics
-- reuse current dimension checking before any numerical fallback
+- reuse current dimension checking before any truth evaluation
 - make failure reasons stable enough for `expect_fail ... [comparison_false]`
-- avoid over-designing domain syntax in the first pass
+- add an explicit non-success path for valid-but-undecidable comparisons
+- avoid numerical fallback until the project has a principled assumption/domain model
+- avoid bundling domain syntax into this feature; treat it as a separate later feature
+
+ERD is the motivating driver, but this feature should generalize cleanly to other scientific papers. The goal is not to make Verso say “true” for more inequalities; the goal is to let authors write comparison claims precisely while keeping the verifier epistemically honest.
 
 ## Verification
 
 - A paper can write inequality claims with `>`, `>=`, `<`, and `<=`
 - Dimension mismatches in inequality claims fail with the expected reason
-- At least one constant inequality is verified symbolically
-- At least one variable inequality is verified numerically
+- At least one constant inequality is verified exactly
+- A dimensionally valid but undecidable symbolic inequality reports `comparison_unknown`
 - `expect_fail` can target a false inequality with a stable reason such as `comparison_false`
+- No numerical sampling is used in this first implementation slice
