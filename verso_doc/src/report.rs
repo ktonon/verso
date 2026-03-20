@@ -56,6 +56,29 @@ fn write_result(f: &mut fmt::Formatter<'_>, result: &VerificationResult) -> fmt:
                 result.name, samples, result.span.line
             )
         }
+        Outcome::ComparisonPass => {
+            writeln!(
+                f,
+                "  \x1b[32m\u{2713}\x1b[0m {} (comparison, line {})",
+                result.name, result.span.line
+            )
+        }
+        Outcome::ComparisonFalse { lhs, relation, rhs } => {
+            writeln!(
+                f,
+                "  \x1b[31m\u{2717}\x1b[0m {} (comparison false, line {})",
+                result.name, result.span.line
+            )?;
+            writeln!(f, "    checked: {} {} {}", lhs, relation.as_str(), rhs)
+        }
+        Outcome::ComparisonUnknown { lhs, relation, rhs } => {
+            writeln!(
+                f,
+                "  \x1b[33m?\x1b[0m {} (comparison unknown, line {})",
+                result.name, result.span.line
+            )?;
+            writeln!(f, "    checked: {} {} {}", lhs, relation.as_str(), rhs)
+        }
         Outcome::Fail { residual } => {
             writeln!(
                 f,

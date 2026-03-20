@@ -1076,7 +1076,10 @@ async fn cmd_lsp() {
             };
 
             match &result.outcome {
-                Outcome::Pass | Outcome::ProofPass { .. } | Outcome::ExpectFailPass => {}
+                Outcome::Pass
+                | Outcome::ComparisonPass
+                | Outcome::ProofPass { .. }
+                | Outcome::ExpectFailPass => {}
                 Outcome::NumericalPass {
                     samples, residual, ..
                 } => {
@@ -1096,6 +1099,36 @@ async fn cmd_lsp() {
                         range: line_range(original_line),
                         severity: Some(DiagnosticSeverity::ERROR),
                         message: format!("'{}' failed. Residual: {}", result.name, residual),
+                        source: Some("verso".to_string()),
+                        ..Default::default()
+                    });
+                }
+                Outcome::ComparisonFalse { lhs, relation, rhs } => {
+                    diagnostics.push(Diagnostic {
+                        range: line_range(original_line),
+                        severity: Some(DiagnosticSeverity::ERROR),
+                        message: format!(
+                            "'{}' comparison was false: {} {} {}",
+                            result.name,
+                            lhs,
+                            relation.as_str(),
+                            rhs
+                        ),
+                        source: Some("verso".to_string()),
+                        ..Default::default()
+                    });
+                }
+                Outcome::ComparisonUnknown { lhs, relation, rhs } => {
+                    diagnostics.push(Diagnostic {
+                        range: line_range(original_line),
+                        severity: Some(DiagnosticSeverity::WARNING),
+                        message: format!(
+                            "'{}' comparison could not be decided conservatively: {} {} {}",
+                            result.name,
+                            lhs,
+                            relation.as_str(),
+                            rhs
+                        ),
                         source: Some("verso".to_string()),
                         ..Default::default()
                     });

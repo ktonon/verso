@@ -69,6 +69,23 @@ Design constraints:
 
 ERD is the motivating driver, but this feature should generalize cleanly to other scientific papers. The goal is not to make Verso say “true” for more inequalities; the goal is to let authors write comparison claims precisely while keeping the verifier epistemically honest.
 
+- 2026-03-19: Phase 1 landed by extending `claim` parsing to accept `>`, `>=`,
+  `<`, and `<=`, representing the relation explicitly in the AST, and preserving
+  the operator in LaTeX claim rendering.
+- 2026-03-19: Phase 2 landed by adding stable `expect_fail` failure kinds for
+  `comparison_false` and `comparison_unknown`, plus report and LSP diagnostic
+  messages that distinguish exact false comparisons from conservative
+  undecidable ones.
+- 2026-03-19: Phase 3 landed conservatively: equality claims keep their current
+  symbolic and numerical behavior, while comparison claims first reuse existing
+  dimension checks and then prove only exact rational comparisons after
+  simplification. Non-rational or still-symbolic comparisons now report
+  `comparison_unknown` instead of falling back to numerical sampling.
+
+Status:
+
+- completed on 2026-03-19 for the scoped v1 in this feature doc
+
 ## Verification
 
 - A paper can write inequality claims with `>`, `>=`, `<`, and `<=`
@@ -77,3 +94,8 @@ ERD is the motivating driver, but this feature should generalize cleanly to othe
 - A dimensionally valid but undecidable symbolic inequality reports `comparison_unknown`
 - `expect_fail` can target a false inequality with a stable reason such as `comparison_false`
 - No numerical sampling is used in this first implementation slice
+- Focused implementation checks:
+  - `cargo test -p verso_doc comparison_`
+  - `cargo test -p verso_doc expect_fail_passes_on_comparison`
+  - `cargo test -p verso_doc --lib`
+  - `cargo test -p verso_doc --bin verso`

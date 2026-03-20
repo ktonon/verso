@@ -1,6 +1,7 @@
-use crate::ast::{Block, Claim, DefDecl, Document, ExpectFailType, Proof, Span};
+use crate::ast::{Block, Claim, ClaimRelation, DefDecl, Document, ExpectFailType, Proof, Span};
 use crate::dim::{collect_units, DimOutcome};
 use verso_symbolic::{subscript_base, Context, Expr, ExprKind};
+use verso_symbolic::rational::Rational;
 
 #[derive(Debug)]
 pub struct VerificationReport {
@@ -38,6 +39,7 @@ impl VerificationResult {
             self.outcome,
             Outcome::Pass
                 | Outcome::NumericalPass { .. }
+                | Outcome::ComparisonPass
                 | Outcome::ProofPass { .. }
                 | Outcome::ExpectFailPass
         );
@@ -53,6 +55,17 @@ pub enum Outcome {
     NumericalPass {
         samples: usize,
         residual: Expr,
+    },
+    ComparisonPass,
+    ComparisonFalse {
+        lhs: Expr,
+        relation: ClaimRelation,
+        rhs: Expr,
+    },
+    ComparisonUnknown {
+        lhs: Expr,
+        relation: ClaimRelation,
+        rhs: Expr,
     },
     Fail {
         residual: Expr,
@@ -103,8 +116,12 @@ fn verify_expect_fail(
             ExpectFailType::Symbolic => {
                 matches!(r.outcome, Outcome::Fail { .. } | Outcome::ProofStepFail { .. })
             }
-            ExpectFailType::ComparisonFalse => false,
-            ExpectFailType::ComparisonUnknown => false,
+            ExpectFailType::ComparisonFalse => {
+                matches!(r.outcome, Outcome::ComparisonFalse { .. })
+            }
+            ExpectFailType::ComparisonUnknown => {
+                matches!(r.outcome, Outcome::ComparisonUnknown { .. })
+            }
             ExpectFailType::DimensionMismatch => {
                 matches!(r.dim_outcome, Some(DimOutcome::LhsRhsMismatch { .. }))
             }
@@ -137,6 +154,15 @@ fn describe_result(r: &VerificationResult) -> String {
         Outcome::Pass => parts.push(format!("'{}' passed symbolically", r.name)),
         Outcome::NumericalPass { samples, .. } => {
             parts.push(format!("'{}' passed numerically ({} samples)", r.name, samples))
+        }
+        Outcome::ComparisonPass => {
+            parts.push(format!("'{}' comparison passed", r.name))
+        }
+        Outcome::ComparisonFalse { .. } => {
+            parts.push(format!("'{}' comparison was false", r.name))
+        }
+        Outcome::ComparisonUnknown { .. } => {
+            parts.push(format!("'{}' comparison was unknown", r.name))
         }
         Outcome::Fail { residual } => {
             parts.push(format!("'{}' failed symbolically (residual: {})", r.name, residual))
@@ -208,7 +234,7 @@ fn verify_blocks_in_context(blocks: &[Block], ctx: &mut Context) -> Vec<Verifica
             }
             Block::Claim(claim) => {
                 let result = verify_claim(claim, &ctx);
-                if result.passed() {
+                if result.passed() && claim.relation == ClaimRelation::Eq {
                     ctx.add_claim_as_rule(&claim.name, &claim.lhs, &claim.rhs);
                 }
                 results.push(result);
@@ -232,17 +258,20 @@ fn verify_blocks_in_context(blocks: &[Block], ctx: &mut Context) -> Vec<Verifica
 
 /// Verify a single claim by checking that `lhs - rhs` simplifies to 0.
 fn verify_claim(claim: &Claim, ctx: &Context) -> VerificationResult {
-    let outcome = match ctx.check_equal(&claim.lhs, &claim.rhs) {
-        verso_symbolic::EqualityResult::Equal => Outcome::Pass,
-        verso_symbolic::EqualityResult::NumericallyEqual { samples, residual } => {
-            Outcome::NumericalPass { samples, residual }
-        }
-        verso_symbolic::EqualityResult::NotEqual { residual } => Outcome::Fail { residual },
-    };
     let dim_outcome = if ctx.has_dims() {
         Some(ctx.check_dims(&claim.lhs, &claim.rhs))
     } else {
         None
+    };
+    let outcome = match claim.relation {
+        ClaimRelation::Eq => match ctx.check_equal(&claim.lhs, &claim.rhs) {
+            verso_symbolic::EqualityResult::Equal => Outcome::Pass,
+            verso_symbolic::EqualityResult::NumericallyEqual { samples, residual } => {
+                Outcome::NumericalPass { samples, residual }
+            }
+            verso_symbolic::EqualityResult::NotEqual { residual } => Outcome::Fail { residual },
+        },
+        _ => verify_comparison(claim, ctx),
     };
     let mut units = collect_units(&claim.lhs);
     units.extend(collect_units(&claim.rhs));
@@ -254,6 +283,48 @@ fn verify_claim(claim: &Claim, ctx: &Context) -> VerificationResult {
         outcome,
         dim_outcome,
         units,
+    }
+}
+
+fn verify_comparison(claim: &Claim, ctx: &Context) -> Outcome {
+    let lhs = ctx.simplify(&claim.lhs);
+    let rhs = ctx.simplify(&claim.rhs);
+    match (expr_as_rational(&lhs), expr_as_rational(&rhs)) {
+        (Some(lhs), Some(rhs)) if relation_holds(lhs.cmp(&rhs), claim.relation) => {
+            Outcome::ComparisonPass
+        }
+        (Some(_), Some(_)) => Outcome::ComparisonFalse {
+            lhs,
+            relation: claim.relation,
+            rhs,
+        },
+        _ => Outcome::ComparisonUnknown {
+            lhs,
+            relation: claim.relation,
+            rhs,
+        },
+    }
+}
+
+fn relation_holds(ordering: std::cmp::Ordering, relation: ClaimRelation) -> bool {
+    match relation {
+        ClaimRelation::Eq => ordering == std::cmp::Ordering::Equal,
+        ClaimRelation::Gt => ordering == std::cmp::Ordering::Greater,
+        ClaimRelation::Ge => {
+            ordering == std::cmp::Ordering::Greater || ordering == std::cmp::Ordering::Equal
+        }
+        ClaimRelation::Lt => ordering == std::cmp::Ordering::Less,
+        ClaimRelation::Le => {
+            ordering == std::cmp::Ordering::Less || ordering == std::cmp::Ordering::Equal
+        }
+    }
+}
+
+fn expr_as_rational(expr: &Expr) -> Option<Rational> {
+    match &expr.kind {
+        ExprKind::Rational(r) => Some(*r),
+        ExprKind::Neg(inner) => expr_as_rational(inner).map(|r| Rational::new(-r.num(), r.den())),
+        _ => None,
     }
 }
 
@@ -386,6 +457,52 @@ mod tests {
         let doc = parse_document("claim wrong\n  x + 1 = x").unwrap();
         let report = verify_document(&doc);
         assert_eq!(report.fail_count(), 1);
+    }
+
+    #[test]
+    fn verify_constant_comparison_pass() {
+        let doc = parse_document("claim threshold\n  3 / 2 > 1").unwrap();
+        let report = verify_document(&doc);
+        assert!(report.all_passed(), "constant comparison should pass");
+        assert!(matches!(report.results[0].outcome, Outcome::ComparisonPass));
+    }
+
+    #[test]
+    fn verify_constant_comparison_false() {
+        let doc = parse_document("claim threshold\n  1 > 3 / 2").unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.fail_count(), 1);
+        assert!(matches!(
+            report.results[0].outcome,
+            Outcome::ComparisonFalse { .. }
+        ));
+    }
+
+    #[test]
+    fn verify_symbolic_comparison_unknown() {
+        let doc = parse_document("claim threshold\n  x > 1").unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.fail_count(), 1);
+        assert!(matches!(
+            report.results[0].outcome,
+            Outcome::ComparisonUnknown { .. }
+        ));
+    }
+
+    #[test]
+    fn verify_comparison_with_dim_mismatch() {
+        let src = "\
+var v [L T^-1]
+claim bad
+  v > 1";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        let result = &report.results[0];
+        assert!(!result.passed());
+        assert!(matches!(
+            result.dim_outcome,
+            Some(DimOutcome::LhsRhsMismatch { .. })
+        ));
     }
 
     #[test]
@@ -833,6 +950,32 @@ expect_fail wrong_dim [dimension_mismatch]
             "expect_fail should pass when inner claim fails with dim mismatch"
         );
         assert!(matches!(result.outcome, Outcome::ExpectFailPass));
+    }
+
+    #[test]
+    fn expect_fail_passes_on_comparison_false() {
+        let src = "\
+expect_fail too_small [comparison_false]
+  claim bad
+    1 > 2";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.results.len(), 1);
+        assert!(report.results[0].passed());
+        assert!(matches!(report.results[0].outcome, Outcome::ExpectFailPass));
+    }
+
+    #[test]
+    fn expect_fail_passes_on_comparison_unknown() {
+        let src = "\
+expect_fail undecidable [comparison_unknown]
+  claim bad
+    x > 2";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        assert_eq!(report.results.len(), 1);
+        assert!(report.results[0].passed());
+        assert!(matches!(report.results[0].outcome, Outcome::ExpectFailPass));
     }
 
     #[test]
