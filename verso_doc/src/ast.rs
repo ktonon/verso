@@ -18,7 +18,7 @@ pub enum Block {
     },
     /// Prose paragraph (may contain inline tagged expressions).
     Prose(Vec<ProseFragment>),
-    /// A claim asserting that `lhs` equals `rhs`.
+    /// A claim asserting a relation between `lhs` and `rhs`.
     Claim(Claim),
     /// A proof chain for a named claim.
     Proof(Proof),
@@ -71,6 +71,10 @@ pub enum Block {
 pub enum ExpectFailType {
     /// Symbolic verification fails (residual != 0).
     Symbolic,
+    /// A comparison evaluates to false.
+    ComparisonFalse,
+    /// A comparison cannot be decided conservatively.
+    ComparisonUnknown,
     /// LHS and RHS have incompatible dimensions.
     DimensionMismatch,
     /// An expression contains a dimensional error (e.g. adding length to time).
@@ -81,6 +85,8 @@ impl ExpectFailType {
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "symbolic" => Some(Self::Symbolic),
+            "comparison_false" => Some(Self::ComparisonFalse),
+            "comparison_unknown" => Some(Self::ComparisonUnknown),
             "dimension_mismatch" => Some(Self::DimensionMismatch),
             "dimension_error" => Some(Self::DimensionError),
             _ => None,
@@ -90,6 +96,8 @@ impl ExpectFailType {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Symbolic => "symbolic",
+            Self::ComparisonFalse => "comparison_false",
+            Self::ComparisonUnknown => "comparison_unknown",
             Self::DimensionMismatch => "dimension_mismatch",
             Self::DimensionError => "dimension_error",
         }
@@ -212,11 +220,43 @@ pub enum ProseFragment {
     ParBreak,
 }
 
-/// An assertion that two expressions are equal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaimRelation {
+    Eq,
+    Gt,
+    Ge,
+    Lt,
+    Le,
+}
+
+impl ClaimRelation {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Eq => "=",
+            Self::Gt => ">",
+            Self::Ge => ">=",
+            Self::Lt => "<",
+            Self::Le => "<=",
+        }
+    }
+
+    pub fn as_tex_str(&self) -> &'static str {
+        match self {
+            Self::Eq => "=",
+            Self::Gt => ">",
+            Self::Ge => "\\ge",
+            Self::Lt => "<",
+            Self::Le => "\\le",
+        }
+    }
+}
+
+/// An assertion that two expressions satisfy a relation.
 #[derive(Debug)]
 pub struct Claim {
     pub name: String,
     pub lhs: Expr,
+    pub relation: ClaimRelation,
     pub rhs: Expr,
     pub span: Span,
 }

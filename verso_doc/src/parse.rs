@@ -1,6 +1,7 @@
 use crate::ast::{
-    Block, Claim, ColumnAlign, DefDecl, Document, EnvKind, Environment, ExpectFailType, Figure,
-    FuncDecl, List, ListItem, MathBlock, Proof, ProofStep, ProseFragment, Span, Table, VarDecl,
+    Block, Claim, ClaimRelation, ColumnAlign, DefDecl, Document, EnvKind, Environment,
+    ExpectFailType, Figure, FuncDecl, List, ListItem, MathBlock, Proof, ProofStep, ProseFragment,
+    Span, Table, VarDecl,
 };
 pub use crate::source::{
     collect_dependencies, parse_document_from_file, resolve_includes, ParseDocError,
@@ -1029,13 +1030,16 @@ fn parse_table_row(line: &str) -> Result<Vec<Vec<ProseFragment>>, ParseDocError>
 }
 
 fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseDocError> {
-    let eq_pos = body.find('=').ok_or_else(|| ParseDocError {
+    let (relation, op, op_pos) = find_claim_relation(body).ok_or_else(|| ParseDocError {
         line,
-        message: format!("claim '{}': expected 'lhs = rhs'", name),
+        message: format!(
+            "claim '{}': expected one of 'lhs = rhs', 'lhs > rhs', 'lhs >= rhs', 'lhs < rhs', or 'lhs <= rhs'",
+            name
+        ),
     })?;
 
-    let lhs_str = body[..eq_pos].trim();
-    let rhs_str = body[eq_pos + 1..].trim();
+    let lhs_str = body[..op_pos].trim();
+    let rhs_str = body[op_pos + op.len()..].trim();
 
     let lhs = parse_expr(lhs_str).map_err(|e| ParseDocError {
         line,
@@ -1050,9 +1054,25 @@ fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseD
     Ok(Claim {
         name: name.to_string(),
         lhs,
+        relation,
         rhs,
         span: Span { line },
     })
+}
+
+fn find_claim_relation(body: &str) -> Option<(ClaimRelation, &'static str, usize)> {
+    for (relation, op) in [
+        (ClaimRelation::Ge, ">="),
+        (ClaimRelation::Le, "<="),
+        (ClaimRelation::Eq, "="),
+        (ClaimRelation::Gt, ">"),
+        (ClaimRelation::Lt, "<"),
+    ] {
+        if let Some(pos) = body.find(op) {
+            return Some((relation, op, pos));
+        }
+    }
+    None
 }
 
 /// Parse a proof step line: `expr` or `expr ; justification`
@@ -1569,6 +1589,7 @@ mod tests {
         match &doc.blocks[0] {
             Block::Claim(c) => {
                 assert_eq!(c.name, "identity");
+                assert_eq!(c.relation, ClaimRelation::Eq);
             }
             _ => panic!("expected Claim"),
         }
@@ -1578,7 +1599,47 @@ mod tests {
     fn parse_claim_missing_equals() {
         let src = "claim bad\n  x + 0";
         let err = parse_document(src).unwrap_err();
-        assert!(err.message.contains("expected 'lhs = rhs'"));
+        assert!(err.message.contains("expected one of"));
+    }
+
+    #[test]
+    fn parse_greater_than_claim() {
+        let src = "claim threshold\n  x > 1";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Claim(c) => assert_eq!(c.relation, ClaimRelation::Gt),
+            _ => panic!("expected Claim"),
+        }
+    }
+
+    #[test]
+    fn parse_greater_equal_claim() {
+        let src = "claim threshold\n  x >= 1";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Claim(c) => assert_eq!(c.relation, ClaimRelation::Ge),
+            _ => panic!("expected Claim"),
+        }
+    }
+
+    #[test]
+    fn parse_less_than_claim() {
+        let src = "claim threshold\n  x < 1";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Claim(c) => assert_eq!(c.relation, ClaimRelation::Lt),
+            _ => panic!("expected Claim"),
+        }
+    }
+
+    #[test]
+    fn parse_less_equal_claim() {
+        let src = "claim threshold\n  x <= 1";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Claim(c) => assert_eq!(c.relation, ClaimRelation::Le),
+            _ => panic!("expected Claim"),
+        }
     }
 
     #[test]

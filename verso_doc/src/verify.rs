@@ -103,6 +103,8 @@ fn verify_expect_fail(
             ExpectFailType::Symbolic => {
                 matches!(r.outcome, Outcome::Fail { .. } | Outcome::ProofStepFail { .. })
             }
+            ExpectFailType::ComparisonFalse => false,
+            ExpectFailType::ComparisonUnknown => false,
             ExpectFailType::DimensionMismatch => {
                 matches!(r.dim_outcome, Some(DimOutcome::LhsRhsMismatch { .. }))
             }

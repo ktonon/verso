@@ -95,6 +95,15 @@ fn compile_claim() {
 }
 
 #[test]
+fn compile_comparison_claim() {
+    let doc = parse_document("claim threshold\n  x >= 1").unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(tex.contains("\\begin{equation} \\label{eq:threshold}"));
+    assert!(tex.contains("x \\ge 1") || tex.contains("x >= 1"));
+    assert!(tex.contains("\\end{equation}"));
+}
+
+#[test]
 fn compile_proof() {
     let src = "\
 proof expand

@@ -33,7 +33,14 @@ pub(super) fn write_section(out: &mut String, level: u8, title: &str, label: Opt
 
 pub(super) fn write_claim(out: &mut String, claim: &Claim) {
     writeln!(out, "\\begin{{equation}} \\label{{eq:{}}}", claim.name).unwrap();
-    writeln!(out, "  {} = {}", claim.lhs.to_tex(), claim.rhs.to_tex()).unwrap();
+    writeln!(
+        out,
+        "  {} {} {}",
+        claim.lhs.to_tex(),
+        claim.relation.as_tex_str(),
+        claim.rhs.to_tex()
+    )
+    .unwrap();
     writeln!(out, "\\end{{equation}}").unwrap();
 }
 
