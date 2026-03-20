@@ -1,6 +1,5 @@
 use crate::expr::{
-    classify_mul, match_log_base, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind,
-    NamedConst,
+    classify_mul, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind, NamedConst,
 };
 use crate::rational::Rational;
 use crate::unicode;
@@ -82,23 +81,49 @@ impl ToTex for FnKind {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct TexRender {
+    tex: String,
+    numeric_like: bool,
+    fn_call: Option<(FnKind, String)>,
+    neg_inner_tex: Option<String>,
+    inv_inner_tex: Option<String>,
+    inv_inner_fn: Option<(FnKind, String)>,
+}
+
 impl ToTex for Expr {
     fn to_tex(&self) -> String {
-        match &self.kind {
-            ExprKind::Rational(r) => {
-                if r.is_integer() {
+        render_expr(self).tex
+    }
+}
+
+fn render_expr(expr: &Expr) -> TexRender {
+    expr.try_fold_post_order(&mut |node, children: Vec<TexRender>| {
+        Some(match (&node.kind, children.as_slice()) {
+            (ExprKind::Rational(r), []) => TexRender {
+                tex: if r.is_integer() {
                     format!("{}", r.num())
                 } else if r.is_negative() {
                     format!("-\\frac{{{}}}{{{}}}", -r.num(), r.den())
                 } else {
                     format!("\\frac{{{}}}{{{}}}", r.num(), r.den())
-                }
-            }
-            ExprKind::Named(nc) => nc.to_tex(),
-            ExprKind::FracPi(r) => frac_pi_to_tex(r),
-            ExprKind::Var { name, indices, .. } => {
+                },
+                numeric_like: true,
+                ..TexRender::default()
+            },
+            (ExprKind::Named(nc), []) => TexRender {
+                tex: nc.to_tex(),
+                numeric_like: true,
+                ..TexRender::default()
+            },
+            (ExprKind::FracPi(r), []) => TexRender {
+                tex: frac_pi_to_tex(r),
+                numeric_like: true,
+                ..TexRender::default()
+            },
+            (ExprKind::Var { name, indices, .. }, []) => {
                 let tex_name = name_to_latex(name);
-                if indices.is_empty() {
+                let tex = if indices.is_empty() {
                     tex_name
                 } else {
                     let upper: Vec<_> = indices
@@ -120,110 +145,126 @@ impl ToTex for Expr {
                         result.push_str(&format!("_{{{}}}", lower.join("")));
                     }
                     result
+                };
+                TexRender {
+                    tex,
+                    ..TexRender::default()
                 }
             }
-            ExprKind::Add(a, b) => {
-                // Detect subtraction: Add(a, Neg(b)) -> a - b
-                match &b.kind {
-                    ExprKind::Neg(inner) => {
-                        format!("{} - {}", a.to_tex(), inner.to_tex())
-                    }
-                    _ => {
-                        format!("{} + {}", a.to_tex(), b.to_tex())
-                    }
-                }
-            }
-            ExprKind::Mul(a, b) => {
-                if let Some((base, arg)) = match_log_base(a, b) {
-                    return format!("\\log_{{{}}}{{{}}}", base.to_tex(), arg.to_tex());
-                }
-
-                // Detect division: Mul(a, Inv(b)) -> \frac{a}{b}
-                match &b.kind {
-                    ExprKind::Inv(inner) => {
-                        format!("\\frac{{{}}}{{{}}}", a.to_tex(), inner.to_tex())
-                    }
-                    _ => {
-                        // Normalize coefficient-first ordering for display
-                        let (lhs, rhs) = if !is_numeric_like(a) && is_numeric_like(b) {
-                            (b, a)
-                        } else {
-                            (a, b)
-                        };
-                        let a_tex = maybe_paren(lhs, self);
-                        let b_tex = maybe_paren(rhs, self);
-                        // Use \times between numeric factors to avoid ambiguity (e.g. 2 \times 10^{10})
-                        let op = if is_numeric_like(lhs) && is_numeric_like(rhs) {
-                            " \\times "
-                        } else {
-                            match classify_mul(a, b) {
-                                MulKind::Scalar => " ",         // scalar multiplication (juxtaposition)
-                                MulKind::Outer => " \\otimes ", // outer/tensor product
-                                MulKind::Single => " \\cdot ",  // single contraction (dot product)
-                                MulKind::Double => " : ",       // double contraction
-                            }
-                        };
-                        format!("{}{}{}", a_tex, op, b_tex)
-                    }
-                }
-            }
-            ExprKind::Neg(a) => {
-                format!("-{}", maybe_paren(a, self))
-            }
-            ExprKind::Inv(a) => {
-                format!("\\frac{{1}}{{{}}}", a.to_tex())
-            }
-            ExprKind::Pow(base, exp) => {
-                if exp.is_sqrt_exp() {
-                    return format!("\\sqrt{{{}}}", base.to_tex());
-                }
-                format!("{}^{{{}}}", maybe_paren(base, self), exp.to_tex())
-            }
-            ExprKind::Fn(kind, arg) => match kind {
-                FnKind::Floor => format!("\\lfloor {} \\rfloor", arg.to_tex()),
-                FnKind::Ceil => format!("\\lceil {} \\rceil", arg.to_tex()),
-                _ => format!("{}{{{}}}", kind.to_tex(), arg.to_tex()),
+            (ExprKind::Add(_, _), [left, right]) => TexRender {
+                tex: if let Some(inner_tex) = &right.neg_inner_tex {
+                    format!("{} - {}", left.tex, inner_tex)
+                } else {
+                    format!("{} + {}", left.tex, right.tex)
+                },
+                ..TexRender::default()
             },
-            ExprKind::FnN(kind, args) => {
-                let rendered: Vec<String> = args.iter().map(|a| a.to_tex()).collect();
-                let joined = rendered.join(", ");
-                match kind {
-                    FnKind::Min | FnKind::Max => {
-                        format!("{}\\left( {} \\right)", kind.to_tex(), joined)
-                    }
-                    _ => format!("{}\\left( {} \\right)", kind.to_tex(), joined),
+            (ExprKind::Mul(a, b), [left, right]) => {
+                let tex = if let (Some((FnKind::Ln, arg_tex)), Some((FnKind::Ln, base_tex))) =
+                    (&left.fn_call, &right.inv_inner_fn)
+                {
+                    format!("\\log_{{{}}}{{{}}}", base_tex, arg_tex)
+                } else if let (Some((FnKind::Ln, base_tex)), Some((FnKind::Ln, arg_tex))) =
+                    (&left.inv_inner_fn, &right.fn_call)
+                {
+                    format!("\\log_{{{}}}{{{}}}", base_tex, arg_tex)
+                } else if let Some(inner_tex) = &right.inv_inner_tex {
+                    format!("\\frac{{{}}}{{{}}}", left.tex, inner_tex)
+                } else {
+                    let (lhs_expr, lhs_render, rhs_expr, rhs_render) =
+                        if !left.numeric_like && right.numeric_like {
+                            (b.as_ref(), right, a.as_ref(), left)
+                        } else {
+                            (a.as_ref(), left, b.as_ref(), right)
+                        };
+                    let lhs_tex = maybe_paren_rendered(lhs_expr, node, &lhs_render.tex);
+                    let rhs_tex = maybe_paren_rendered(rhs_expr, node, &rhs_render.tex);
+                    let op = if lhs_render.numeric_like && rhs_render.numeric_like {
+                        " \\times "
+                    } else {
+                        match classify_mul(a, b) {
+                            MulKind::Scalar => " ",
+                            MulKind::Outer => " \\otimes ",
+                            MulKind::Single => " \\cdot ",
+                            MulKind::Double => " : ",
+                        }
+                    };
+                    format!("{}{}{}", lhs_tex, op, rhs_tex)
+                };
+                TexRender {
+                    tex,
+                    numeric_like: left.numeric_like && right.numeric_like,
+                    ..TexRender::default()
                 }
             }
-            ExprKind::Quantity(inner, unit) => {
-                format!("{} \\; \\mathrm{{{}}}", inner.to_tex(), unit.display)
+            (ExprKind::Neg(inner), [child]) => TexRender {
+                tex: format!("-{}", maybe_paren_rendered(inner, node, &child.tex)),
+                numeric_like: child.numeric_like,
+                neg_inner_tex: Some(child.tex.clone()),
+                ..TexRender::default()
+            },
+            (ExprKind::Inv(_), [child]) => TexRender {
+                tex: format!("\\frac{{1}}{{{}}}", child.tex),
+                inv_inner_tex: Some(child.tex.clone()),
+                inv_inner_fn: child.fn_call.clone(),
+                ..TexRender::default()
+            },
+            (ExprKind::Pow(base, exp), [base_render, exp_render]) => TexRender {
+                tex: if exp.is_sqrt_exp() {
+                    format!("\\sqrt{{{}}}", base_render.tex)
+                } else {
+                    format!(
+                        "{}^{{{}}}",
+                        maybe_paren_rendered(base, node, &base_render.tex),
+                        exp_render.tex
+                    )
+                },
+                numeric_like: base_render.numeric_like,
+                ..TexRender::default()
+            },
+            (ExprKind::Fn(kind, _), [child]) => TexRender {
+                tex: match kind {
+                    FnKind::Floor => format!("\\lfloor {} \\rfloor", child.tex),
+                    FnKind::Ceil => format!("\\lceil {} \\rceil", child.tex),
+                    _ => format!("{}{{{}}}", kind.to_tex(), child.tex),
+                },
+                fn_call: Some((kind.clone(), child.tex.clone())),
+                ..TexRender::default()
+            },
+            (ExprKind::FnN(kind, _), args) => {
+                let joined = args
+                    .iter()
+                    .map(|arg| arg.tex.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                TexRender {
+                    tex: format!("{}\\left( {} \\right)", kind.to_tex(), joined),
+                    ..TexRender::default()
+                }
             }
-        }
-    }
+            (ExprKind::Quantity(_, unit), [child]) => TexRender {
+                tex: format!("{} \\; \\mathrm{{{}}}", child.tex, unit.display),
+                ..TexRender::default()
+            },
+            other => panic!("unexpected TeX render fold shape: {:?}", other),
+        })
+    })
+    .expect("TeX rendering fold should not fail")
 }
 
-fn maybe_paren(child: &Expr, parent: &Expr) -> String {
+fn maybe_paren_rendered(child: &Expr, parent: &Expr, child_tex: &str) -> String {
     if child.precedence() < parent.precedence() {
-        format!("\\left( {} \\right)", child.to_tex())
+        format!("\\left( {} \\right)", child_tex)
     } else {
-        child.to_tex()
+        child_tex.to_string()
     }
 }
 
 /// True when an expression is purely numeric (no variables), so that
 /// adjacent numeric factors should be separated with `\times` in LaTeX.
+#[cfg_attr(not(test), allow(dead_code))]
 fn is_numeric_like(expr: &Expr) -> bool {
-    expr.try_fold_post_order(&mut |node, children: Vec<bool>| {
-        Some(match (&node.kind, children.as_slice()) {
-            (ExprKind::Rational(_), []) | (ExprKind::Named(_), []) | (ExprKind::FracPi(_), []) => {
-                true
-            }
-            (ExprKind::Pow(_, _), [base, _exp]) => *base,
-            (ExprKind::Neg(_), [base]) => *base,
-            (ExprKind::Mul(_, _), [left, right]) => *left && *right,
-            _ => false,
-        })
-    })
-    .unwrap_or(false)
+    render_expr(expr).numeric_like
 }
 
 
