@@ -63,6 +63,10 @@ coverage.
   recursion in both index collection and canonical string building while
   adding direct regression coverage for `Mul(x, x) ~ Pow(x, 2)` and dummy-index
   alpha-equivalence.
+- 2026-03-19: Phase 4 then migrated the recursive numeric-shape analysis in
+  `verso_symbolic/src/to_tex.rs` onto `Expr::try_fold_post_order`, with focused
+  regression coverage for nested numeric detection and `\times` rendering for
+  negated numeric factors.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.

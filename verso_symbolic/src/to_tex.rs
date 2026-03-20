@@ -212,13 +212,18 @@ fn maybe_paren(child: &Expr, parent: &Expr) -> String {
 /// True when an expression is purely numeric (no variables), so that
 /// adjacent numeric factors should be separated with `\times` in LaTeX.
 fn is_numeric_like(expr: &Expr) -> bool {
-    match &expr.kind {
-        ExprKind::Rational(_) | ExprKind::Named(_) | ExprKind::FracPi(_) => true,
-        ExprKind::Pow(base, _) => is_numeric_like(base),
-        ExprKind::Neg(inner) => is_numeric_like(inner),
-        ExprKind::Mul(a, b) => is_numeric_like(a) && is_numeric_like(b),
-        _ => false,
-    }
+    expr.try_fold_post_order(&mut |node, children: Vec<bool>| {
+        Some(match (&node.kind, children.as_slice()) {
+            (ExprKind::Rational(_), []) | (ExprKind::Named(_), []) | (ExprKind::FracPi(_), []) => {
+                true
+            }
+            (ExprKind::Pow(_, _), [base, _exp]) => *base,
+            (ExprKind::Neg(_), [base]) => *base,
+            (ExprKind::Mul(_, _), [left, right]) => *left && *right,
+            _ => false,
+        })
+    })
+    .unwrap_or(false)
 }
 
 
@@ -403,6 +408,21 @@ mod tests {
             scalar("c"),
         );
         assert_eq!(e.to_tex(), "2 \\times 10^{10} c");
+    }
+
+    #[test]
+    fn is_numeric_like_for_nested_numeric_expr() {
+        let numeric = neg(mul(constant(2.0), pow(constant(10.0), constant(3.0))));
+        let symbolic = mul(constant(2.0), scalar("x"));
+
+        assert!(is_numeric_like(&numeric));
+        assert!(!is_numeric_like(&symbolic));
+    }
+
+    #[test]
+    fn to_tex_numeric_mul_with_negated_factor_uses_times() {
+        let e = mul(neg(constant(2.0)), pow(constant(10.0), constant(10.0)));
+        assert_eq!(e.to_tex(), "-2 \\times 10^{10}");
     }
 
     #[test]
