@@ -118,6 +118,19 @@ pub fn policy_inference_loop<B: Backend>(
     (result, trace)
 }
 
+fn parse_error_result() -> ValidationResult {
+    ValidationResult {
+        valid_steps: 0,
+        total_steps: 0,
+        final_expr: Expr::new(ExprKind::Rational(
+            verso_symbolic::rational::Rational::ZERO,
+        )),
+        final_complexity: 0,
+        input_complexity: 0,
+        step_details: Vec::new(),
+    }
+}
+
 /// Run evaluation on validation examples using the policy model.
 pub fn policy_evaluate<B: Backend>(
     model: &PolicyModel<B>,
@@ -141,16 +154,7 @@ pub fn policy_evaluate<B: Backend>(
             Err(e) => {
                 parse_errors += 1;
                 eprintln!("Warning: could not parse example {}: {}", i, e);
-                all_results.push(ValidationResult {
-                    valid_steps: 0,
-                    total_steps: 0,
-                    final_expr: Expr::new(ExprKind::Rational(
-                        verso_symbolic::rational::Rational::ZERO,
-                    )),
-                    final_complexity: 0,
-                    input_complexity: 0,
-                    step_details: Vec::new(),
-                });
+                all_results.push(parse_error_result());
             }
         }
     }
@@ -255,6 +259,49 @@ mod tests {
 
     type TestBackend = NdArray;
 
+    fn sample_policy_eval_config() -> PolicyEvalConfig {
+        PolicyEvalConfig {
+            checkpoint: "checkpoints/policy_best".to_string(),
+            data_dir: "data_training".to_string(),
+            val_fraction: 0.2,
+            seed: 11,
+            invalid_penalty: 0.75,
+            max_steps: 14,
+            device: "cpu".to_string(),
+            d_model: 192,
+            n_encoder_layers: 6,
+            n_heads: 8,
+            d_ff: 384,
+            dropout: 0.2,
+            max_enc_len: 96,
+        }
+    }
+
+    #[test]
+    fn test_parse_error_result_has_empty_sequence_shape() {
+        let result = parse_error_result();
+
+        assert_eq!(result.valid_steps, 0);
+        assert_eq!(result.total_steps, 0);
+        assert_eq!(result.final_complexity, 0);
+        assert_eq!(result.input_complexity, 0);
+        assert!(result.step_details.is_empty());
+    }
+
+    #[test]
+    fn test_policy_eval_config_maps_model_fields() {
+        let config = sample_policy_eval_config();
+
+        let policy = config.to_policy_config();
+
+        assert_eq!(policy.d_model, 192);
+        assert_eq!(policy.n_encoder_layers, 6);
+        assert_eq!(policy.n_heads, 8);
+        assert_eq!(policy.d_ff, 384);
+        assert_eq!(policy.dropout, 0.2);
+        assert_eq!(policy.max_enc_len, 96);
+    }
+
     #[test]
     fn test_inference_loop_produces_trace() {
         let indexed = IndexedRuleSet::new(RuleSet::full());
@@ -324,5 +371,30 @@ mod tests {
 
         let metrics = policy_evaluate(&model, &examples, &enc_vocab, &indexed, 10, 0.5, &device);
         assert_eq!(metrics.total_examples, 2);
+    }
+
+    #[test]
+    fn test_policy_evaluate_counts_parse_errors_as_empty_sequences() {
+        let indexed = IndexedRuleSet::new(RuleSet::full());
+        let enc_vocab = EncoderVocab::new(&indexed);
+        let num_rules = indexed.total_directions as usize;
+        let config = PolicyConfig::default();
+        let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+        let model: PolicyModel<TestBackend> =
+            PolicyModel::new(&config, enc_vocab.size(), num_rules, &device);
+
+        let examples = vec![TrainingExample {
+            input_tokens: vec!["NOT_A_REAL_TOKEN".to_string()],
+            actions: vec![],
+            output_complexity: 0,
+            input_complexity: 0,
+        }];
+
+        let metrics = policy_evaluate(&model, &examples, &enc_vocab, &indexed, 10, 0.5, &device);
+
+        assert_eq!(metrics.total_examples, 1);
+        assert_eq!(metrics.empty_sequence_count, 1);
+        assert_eq!(metrics.unchanged_count, 1);
+        assert_eq!(metrics.mean_steps, 0.0);
     }
 }
