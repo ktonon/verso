@@ -205,7 +205,7 @@
 #^^^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
 #    ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso meta.expression.lhs.verso
 #     ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
-#      ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso keyword.operator.equals.verso
+#      ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso keyword.operator.comparison.verso
 #       ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
 #        ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso meta.expression.rhs.verso
 >

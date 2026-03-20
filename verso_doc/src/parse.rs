@@ -350,7 +350,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             if rest.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
-                    message: "expect_fail requires: expect_fail name [type]. Valid types: symbolic, dimension_mismatch, dimension_error".into(),
+                    message: "expect_fail requires: expect_fail name [type]. Valid types: symbolic, comparison_false, comparison_unknown, dimension_mismatch, dimension_error".into(),
                 });
             }
             // Parse: name [type]
@@ -364,12 +364,12 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                     .map(|s| s.trim())
                     .ok_or_else(|| ParseDocError {
                         line: i + 1,
-                        message: "expect_fail type must be in brackets: [symbolic], [dimension_mismatch], or [dimension_error]".into(),
+                        message: "expect_fail type must be in brackets: [symbolic], [comparison_false], [comparison_unknown], [dimension_mismatch], or [dimension_error]".into(),
                     })?;
                 let ft = ExpectFailType::from_str(inner).ok_or_else(|| ParseDocError {
                     line: i + 1,
                     message: format!(
-                        "unknown expect_fail type '{}'. Valid types: symbolic, dimension_mismatch, dimension_error",
+                        "unknown expect_fail type '{}'. Valid types: symbolic, comparison_false, comparison_unknown, dimension_mismatch, dimension_error",
                         inner
                     ),
                 })?;
@@ -378,7 +378,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 return Err(ParseDocError {
                     line: i + 1,
                     message: format!(
-                        "expect_fail '{}' missing failure type. Use: expect_fail {} [symbolic|dimension_mismatch|dimension_error]",
+                        "expect_fail '{}' missing failure type. Use: expect_fail {} [symbolic|comparison_false|comparison_unknown|dimension_mismatch|dimension_error]",
                         rest, rest
                     ),
                 });

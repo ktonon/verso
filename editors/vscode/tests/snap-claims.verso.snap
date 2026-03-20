@@ -14,7 +14,7 @@
 #          ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso constant.numeric.decimal.verso
 #           ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 #            ^ source.verso meta.block.claim.verso
-#             ^ source.verso meta.block.claim.verso keyword.operator.equals.verso
+#             ^ source.verso meta.block.claim.verso keyword.operator.comparison.verso
 #              ^ source.verso meta.block.claim.verso
 #               ^^ source.verso meta.block.claim.verso meta.expression.rhs.verso
 #                 ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
@@ -44,7 +44,7 @@
 #            ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #             ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 #              ^ source.verso meta.block.claim.verso
-#               ^ source.verso meta.block.claim.verso keyword.operator.equals.verso
+#               ^ source.verso meta.block.claim.verso keyword.operator.comparison.verso
 #                ^ source.verso meta.block.claim.verso
 #                 ^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 #                  ^ source.verso meta.block.claim.verso meta.expression.rhs.verso keyword.operator.arithmetic.verso
@@ -70,7 +70,7 @@
 #     ^^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.unit.verso
 #       ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 #        ^ source.verso meta.block.claim.verso
-#         ^ source.verso meta.block.claim.verso keyword.operator.equals.verso
+#         ^ source.verso meta.block.claim.verso keyword.operator.comparison.verso
 #          ^ source.verso meta.block.claim.verso
 #           ^^^^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 #               ^ source.verso meta.block.claim.verso meta.expression.rhs.verso
@@ -90,11 +90,42 @@
 #      ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso storage.type.dimension.verso
 #       ^ source.verso meta.block.claim.verso meta.expression.lhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
 #        ^ source.verso meta.block.claim.verso
-#         ^ source.verso meta.block.claim.verso keyword.operator.equals.verso
+#         ^ source.verso meta.block.claim.verso keyword.operator.comparison.verso
 #          ^ source.verso meta.block.claim.verso
 #           ^^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 #             ^ source.verso meta.block.claim.verso meta.expression.rhs.verso
 #              ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.begin.verso
 #               ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso storage.type.dimension.verso
 #                ^ source.verso meta.block.claim.verso meta.expression.rhs.verso meta.bracket-annotation.verso punctuation.definition.bracket.end.verso
+>
+>claim lower_bound
+#^^^^^ source.verso meta.block.claim.verso keyword.control.directive.claim.verso
+#     ^ source.verso meta.block.claim.verso
+#      ^^^^^^^^^^^ source.verso meta.block.claim.verso entity.name.function.claim.verso
+>  x >= 1
+#^^ source.verso meta.block.claim.verso
+#  ^ source.verso meta.block.claim.verso meta.expression.lhs.verso
+#   ^ source.verso meta.block.claim.verso
+#    ^^ source.verso meta.block.claim.verso keyword.operator.comparison.verso
+#      ^ source.verso meta.block.claim.verso
+#       ^ source.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
+>
+>expect_fail bad_threshold [comparison_false]
+#^^^^^^^^^^^ source.verso meta.block.expect-fail.verso keyword.control.directive.expect-fail.verso
+#           ^ source.verso meta.block.expect-fail.verso
+#            ^^^^^^^^^^^^^ source.verso meta.block.expect-fail.verso entity.name.function.expect-fail.verso
+#                         ^ source.verso meta.block.expect-fail.verso
+#                          ^^^^^^^^^^^^^^^^^^ source.verso meta.block.expect-fail.verso support.type.expect-fail.verso
+>  claim bad
+#^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#  ^^^^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso keyword.control.directive.claim.verso
+#       ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#        ^^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso entity.name.function.claim.verso
+>    1 > 2
+#^^^^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#    ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso meta.expression.lhs.verso constant.numeric.decimal.verso
+#     ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#      ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso keyword.operator.comparison.verso
+#       ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso
+#        ^ source.verso meta.block.expect-fail.verso meta.block.claim.verso meta.expression.rhs.verso constant.numeric.decimal.verso
 >

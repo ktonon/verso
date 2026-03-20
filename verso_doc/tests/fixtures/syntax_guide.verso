@@ -194,9 +194,12 @@ optional description.
 
 ## Claims label`claims`
 
-A claim is a named equation that Verso verifies. Verification checks that
+A claim is a named relation that Verso verifies. Equality claims check that
 the left-hand side minus the right-hand side simplifies to zero, falling
 back to numerical spot-checking if symbolic simplification is insufficient.
+Comparison claims are more conservative: Verso first checks dimensions, then
+proves the comparison only when both sides simplify to exact comparable
+constants. Otherwise the result is reported as unknown rather than guessed.
 
 claim add_zero_identity
   x + 0 = x
@@ -207,8 +210,17 @@ claim mul_one_identity
 claim square_expansion
   (x + y)^2 = x^2 + 2*x*y + y^2
 
+claim positive_threshold
+  3 / 2 > 1
+
+claim lower_bound
+  1 <= 1
+
 The body must be indented. Exactly one equals sign separates the left-hand
-side from the right-hand side. Both sides use Verso expression syntax.
+side from the right-hand side for equality claims. Comparison claims use one
+of the operators >, >=, <, or <=. Chained comparisons such as
+tex`0 < x < 1` are not supported in the current language. Both sides use
+Verso expression syntax.
 Claims compile to numbered LaTeX equations with an equation label.
 
 See claim`add_zero_identity` for the simplest example.
@@ -419,6 +431,8 @@ fails with the specified failure type.
   | Type | Matches when... |
   |------|-----------------|
   | symbolic | Symbolic verification fails (residual is not zero) |
+  | comparison_false | A comparison claim is evaluated exactly and found false |
+  | comparison_unknown | A comparison claim is dimensionally valid but cannot be decided conservatively |
   | dimension_mismatch | LHS and RHS have incompatible dimensions |
   | dimension_error | An expression contains a dimensional error |
 
@@ -435,6 +449,20 @@ expect_fail bad_symbolic [symbolic]
 
 The block above succeeds because the claim fails symbolically: x minus
 x plus 1 simplifies to 1, not zero.
+
+expect_fail bad_threshold [comparison_false]
+  claim bad
+    1 > 2
+
+The block above succeeds because the comparison can be decided exactly and is
+false.
+
+expect_fail undecidable_threshold [comparison_unknown]
+  claim bad
+    x > 2
+
+The block above succeeds because the comparison is dimensionally valid but
+cannot be decided conservatively from the current symbolic information alone.
 
 Inner blocks can declare their own variables and definitions. The block
 inherits all declarations from the enclosing document.

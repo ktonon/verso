@@ -95,10 +95,10 @@
     },
 
     "claim-body": {
-      "match": "^\\s+(.+?)\\s*(=)\\s*(.+)$",
+      "match": "^\\s+(.+?)\\s*(>=|<=|=|>|<)\\s*(.+)$",
       "captures": {
         "1": { "name": "meta.expression.lhs.verso", "patterns": [{ "include": "#math-expression" }] },
-        "2": { "name": "keyword.operator.equals.verso" },
+        "2": { "name": "keyword.operator.comparison.verso" },
         "3": { "name": "meta.expression.rhs.verso", "patterns": [{ "include": "#math-expression" }] }
       }
     },
@@ -168,7 +168,7 @@
     },
 
     "directive-expect-fail": {
-      "begin": "^(expect_fail)\\s+(\\S+)\\s+(\\[(?:symbolic|dimension_mismatch|dimension_error)\\])\\s*$",
+      "begin": "^(expect_fail)\\s+(\\S+)\\s+(\\[(?:symbolic|comparison_false|comparison_unknown|dimension_mismatch|dimension_error)\\])\\s*$",
       "end": "^(?=\\S|$(?!\\s))",
       "beginCaptures": {
         "1": { "name": "keyword.control.directive.expect-fail.verso" },

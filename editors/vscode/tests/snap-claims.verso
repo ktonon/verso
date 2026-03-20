@@ -9,3 +9,10 @@ claim si_prefix
 
 claim derived_unit
   10 [N] = 10 [N]
+
+claim lower_bound
+  x >= 1
+
+expect_fail bad_threshold [comparison_false]
+  claim bad
+    1 > 2
