@@ -86,6 +86,10 @@ coverage.
   Node test so module-level coverage hot spots can be surfaced from
   `cargo llvm-cov --workspace --summary-only` without manually scanning the
   full table.
+- 2026-03-19: Phase 5 then added direct `ml_simplify` coverage by extracting
+  small helpers for ML-improvement selection and beam-search fallback, with
+  focused tests for the “use ML result” and “fall back to classic simplify”
+  branches in `verso_training/src/ml_simplify.rs`.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -233,6 +237,9 @@ npm run coverage:summary
 - Focused Phase 5 coverage-tooling checks passed:
   - `npm run test:js`
   - `npm run coverage:modules`
+- Focused Phase 5 ML-simplifier tests passed:
+  - `cargo test -p verso_training ml_simplify::tests`
+  - `cargo test -p verso_training beam_fallback_uses_search_and_marks_non_ml_result`
 - Manual regression checks on 2026-03-19:
   - Built and reloaded VS Code to confirm the extension still works after the
     Phase 3 refactors.
