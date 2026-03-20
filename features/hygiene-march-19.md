@@ -73,6 +73,11 @@ coverage.
   config-driven output planning and single-file output resolution, and guarding
   against `--output` with multi-paper configs so the CLI cannot silently
   overwrite multiple builds into the same artifact path.
+- 2026-03-19: Phase 5 then added direct unit coverage for training-side
+  orchestration helpers in `verso_training/src/policy_train.rs` and
+  `verso_training/src/policy_rl_train.rs`, including checkpoint metadata/path
+  planning, model-config translation from CLI structs, and single-expression RL
+  encoding so those entry points are no longer covered only indirectly.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -211,6 +216,9 @@ npm run coverage:summary
 - Focused Phase 5 CLI regression tests passed:
   - `cargo test -p verso_doc --bin verso plan_config_builds`
   - `cargo test -p verso_doc --bin verso resolve_single_build_output`
+- Focused Phase 5 training-orchestration tests passed:
+  - `cargo test -p verso_training policy_train::tests`
+  - `cargo test -p verso_training policy_rl_train::tests`
 - Manual regression checks on 2026-03-19:
   - Built and reloaded VS Code to confirm the extension still works after the
     Phase 3 refactors.

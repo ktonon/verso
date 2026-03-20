@@ -490,3 +490,76 @@ pub fn policy_rl_train<B: AutodiffBackend>(config: PolicyRLConfig, device: B::De
 
     println!("\nDone. Best eval reward: {:+.4}", best_eval_reward);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use burn::backend::NdArray;
+    use verso_symbolic::token::tokenize;
+
+    type TestBackend = NdArray;
+
+    fn sample_policy_rl_config() -> PolicyRLConfig {
+        PolicyRLConfig {
+            checkpoint: "checkpoints/policy_best".to_string(),
+            data_dir: "data_training".to_string(),
+            batch_size: 16,
+            lr: 1e-5,
+            temperature: 0.75,
+            max_epochs: 8,
+            eval_every: 2,
+            baseline_decay: 0.95,
+            entropy_bonus: 0.1,
+            invalid_penalty: 0.7,
+            max_eval_steps: 12,
+            checkpoint_dir: "checkpoints".to_string(),
+            device: "cpu".to_string(),
+            log_every: 3,
+            val_fraction: 0.15,
+            seed: 17,
+            d_model: 256,
+            n_encoder_layers: 5,
+            n_heads: 8,
+            d_ff: 512,
+            dropout: 0.2,
+            max_enc_len: 80,
+        }
+    }
+
+    #[test]
+    fn policy_rl_config_maps_model_fields() {
+        let config = sample_policy_rl_config();
+
+        let policy = config.to_policy_config();
+
+        assert_eq!(policy.d_model, 256);
+        assert_eq!(policy.n_encoder_layers, 5);
+        assert_eq!(policy.n_heads, 8);
+        assert_eq!(policy.d_ff, 512);
+        assert_eq!(policy.dropout, 0.2);
+        assert_eq!(policy.max_enc_len, 80);
+    }
+
+    #[test]
+    fn encode_single_expr_matches_token_ids_without_padding() {
+        let indexed = IndexedRuleSet::new(RuleSet::full());
+        let enc_vocab = EncoderVocab::new(&indexed);
+        let device = burn::backend::ndarray::NdArrayDevice::Cpu;
+        let expr = verso_symbolic::parse_expr("x + 0").unwrap();
+
+        let (enc_ids, enc_pad_mask) = encode_single_expr::<TestBackend>(&expr, &enc_vocab, &device);
+
+        let (tokens, _db) = tokenize(&expr);
+        let expected_ids: Vec<i64> = tokens
+            .iter()
+            .map(|token| enc_vocab.encode(&token_to_string(token)) as i64)
+            .collect();
+
+        assert_eq!(enc_ids.dims(), [1, expected_ids.len()]);
+        assert_eq!(enc_ids.into_data().to_vec::<i64>().unwrap(), expected_ids);
+        assert_eq!(
+            enc_pad_mask.into_data().to_vec::<bool>().unwrap(),
+            vec![false; expected_ids.len()]
+        );
+    }
+}

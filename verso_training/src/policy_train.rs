@@ -278,6 +278,22 @@ fn policy_validate<B: AutodiffBackend>(
     }
 }
 
+fn checkpoint_record_path(checkpoint_dir: &str, name: &str) -> PathBuf {
+    PathBuf::from(checkpoint_dir).join(name)
+}
+
+fn checkpoint_metadata_path(checkpoint_dir: &str, name: &str) -> PathBuf {
+    PathBuf::from(checkpoint_dir).join(format!("{}_metadata.json", name))
+}
+
+fn checkpoint_metadata(epoch: usize, val_loss: f64) -> serde_json::Value {
+    serde_json::json!({
+        "epoch": epoch,
+        "val_loss": val_loss,
+        "model_type": "policy",
+    })
+}
+
 /// Save policy model checkpoint.
 pub fn save_policy_checkpoint<B: AutodiffBackend>(
     model: &PolicyModel<B>,
@@ -289,17 +305,13 @@ pub fn save_policy_checkpoint<B: AutodiffBackend>(
     std::fs::create_dir_all(checkpoint_dir).unwrap();
 
     let recorder = NamedMpkFileRecorder::<FullPrecisionSettings>::default();
-    let path = PathBuf::from(checkpoint_dir).join(name);
+    let path = checkpoint_record_path(checkpoint_dir, name);
     recorder
         .record(model.clone().into_record(), path)
         .expect("Failed to save policy checkpoint");
 
-    let metadata = serde_json::json!({
-        "epoch": epoch,
-        "val_loss": val_loss,
-        "model_type": "policy",
-    });
-    let meta_path = PathBuf::from(checkpoint_dir).join(format!("{}_metadata.json", name));
+    let metadata = checkpoint_metadata(epoch, val_loss);
+    let meta_path = checkpoint_metadata_path(checkpoint_dir, name);
     std::fs::write(meta_path, serde_json::to_string_pretty(&metadata).unwrap()).unwrap();
 
     println!("  Checkpoint saved: {}/{}.mpk", checkpoint_dir, name);
@@ -319,4 +331,67 @@ pub fn load_policy_model<B: Backend>(
         .expect("Failed to load policy checkpoint");
     let model = PolicyModel::new(config, enc_vocab_size, num_rules, device);
     model.load_record(record)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_policy_train_config() -> PolicyTrainConfig {
+        PolicyTrainConfig {
+            data_dir: "data".to_string(),
+            val_fraction: 0.2,
+            seed: 7,
+            d_model: 192,
+            n_encoder_layers: 6,
+            n_heads: 8,
+            d_ff: 384,
+            dropout: 0.25,
+            max_enc_len: 96,
+            batch_size: 32,
+            lr: 1e-4,
+            weight_decay: 0.02,
+            warmup_steps: 50,
+            max_epochs: 20,
+            patience: 4,
+            checkpoint_dir: "checkpoints".to_string(),
+            log_every: 5,
+            device: "cpu".to_string(),
+        }
+    }
+
+    #[test]
+    fn policy_train_config_maps_model_fields() {
+        let config = sample_policy_train_config();
+
+        let policy = config.to_policy_config();
+
+        assert_eq!(policy.d_model, 192);
+        assert_eq!(policy.n_encoder_layers, 6);
+        assert_eq!(policy.n_heads, 8);
+        assert_eq!(policy.d_ff, 384);
+        assert_eq!(policy.dropout, 0.25);
+        assert_eq!(policy.max_enc_len, 96);
+    }
+
+    #[test]
+    fn checkpoint_paths_use_expected_names() {
+        assert_eq!(
+            checkpoint_record_path("artifacts/checkpoints", "policy_best"),
+            PathBuf::from("artifacts/checkpoints").join("policy_best")
+        );
+        assert_eq!(
+            checkpoint_metadata_path("artifacts/checkpoints", "policy_best"),
+            PathBuf::from("artifacts/checkpoints").join("policy_best_metadata.json")
+        );
+    }
+
+    #[test]
+    fn checkpoint_metadata_has_expected_shape() {
+        let metadata = checkpoint_metadata(12, 0.375);
+
+        assert_eq!(metadata["epoch"], 12);
+        assert_eq!(metadata["val_loss"], 0.375);
+        assert_eq!(metadata["model_type"], "policy");
+    }
 }
