@@ -75,17 +75,19 @@ fn main() {
             watch,
         } => {
             let config = require_config();
+            let builds = plan_config_builds(&config, output.as_deref()).unwrap_or_else(|e| {
+                eprintln!("error: {}", e);
+                process::exit(1);
+            });
             if watch {
-                let tasks: Vec<WatchTask> = config
-                    .papers
-                    .iter()
-                    .map(|paper| {
-                        let input = paper.input.clone();
-                        let input2 = input.clone();
-                        let out = output.clone().unwrap_or_else(|| {
-                            format!("{}/{}.pdf", config.output_dir, paper.output)
-                        });
-                        WatchTask::new(&input, move || cmd_build(&input2, Some(&out)))
+                let tasks: Vec<WatchTask> = builds
+                    .into_iter()
+                    .map(|(input, output_path)| {
+                        let watch_input = input.clone();
+                        let run_input = input;
+                        WatchTask::new(&watch_input, move || {
+                            cmd_build(&run_input, Some(&output_path))
+                        })
                     })
                     .collect();
                 // Ensure output dir exists before first run
@@ -259,13 +261,56 @@ fn cmd_build_from_config_resolved(
         });
     }
 
-    for paper in &config.papers {
-        let output = match output_override {
-            Some(o) => o.to_string(),
-            None => format!("{}/{}.pdf", config.output_dir, paper.output),
-        };
-        cmd_build(&paper.input, Some(&output));
+    let builds = plan_config_builds(config, output_override).unwrap_or_else(|e| {
+        eprintln!("error: {}", e);
+        process::exit(1);
+    });
+
+    for (input, output) in builds {
+        cmd_build(&input, Some(&output));
     }
+}
+
+fn plan_config_builds(
+    config: &verso_doc::config::ResolvedConfig,
+    output_override: Option<&str>,
+) -> Result<Vec<(String, String)>, String> {
+    if output_override.is_some() && config.papers.len() > 1 {
+        return Err(
+            "cannot use --output when config resolves to multiple papers; set per-paper outputs in .verso.jsonc instead"
+                .to_string(),
+        );
+    }
+
+    Ok(config
+        .papers
+        .iter()
+        .map(|paper| {
+            let output = output_override.map_or_else(
+                || format!("{}/{}.pdf", config.output_dir, paper.output),
+                str::to_string,
+            );
+            (paper.input.clone(), output)
+        })
+        .collect())
+}
+
+fn resolve_single_build_output(path: &Path, output: Option<&str>) -> std::path::PathBuf {
+    match output {
+        Some(o) => std::path::PathBuf::from(o),
+        None => {
+            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+            path.parent()
+                .unwrap_or(Path::new("."))
+                .join(format!("{}.pdf", stem))
+        }
+    }
+}
+
+fn output_is_tex(output_path: &Path) -> bool {
+    output_path
+        .extension()
+        .is_some_and(|extension| extension == "tex")
 }
 
 fn cmd_build(file: &str, output: Option<&str>) {
@@ -275,17 +320,8 @@ fn cmd_build(file: &str, output: Option<&str>) {
 
     let path = Path::new(file);
 
-    // Determine output path and format
-    let output_path = match output {
-        Some(o) => std::path::PathBuf::from(o),
-        None => {
-            let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-            path.parent()
-                .unwrap_or(Path::new("."))
-                .join(format!("{}.pdf", stem))
-        }
-    };
-    let is_tex = output_path.extension().map_or(false, |e| e == "tex");
+    let output_path = resolve_single_build_output(path, output);
+    let is_tex = output_is_tex(&output_path);
 
     let doc = match parse_document_from_file(path) {
         Ok(d) => d,
@@ -360,10 +396,7 @@ fn cmd_build(file: &str, output: Option<&str>) {
     }
 
     let run = |cmd: &str, args: &[&str]| -> bool {
-        let output = Command::new(cmd)
-            .args(args)
-            .current_dir(&tmp)
-            .output();
+        let output = Command::new(cmd).args(args).current_dir(&tmp).output();
         match output {
             Ok(o) => {
                 if !o.status.success() {
@@ -519,6 +552,96 @@ fn watch_and_run(tasks: Vec<WatchTask>) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{output_is_tex, plan_config_builds, resolve_single_build_output};
+    use std::path::Path;
+    use verso_doc::config::{ResolvedConfig, ResolvedPaper};
+
+    fn resolved_config(output_dir: &str, papers: &[(&str, &str)]) -> ResolvedConfig {
+        ResolvedConfig {
+            output_dir: output_dir.to_string(),
+            papers: papers
+                .iter()
+                .map(|(input, output)| ResolvedPaper {
+                    input: (*input).to_string(),
+                    output: (*output).to_string(),
+                })
+                .collect(),
+            tests: vec![],
+        }
+    }
+
+    #[test]
+    fn plan_config_builds_uses_per_paper_defaults() {
+        let config = resolved_config(
+            "build",
+            &[("src/alpha.verso", "alpha"), ("src/beta.verso", "beta")],
+        );
+
+        let builds = plan_config_builds(&config, None).unwrap();
+
+        assert_eq!(
+            builds,
+            vec![
+                ("src/alpha.verso".to_string(), "build/alpha.pdf".to_string()),
+                ("src/beta.verso".to_string(), "build/beta.pdf".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn plan_config_builds_rejects_output_override_for_multiple_papers() {
+        let config = resolved_config(
+            "build",
+            &[("src/alpha.verso", "alpha"), ("src/beta.verso", "beta")],
+        );
+
+        let err = plan_config_builds(&config, Some("out.pdf")).unwrap_err();
+
+        assert_eq!(
+            err,
+            "cannot use --output when config resolves to multiple papers; set per-paper outputs in .verso.jsonc instead"
+        );
+    }
+
+    #[test]
+    fn plan_config_builds_allows_output_override_for_single_paper() {
+        let config = resolved_config("build", &[("src/paper.verso", "paper")]);
+
+        let builds = plan_config_builds(&config, Some("artifacts/final.tex")).unwrap();
+
+        assert_eq!(
+            builds,
+            vec![(
+                "src/paper.verso".to_string(),
+                "artifacts/final.tex".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn resolve_single_build_output_defaults_to_pdf_beside_input() {
+        let output = resolve_single_build_output(Path::new("src/paper.verso"), None);
+
+        assert_eq!(output, Path::new("src/paper.pdf"));
+    }
+
+    #[test]
+    fn resolve_single_build_output_preserves_explicit_output() {
+        let output =
+            resolve_single_build_output(Path::new("src/paper.verso"), Some("artifacts/final.tex"));
+
+        assert_eq!(output, Path::new("artifacts/final.tex"));
+    }
+
+    #[test]
+    fn output_is_tex_detects_tex_extension() {
+        assert!(output_is_tex(Path::new("build/paper.tex")));
+        assert!(!output_is_tex(Path::new("build/paper.pdf")));
+    }
+}
+
 #[tokio::main]
 async fn cmd_lsp() {
     use std::path::PathBuf;
@@ -580,10 +703,7 @@ async fn cmd_lsp() {
         async fn did_open(&self, params: DidOpenTextDocumentParams) {
             let uri = params.text_document.uri.clone();
             let text = params.text_document.text.clone();
-            self.documents
-                .write()
-                .unwrap()
-                .insert(uri, text);
+            self.documents.write().unwrap().insert(uri, text);
             let file_path = params.text_document.uri.to_file_path().ok();
             let diagnostics = compute_diagnostics(&params.text_document.text, file_path.as_deref());
             self.client
@@ -605,10 +725,7 @@ async fn cmd_lsp() {
             }
         }
 
-        async fn completion(
-            &self,
-            params: CompletionParams,
-        ) -> Result<Option<CompletionResponse>> {
+        async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
             let pos = params.text_document_position.position;
             let uri = &params.text_document_position.text_document.uri;
 
@@ -775,7 +892,8 @@ async fn cmd_lsp() {
                                 && (sym.kind == "claim" || sym.kind == "definition")
                                 && format!("eq:{}", sym.name) == label)
                         {
-                            let markdown = format!("**{}** `{}`\n\n{}", sym.kind, sym.name, sym.detail);
+                            let markdown =
+                                format!("**{}** `{}`\n\n{}", sym.kind, sym.name, sym.detail);
                             return Ok(Some(Hover {
                                 contents: HoverContents::Markup(MarkupContent {
                                     kind: MarkupKind::Markdown,
@@ -828,8 +946,7 @@ async fn cmd_lsp() {
                 if let Some(doc) = doc {
                     let symbols = collect_symbols(doc);
                     if let Some(sym) = find_symbol(&symbols, &symbol) {
-                        let markdown =
-                            format!("**{}** `{}`\n\n{}", sym.kind, sym.name, sym.detail);
+                        let markdown = format!("**{}** `{}`\n\n{}", sym.kind, sym.name, sym.detail);
                         return Ok(Some(Hover {
                             contents: HoverContents::Markup(MarkupContent {
                                 kind: MarkupKind::Markdown,
@@ -853,10 +970,7 @@ async fn cmd_lsp() {
         let resolved;
         let src = if let Some(path) = file_path {
             let base_dir = path.parent().unwrap_or(Path::new("."));
-            let mut seen = path
-                .canonicalize()
-                .map(|p| vec![p])
-                .unwrap_or_default();
+            let mut seen = path.canonicalize().map(|p| vec![p]).unwrap_or_default();
             match resolve_includes(text, base_dir, &mut seen) {
                 Ok(r) => {
                     resolved = r;
@@ -956,8 +1070,8 @@ async fn cmd_lsp() {
 
         for result in &report.results {
             let original_line = match find_original_line(&result.name) {
-                None => result.span.line,  // no resolution, use as-is
-                Some(0) => continue,       // from an import, skip
+                None => result.span.line, // no resolution, use as-is
+                Some(0) => continue,      // from an import, skip
                 Some(n) => n,
             };
 
@@ -1008,10 +1122,7 @@ async fn cmd_lsp() {
                     diagnostics.push(Diagnostic {
                         range: line_range(original_line),
                         severity: Some(DiagnosticSeverity::ERROR),
-                        message: format!(
-                            "def '{}' dimension error: {}",
-                            result.name, error
-                        ),
+                        message: format!("def '{}' dimension error: {}", result.name, error),
                         source: Some("verso".to_string()),
                         ..Default::default()
                     });
@@ -1030,7 +1141,9 @@ async fn cmd_lsp() {
                     } else {
                         format!(
                             "expect_fail '{}': no {} failure found. Actual: {}",
-                            result.name, result.name, details.join("; ")
+                            result.name,
+                            result.name,
+                            details.join("; ")
                         )
                     };
                     diagnostics.push(Diagnostic {
@@ -1217,12 +1330,14 @@ async fn cmd_lsp() {
         }
         let ident = &text[start..end];
         // Filter out pure numbers and braces-only
-        if ident.chars().all(|c| c.is_ascii_digit() || c == '{' || c == '}' || c == '_') {
+        if ident
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '{' || c == '}' || c == '_')
+        {
             return None;
         }
         Some(ident.to_string())
     }
-
 
     fn find_root_document(file_path: &Path) -> Option<PathBuf> {
         let mut dir = file_path.parent()?;

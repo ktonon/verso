@@ -68,6 +68,11 @@ coverage.
   numeric-shape analysis previously used for `\times` insertion, while
   preserving subtraction, division, log-base detection, and numeric-factor
   ordering through focused TeX regressions.
+- 2026-03-19: Phase 5 started by extracting testable CLI build-planning helpers
+  from `verso_doc/src/bin/verso.rs`, adding focused regression coverage for
+  config-driven output planning and single-file output resolution, and guarding
+  against `--output` with multi-paper configs so the CLI cannot silently
+  overwrite multiple builds into the same artifact path.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -203,6 +208,9 @@ npm run coverage:summary
 
 - `npm test` passed.
 - `cargo llvm-cov --workspace --summary-only` reported 85.15% total line coverage.
+- Focused Phase 5 CLI regression tests passed:
+  - `cargo test -p verso_doc --bin verso plan_config_builds`
+  - `cargo test -p verso_doc --bin verso resolve_single_build_output`
 - Manual regression checks on 2026-03-19:
   - Built and reloaded VS Code to confirm the extension still works after the
     Phase 3 refactors.
