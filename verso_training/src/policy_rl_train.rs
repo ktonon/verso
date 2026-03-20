@@ -10,7 +10,7 @@ use rand::SeedableRng;
 use verso_symbolic::random_search::IndexedRuleSet;
 use verso_symbolic::token::tokenize;
 use verso_symbolic::training_data::{token_to_string, TrainingExample};
-use verso_symbolic::validate::{validate_action_sequence, PredictedAction};
+use verso_symbolic::validate::{validate_action_sequence, PredictedAction, ValidationResult};
 use verso_symbolic::RuleSet;
 
 use crate::config::PolicyConfig;
@@ -89,6 +89,38 @@ impl PolicyRLConfig {
             max_enc_len: self.max_enc_len,
         }
     }
+}
+
+fn reward_for_validation(result: &ValidationResult, invalid_penalty: f64) -> (f64, bool) {
+    if result.valid_steps == 1 {
+        (
+            result.input_complexity as f64 - result.final_complexity as f64,
+            true,
+        )
+    } else {
+        (-invalid_penalty, false)
+    }
+}
+
+fn pad_encoded_batch(enc_data: &[(Vec<i64>, usize)]) -> (Vec<i64>, usize) {
+    let max_len = enc_data.iter().map(|(_, len)| *len).max().unwrap_or(1);
+    let flat = enc_data
+        .iter()
+        .flat_map(|(ids, _)| {
+            let mut padded = ids.clone();
+            padded.resize(max_len, 0);
+            padded
+        })
+        .collect();
+    (flat, max_len)
+}
+
+fn baseline_update(baseline: f64, mean_reward: f64, baseline_decay: f64) -> f64 {
+    baseline_decay * baseline + (1.0 - baseline_decay) * mean_reward
+}
+
+fn should_run_evaluation(epoch: usize, eval_every: usize) -> bool {
+    eval_every > 0 && (epoch + 1) % eval_every == 0
 }
 
 /// Encode a single expression into tensors for the policy model.
@@ -178,27 +210,17 @@ fn policy_rl_step<B: AutodiffBackend, O: Optimizer<PolicyModel<B>, B>>(
         };
         let result = validate_action_sequence(&expr, &[predicted], rules);
 
-        if result.valid_steps == 1 {
+        let (reward, is_valid) = reward_for_validation(&result, config.invalid_penalty);
+        rewards.push(reward);
+        if is_valid {
             num_valid += 1;
-            let delta = result.input_complexity as f64 - result.final_complexity as f64;
-            rewards.push(delta);
-        } else {
-            rewards.push(-config.invalid_penalty);
         }
     }
 
     let mean_reward: f64 = rewards.iter().sum::<f64>() / batch_size as f64;
 
     // 2. Re-encode all expressions in a single padded batch for gradient computation
-    let max_len = enc_data.iter().map(|(_, l)| *l).max().unwrap_or(1);
-    let flat: Vec<i64> = enc_data
-        .iter()
-        .flat_map(|(ids, _)| {
-            let mut padded = ids.clone();
-            padded.resize(max_len, 0);
-            padded
-        })
-        .collect();
+    let (flat, max_len) = pad_encoded_batch(&enc_data);
 
     let enc_ids =
         Tensor::<B, 2, Int>::from_data(TensorData::new(flat, [batch_size, max_len]), device);
@@ -290,8 +312,7 @@ fn policy_rl_step<B: AutodiffBackend, O: Optimizer<PolicyModel<B>, B>>(
     let model = optimizer.step(config.lr, model, grads);
 
     // 9. Update baseline (EMA)
-    let new_baseline =
-        config.baseline_decay * baseline + (1.0 - config.baseline_decay) * mean_reward;
+    let new_baseline = baseline_update(baseline, mean_reward, config.baseline_decay);
 
     (
         model,
@@ -446,7 +467,7 @@ pub fn policy_rl_train<B: AutodiffBackend>(config: PolicyRLConfig, device: B::De
         );
 
         // Periodic evaluation using the inference loop
-        if (epoch + 1) % config.eval_every == 0 {
+        if should_run_evaluation(epoch, config.eval_every) {
             println!("\n--- Full evaluation at epoch {} ---", epoch + 1);
             let mut results = Vec::new();
             for ex in val_examples.iter().take(200) {
@@ -561,5 +582,50 @@ mod tests {
             enc_pad_mask.into_data().to_vec::<bool>().unwrap(),
             vec![false; expected_ids.len()]
         );
+    }
+
+    fn validation_result(valid_steps: usize, final_complexity: usize, input_complexity: usize) -> ValidationResult {
+        ValidationResult {
+            valid_steps,
+            total_steps: 1,
+            final_expr: verso_symbolic::parse_expr("x").unwrap(),
+            final_complexity,
+            input_complexity,
+            step_details: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn reward_for_validation_returns_delta_for_valid_step() {
+        let result = validation_result(1, 2, 5);
+
+        assert_eq!(reward_for_validation(&result, 0.5), (3.0, true));
+    }
+
+    #[test]
+    fn reward_for_validation_returns_penalty_for_invalid_step() {
+        let result = validation_result(0, 5, 5);
+
+        assert_eq!(reward_for_validation(&result, 0.5), (-0.5, false));
+    }
+
+    #[test]
+    fn pad_encoded_batch_pads_rows_to_max_length() {
+        let (flat, max_len) = pad_encoded_batch(&[(vec![1, 2, 3], 3), (vec![4], 1)]);
+
+        assert_eq!(max_len, 3);
+        assert_eq!(flat, vec![1, 2, 3, 4, 0, 0]);
+    }
+
+    #[test]
+    fn baseline_update_uses_exponential_moving_average() {
+        assert!((baseline_update(2.0, 6.0, 0.75) - 3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn should_run_evaluation_handles_zero_and_periodic_epochs() {
+        assert!(!should_run_evaluation(0, 0));
+        assert!(!should_run_evaluation(0, 2));
+        assert!(should_run_evaluation(1, 2));
     }
 }

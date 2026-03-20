@@ -94,6 +94,11 @@ coverage.
   extracting schedule math, average-loss calculation, and early-stopping
   decisions into small helpers with focused tests in
   `verso_training/src/policy_train.rs`.
+- 2026-03-19: Phase 5 then added direct `policy_rl_train` control-flow coverage
+  by extracting reward selection, encoded-batch padding, EMA baseline updates,
+  and periodic-evaluation gating into small helpers with focused tests in
+  `verso_training/src/policy_rl_train.rs`, including a safe `eval_every = 0`
+  branch.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -246,6 +251,9 @@ npm run coverage:summary
   - `cargo test -p verso_training beam_fallback_uses_search_and_marks_non_ml_result`
 - Focused Phase 5 supervised-training tests passed:
   - `cargo test -p verso_training policy_train::tests`
+- Focused Phase 5 RL-training tests passed:
+  - `cargo test -p verso_training policy_rl_train::tests`
+  - `cargo test -p verso_training should_run_evaluation_handles_zero_and_periodic_epochs`
 - Manual regression checks on 2026-03-19:
   - Built and reloaded VS Code to confirm the extension still works after the
     Phase 3 refactors.
