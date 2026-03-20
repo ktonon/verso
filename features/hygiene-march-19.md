@@ -82,6 +82,10 @@ coverage.
   `verso_training/src/policy_evaluate.rs`, extracting the parse-error fallback
   into a small helper and adding direct tests for bad-example handling and
   evaluation CLI config mapping.
+- 2026-03-19: Phase 5 then added `scripts/coverage-modules.mjs` plus a small
+  Node test so module-level coverage hot spots can be surfaced from
+  `cargo llvm-cov --workspace --summary-only` without manually scanning the
+  full table.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -226,6 +230,9 @@ npm run coverage:summary
 - Focused Phase 5 evaluation-orchestration tests passed:
   - `cargo test -p verso_training policy_evaluate::tests`
   - `cargo test -p verso_training test_policy_eval_config_maps_model_fields`
+- Focused Phase 5 coverage-tooling checks passed:
+  - `npm run test:js`
+  - `npm run coverage:modules`
 - Manual regression checks on 2026-03-19:
   - Built and reloaded VS Code to confirm the extension still works after the
     Phase 3 refactors.
