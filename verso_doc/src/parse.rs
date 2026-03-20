@@ -1477,6 +1477,18 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "verso-{prefix}-{}-{}",
+            std::process::id(),
+            id
+        ))
+    }
 
     #[test]
     fn parse_empty_document() {
@@ -2693,7 +2705,7 @@ More prose here.
 
     #[test]
     fn use_imports_declarations_only() {
-        let dir = std::env::temp_dir().join("verso_test_use_basic");
+        let dir = unique_temp_dir("use-basic");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(
@@ -2737,7 +2749,7 @@ More prose here.
 
     #[test]
     fn use_imports_descriptions() {
-        let dir = std::env::temp_dir().join("verso_test_use_descriptions");
+        let dir = unique_temp_dir("use-descriptions");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("main.verso"), "use defs.verso").unwrap();
@@ -2767,7 +2779,7 @@ More prose here.
 
     #[test]
     fn use_tracks_dependencies() {
-        let dir = std::env::temp_dir().join("verso_test_use_deps");
+        let dir = unique_temp_dir("use-deps");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("main.verso"), "use notation.verso").unwrap();
@@ -2779,7 +2791,7 @@ More prose here.
 
     #[test]
     fn use_missing_file_error() {
-        let dir = std::env::temp_dir().join("verso_test_use_missing");
+        let dir = unique_temp_dir("use-missing");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("main.verso"), "use nonexistent.verso").unwrap();
@@ -2790,7 +2802,7 @@ More prose here.
 
     #[test]
     fn use_empty_path_error() {
-        let dir = std::env::temp_dir().join("verso_test_use_empty");
+        let dir = unique_temp_dir("use-empty");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("main.verso"), "use").unwrap();
@@ -2801,7 +2813,7 @@ More prose here.
 
     #[test]
     fn use_imports_func() {
-        let dir = std::env::temp_dir().join("verso_test_use_func");
+        let dir = unique_temp_dir("use-func");
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("main.verso"), "use funcs.verso").unwrap();
@@ -2871,7 +2883,8 @@ More prose here.
 
     #[test]
     fn parse_include_basic() {
-        let dir = std::env::temp_dir().join("verso_test_include_basic");
+        let dir = unique_temp_dir("include-basic");
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(
             dir.join("main.verso"),
@@ -2888,7 +2901,8 @@ More prose here.
 
     #[test]
     fn parse_include_circular_error() {
-        let dir = std::env::temp_dir().join("verso_test_include_circular");
+        let dir = unique_temp_dir("include-circular");
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("a.verso"), "!include b.verso").unwrap();
         std::fs::write(dir.join("b.verso"), "!include a.verso").unwrap();
@@ -2899,7 +2913,8 @@ More prose here.
 
     #[test]
     fn parse_include_missing_file_error() {
-        let dir = std::env::temp_dir().join("verso_test_include_missing");
+        let dir = unique_temp_dir("include-missing");
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         std::fs::write(dir.join("main.verso"), "!include nonexistent.verso").unwrap();
         let err = parse_document_from_file(&dir.join("main.verso")).unwrap_err();
@@ -2909,7 +2924,8 @@ More prose here.
 
     #[test]
     fn parse_include_nested() {
-        let dir = std::env::temp_dir().join("verso_test_include_nested");
+        let dir = unique_temp_dir("include-nested");
+        let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(dir.join("sub"));
         std::fs::write(dir.join("main.verso"), "!include sub/a.verso").unwrap();
         std::fs::write(dir.join("sub/a.verso"), "!include b.verso").unwrap();

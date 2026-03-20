@@ -362,6 +362,18 @@ pub fn load_config(path: &Path) -> Result<VersoConfig, ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!(
+            "verso-{prefix}-{}-{}",
+            std::process::id(),
+            id
+        ))
+    }
 
     #[test]
     fn parse_single_input() {
@@ -528,7 +540,7 @@ mod tests {
 
     #[test]
     fn find_config_prefers_jsonc() {
-        let dir = std::env::temp_dir().join("verso-test-find-config");
+        let dir = unique_temp_dir("find-config");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(".verso.jsonc"), "{}").unwrap();
@@ -540,7 +552,7 @@ mod tests {
 
     #[test]
     fn find_config_falls_back_to_json() {
-        let dir = std::env::temp_dir().join("verso-test-find-json");
+        let dir = unique_temp_dir("find-json");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join(".verso.json"), "{}").unwrap();
@@ -551,7 +563,7 @@ mod tests {
 
     #[test]
     fn find_config_returns_none_when_missing() {
-        let dir = std::env::temp_dir().join("verso-test-find-none");
+        let dir = unique_temp_dir("find-none");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         assert!(find_config(&dir).is_none());
@@ -560,7 +572,7 @@ mod tests {
 
     #[test]
     fn load_config_reads_jsonc_file() {
-        let dir = std::env::temp_dir().join("verso-test-load");
+        let dir = unique_temp_dir("load");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(".verso.jsonc");
@@ -713,7 +725,7 @@ mod tests {
 
     #[test]
     fn resolve_config_with_tests() {
-        let dir = std::env::temp_dir().join("verso-test-resolve-tests");
+        let dir = unique_temp_dir("resolve-tests");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(

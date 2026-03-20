@@ -1,5 +1,6 @@
 use crate::ast::Document;
 use std::fmt;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct ParseDocError {
@@ -64,13 +65,15 @@ pub fn collect_dependencies(
         line: 0,
         message: format!("cannot read '{}': {}", path.display(), e),
     })?;
-    let base_dir = path.parent().unwrap_or(std::path::Path::new("."));
-    let mut seen = vec![path.canonicalize().map_err(|e| ParseDocError {
+    let canonical = path.canonicalize().map_err(|e| ParseDocError {
         line: 0,
         message: format!("cannot resolve '{}': {}", path.display(), e),
-    })?];
-    let _ = resolve_includes(&src, base_dir, &mut seen)?;
-    Ok(seen)
+    })?;
+    let base_dir = canonical.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let mut stack = vec![canonical.clone()];
+    let mut deps = vec![canonical];
+    collect_dependencies_from_source(&src, &base_dir, &mut stack, &mut deps)?;
+    Ok(deps)
 }
 
 /// Parse an `.verso` file, resolving `!include` directives.
@@ -117,12 +120,68 @@ fn resolve_file(
     })?;
     let child_dir = canonical.parent().unwrap_or(base_dir);
     let resolved = resolve_includes(&content, child_dir, seen)?;
+    seen.pop();
 
     if symbols_only {
         Ok(extract_declarations(&resolved))
     } else {
         Ok(resolved)
     }
+}
+
+fn collect_dependencies_from_source(
+    src: &str,
+    base_dir: &Path,
+    stack: &mut Vec<PathBuf>,
+    deps: &mut Vec<PathBuf>,
+) -> Result<(), ParseDocError> {
+    for (i, line) in src.lines().enumerate() {
+        let trimmed = line.trim();
+        let (directive, path_str) = if trimmed.starts_with("!include") {
+            ("!include", trimmed["!include".len()..].trim())
+        } else if trimmed == "use" || trimmed.starts_with("use ") {
+            ("use", trimmed.strip_prefix("use").unwrap().trim())
+        } else {
+            continue;
+        };
+
+        if path_str.is_empty() {
+            return Err(ParseDocError {
+                line: i + 1,
+                message: if directive == "use" {
+                    "use requires a file path, e.g. use notation.verso".into()
+                } else {
+                    "!include requires a file path".into()
+                },
+            });
+        }
+
+        let path = base_dir.join(path_str);
+        let canonical = path.canonicalize().map_err(|e| ParseDocError {
+            line: i + 1,
+            message: format!("{} '{}': {}", directive, path_str, e),
+        })?;
+        if stack.contains(&canonical) {
+            return Err(ParseDocError {
+                line: i + 1,
+                message: format!("{} '{}': circular include detected", directive, path_str),
+            });
+        }
+        if !deps.contains(&canonical) {
+            deps.push(canonical.clone());
+        }
+
+        let content = std::fs::read_to_string(&canonical).map_err(|e| ParseDocError {
+            line: i + 1,
+            message: format!("{} '{}': {}", directive, path_str, e),
+        })?;
+        let child_dir = canonical.parent().unwrap_or(base_dir).to_path_buf();
+        stack.push(canonical);
+        collect_dependencies_from_source(&content, &child_dir, stack, deps)?;
+        stack.pop();
+    }
+
+    Ok(())
 }
 
 /// Extract only declaration lines (var, def, func) and their indented body lines

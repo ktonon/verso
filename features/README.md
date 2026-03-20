@@ -19,4 +19,4 @@
 | [fix-training-build.md](fix-training-build.md) | Fix Training Build | 2026-03-18 | 2026-03-18 | planned |
 | [semantic-regression-tests.md](semantic-regression-tests.md) | Semantic Regression Test Roots | 2026-03-18 | 2026-03-18 | completed |
 | [inequality-threshold-claims.md](inequality-threshold-claims.md) | Inequality and Threshold Claims | 2026-03-18 | 2026-03-18 | planned |
-| [hygiene-march-19.md](hygiene-march-19.md) | Hygiene Review - March 19 | 2026-03-19 | 2026-03-19 | wip |
+| [hygiene-march-19.md](hygiene-march-19.md) | Hygiene Review - March 19 | 2026-03-19 | 2026-03-19 | completed |

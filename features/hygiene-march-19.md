@@ -99,6 +99,13 @@ coverage.
   and periodic-evaluation gating into small helpers with focused tests in
   `verso_training/src/policy_rl_train.rs`, including a safe `eval_every = 0`
   branch.
+- 2026-03-19: Phase 5 then stabilized `verso_doc` temp-directory tests by
+  switching the config/include/use regression cases onto unique per-test temp
+  roots, and fixed `verso_doc/src/source.rs` so include-cycle tracking uses a
+  traversal stack while `collect_dependencies` keeps a separate transitive
+  dependency list. This restored the full coverage workflow after the source
+  loading refactor and preserved both circular-include detection and dependency
+  tracking.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
@@ -200,7 +207,7 @@ Success criteria:
 
 - Fewer repeated `match ExprKind` traversal blocks across modules.
 - New symbolic features can reuse shared traversal primitives.
-- Status: started on 2026-03-19.
+- Status: completed on 2026-03-19.
 
 ### Phase 5 - Close Testing and Tooling Gaps
 
@@ -216,6 +223,7 @@ Success criteria:
 
 - Coverage improves in the currently low-signal orchestration files.
 - Refactors have regression protection at both unit and workflow levels.
+- Status: completed on 2026-03-19.
 
 ### Recommended Order
 
@@ -233,7 +241,8 @@ npm run coverage:summary
 ```
 
 - `npm test` passed.
-- `cargo llvm-cov --workspace --summary-only` reported 85.15% total line coverage.
+- `cargo llvm-cov --workspace --summary-only` reported 85.79% region coverage
+  and 83.52% total line coverage.
 - Focused Phase 5 CLI regression tests passed:
   - `cargo test -p verso_doc --bin verso plan_config_builds`
   - `cargo test -p verso_doc --bin verso resolve_single_build_output`
@@ -254,8 +263,15 @@ npm run coverage:summary
 - Focused Phase 5 RL-training tests passed:
   - `cargo test -p verso_training policy_rl_train::tests`
   - `cargo test -p verso_training should_run_evaluation_handles_zero_and_periodic_epochs`
+- Source-loading regression checks passed:
+  - `cargo test -p verso_doc --lib`
+  - `cargo test -p verso_doc --test integration`
 - Manual regression checks on 2026-03-19:
   - Built and reloaded VS Code to confirm the extension still works after the
     Phase 3 refactors.
   - Ran check/build against the `erd` document after editing source files and
     verified the generated PDF output.
+- Current module-coverage hot spots from `npm run coverage:modules`:
+  - `verso_doc/src/bin/verso.rs` at 10.37% line coverage.
+  - `verso_training/src/policy_rl_train.rs` at 34.15% line coverage.
+  - `verso_training/src/policy_train.rs` at 39.10% line coverage.
