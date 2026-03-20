@@ -579,31 +579,16 @@ pub fn eval_constants(expr: &Expr) -> Expr {
 /// Collect all indices from an expression.
 fn collect_all_indices(expr: &Expr) -> Vec<(String, crate::expr::IndexPosition)> {
     let mut result = Vec::new();
-    collect_all_indices_rec(expr, &mut result);
+    expr.walk(&mut |node| {
+        if let ExprKind::Var { indices, .. } = &node.kind {
+            result.extend(
+                indices
+                    .iter()
+                    .map(|idx| (idx.name.clone(), idx.position.clone())),
+            );
+        }
+    });
     result
-}
-
-fn collect_all_indices_rec(expr: &Expr, result: &mut Vec<(String, crate::expr::IndexPosition)>) {
-    match &expr.kind {
-        ExprKind::Var { indices, .. } => {
-            for idx in indices {
-                result.push((idx.name.clone(), idx.position.clone()));
-            }
-        }
-        ExprKind::Add(a, b) | ExprKind::Mul(a, b) | ExprKind::Pow(a, b) => {
-            collect_all_indices_rec(a, result);
-            collect_all_indices_rec(b, result);
-        }
-        ExprKind::Neg(a) | ExprKind::Inv(a) | ExprKind::Fn(_, a) => {
-            collect_all_indices_rec(a, result);
-        }
-        ExprKind::FnN(_, args) => {
-            for arg in args {
-                collect_all_indices_rec(arg, result);
-            }
-        }
-        _ => {}
-    }
 }
 
 /// Find contracted (dummy) indices - those that appear both upper and lower.
@@ -658,81 +643,56 @@ fn canonical_key(expr: &Expr) -> String {
 fn canonical_key_with_map(expr: &Expr, dummy_map: &HashMap<String, String>) -> String {
     use crate::expr::{classify_mul, IndexPosition, MulKind};
 
-    match &expr.kind {
-        ExprKind::Rational(r) => format!("Rat({}/{})", r.num(), r.den()),
-        ExprKind::Named(nc) => format!("Named({:?})", nc),
-        ExprKind::FracPi(r) => format!("FracPi({}/{})", r.num(), r.den()),
-        ExprKind::Var { name, indices, .. } => {
-            if indices.is_empty() {
-                format!("Var({})", name)
-            } else {
-                let normalized_indices: Vec<String> = indices
-                    .iter()
-                    .map(|idx| {
-                        let idx_name = dummy_map.get(&idx.name).unwrap_or(&idx.name);
-                        match idx.position {
-                            IndexPosition::Upper => format!("^{}", idx_name),
-                            IndexPosition::Lower => format!("_{}", idx_name),
-                        }
-                    })
-                    .collect();
-                format!("Var({}[{}])", name, normalized_indices.join(","))
+    expr.try_fold_post_order(&mut |node, children: Vec<String>| {
+        Some(match (&node.kind, children.as_slice()) {
+            (ExprKind::Rational(r), []) => format!("Rat({}/{})", r.num(), r.den()),
+            (ExprKind::Named(nc), []) => format!("Named({:?})", nc),
+            (ExprKind::FracPi(r), []) => format!("FracPi({}/{})", r.num(), r.den()),
+            (ExprKind::Var { name, indices, .. }, []) => {
+                if indices.is_empty() {
+                    format!("Var({})", name)
+                } else {
+                    let normalized_indices: Vec<String> = indices
+                        .iter()
+                        .map(|idx| {
+                            let idx_name = dummy_map.get(&idx.name).unwrap_or(&idx.name);
+                            match idx.position {
+                                IndexPosition::Upper => format!("^{}", idx_name),
+                                IndexPosition::Lower => format!("_{}", idx_name),
+                            }
+                        })
+                        .collect();
+                    format!("Var({}[{}])", name, normalized_indices.join(","))
+                }
             }
-        }
-        ExprKind::Mul(a, b) => {
-            let ka = canonical_key_with_map(a, dummy_map);
-            let kb = canonical_key_with_map(b, dummy_map);
-            // Normalize x * x to match x^2
-            if ka == kb {
-                format!("Pow({}, 2)", ka)
-            } else if classify_mul(a, b) == MulKind::Outer {
-                // Outer products are non-commutative, preserve order
-                format!("Mul({}, {})", ka, kb)
-            } else if ka <= kb {
-                format!("Mul({}, {})", ka, kb)
-            } else {
-                format!("Mul({}, {})", kb, ka)
+            (ExprKind::Mul(a, b), [ka, kb]) => {
+                if ka == kb {
+                    format!("Pow({}, 2)", ka)
+                } else if classify_mul(a, b) == MulKind::Outer {
+                    format!("Mul({}, {})", ka, kb)
+                } else if ka <= kb {
+                    format!("Mul({}, {})", ka, kb)
+                } else {
+                    format!("Mul({}, {})", kb, ka)
+                }
             }
-        }
-        ExprKind::Add(a, b) => {
-            format!(
-                "Add({}, {})",
-                canonical_key_with_map(a, dummy_map),
-                canonical_key_with_map(b, dummy_map)
-            )
-        }
-        ExprKind::Neg(a) => format!("Neg({})", canonical_key_with_map(a, dummy_map)),
-        ExprKind::Inv(a) => format!("Inv({})", canonical_key_with_map(a, dummy_map)),
-        ExprKind::Pow(base, exp) => {
-            // Normalize Pow(x, 2) for consistency with Mul(x, x)
-            if matches!(&exp.kind, ExprKind::Rational(r) if *r == Rational::TWO) {
-                format!("Pow({}, 2)", canonical_key_with_map(base, dummy_map))
-            } else {
-                format!(
-                    "Pow({}, {})",
-                    canonical_key_with_map(base, dummy_map),
-                    canonical_key_with_map(exp, dummy_map)
-                )
+            (ExprKind::Add(_, _), [a, b]) => format!("Add({}, {})", a, b),
+            (ExprKind::Neg(_), [inner]) => format!("Neg({})", inner),
+            (ExprKind::Inv(_), [inner]) => format!("Inv({})", inner),
+            (ExprKind::Pow(_, exp), [base, exp_key]) => {
+                if matches!(&exp.kind, ExprKind::Rational(r) if *r == Rational::TWO) {
+                    format!("Pow({}, 2)", base)
+                } else {
+                    format!("Pow({}, {})", base, exp_key)
+                }
             }
-        }
-        ExprKind::Fn(kind, a) => {
-            format!("Fn({:?}, {})", kind, canonical_key_with_map(a, dummy_map))
-        }
-        ExprKind::FnN(kind, args) => {
-            let arg_keys: Vec<_> = args
-                .iter()
-                .map(|a| canonical_key_with_map(a, dummy_map))
-                .collect();
-            format!("FnN({:?}, [{}])", kind, arg_keys.join(", "))
-        }
-        ExprKind::Quantity(inner, unit) => {
-            format!(
-                "Qty({}, {})",
-                canonical_key_with_map(inner, dummy_map),
-                unit
-            )
-        }
-    }
+            (ExprKind::Fn(kind, _), [inner]) => format!("Fn({:?}, {})", kind, inner),
+            (ExprKind::FnN(kind, _), args) => format!("FnN({:?}, [{}])", kind, args.join(", ")),
+            (ExprKind::Quantity(_, unit), [inner]) => format!("Qty({}, {})", inner, unit),
+            other => panic!("unexpected canonical key fold shape: {:?}", other),
+        })
+    })
+    .expect("canonical key fold should not fail")
 }
 
 /// A coefficient for exact Rational arithmetic.
@@ -2618,6 +2578,23 @@ mod tests {
             "Should contain both tensors a and b, got: {}",
             debug
         );
+    }
+
+    #[test]
+    fn canonical_key_normalizes_mul_self_to_pow_two() {
+        let product = mul(scalar("x"), scalar("x"));
+        let squared = pow(scalar("x"), constant(2.0));
+        assert_eq!(canonical_key(&product), canonical_key(&squared));
+    }
+
+    #[test]
+    fn canonical_key_normalizes_dummy_index_names() {
+        use crate::expr::lower;
+
+        let left = mul(tensor("a", vec![upper("i")]), tensor("b", vec![lower("i")]));
+        let right = mul(tensor("a", vec![upper("j")]), tensor("b", vec![lower("j")]));
+
+        assert_eq!(canonical_key(&left), canonical_key(&right));
     }
 
     #[test]

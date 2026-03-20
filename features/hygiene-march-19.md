@@ -58,6 +58,11 @@ coverage.
   read-only tree folds, used it to replace the recursive `eval_f64`
   implementation in `verso_symbolic/src/eval.rs`, and added a focused
   post-order fold regression test in `verso_symbolic/src/expr.rs`.
+- 2026-03-19: Phase 4 then migrated `verso_symbolic/src/search.rs`
+  canonical-key generation onto the shared traversal helpers, replacing manual
+  recursion in both index collection and canonical string building while
+  adding direct regression coverage for `Mul(x, x) ~ Pow(x, 2)` and dummy-index
+  alpha-equivalence.
 - The syntax guide is a strength. It is both readable product documentation and a
   regression fixture, and `verso_doc/tests/integration.rs` already verifies that it
   parses, verifies, and compiles.
