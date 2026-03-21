@@ -1,6 +1,6 @@
 use crate::ast::{DefDecl, ProseFragment, VarDecl};
 use crate::parse::parse_prose_fragments;
-use crate::tex_queries::{find_symbol, SymbolInfo};
+use crate::tex_queries::{declaration_equation_label, find_symbol, SymbolInfo};
 use std::collections::HashMap;
 use std::fmt::Write;
 use verso_symbolic::ToTex;
@@ -177,29 +177,21 @@ pub(super) fn write_prose_fragments(
                 let tex_name = verso_symbolic::parse_expr(name)
                     .map(|e| e.to_tex())
                     .unwrap_or_else(|_| name.clone());
-                write!(out, "${}$", tex_name).unwrap();
-                if let Some(sym) = sym {
-                    let type_info = sym.detail.lines().next().unwrap_or("");
-                    if !type_info.is_empty() && type_info != "[1]" {
-                        let tex_info = if sym.kind == "var" {
-                            escape_tex_dim(type_info)
-                        } else {
-                            verso_symbolic::parse_expr(type_info)
-                                .map(|e| e.to_tex())
-                                .unwrap_or_else(|_| escape_tex_dim(type_info))
-                        };
-                        write!(out, " ${}$", tex_info).unwrap();
-                    }
-                    let desc = display.as_deref().or_else(|| {
-                        let rest = sym.detail.find("\n\n").map(|i| sym.detail[i + 2..].trim());
-                        rest.filter(|s| !s.is_empty())
-                    });
-                    if let Some(desc) = desc {
-                        out.push_str(": ");
-                        match parse_prose_fragments(desc) {
-                            Ok(frags) => write_prose_fragments(out, &frags, ctx),
-                            Err(_) => out.push_str(&escape_prose(desc)),
+                match (sym, display.as_deref()) {
+                    (Some(sym), Some(override_text)) => {
+                        write_sym_display(out, override_text, ctx);
+                        if let Some(label) = &sym.reference_label {
+                            write!(out, "~\\eqref{{{}}}", label).unwrap();
                         }
+                    }
+                    (Some(sym), None) => {
+                        write!(out, "${}$", tex_name).unwrap();
+                        if let Some(label) = &sym.reference_label {
+                            write!(out, "~\\eqref{{{}}}", label).unwrap();
+                        }
+                    }
+                    (None, _) => {
+                        write!(out, "${}$", tex_name).unwrap();
                     }
                 }
             }
@@ -218,7 +210,9 @@ pub(super) fn write_var(out: &mut String, decl: &VarDecl, ctx: &TexContext) {
         .map(|e| e.to_tex())
         .unwrap_or_else(|_| decl.var_name.clone());
     let dim = format!("{}", decl.dimension);
-    writeln!(out, "\\begin{{equation}}").unwrap();
+    let label = declaration_equation_label("var", &decl.var_name)
+        .expect("var declarations should always have equation labels");
+    writeln!(out, "\\begin{{equation}} \\label{{{}}}", label).unwrap();
     if dim != "1" {
         writeln!(out, "  {} \\quad {}", tex_name, escape_tex_dim(&dim)).unwrap();
     } else {
@@ -234,7 +228,9 @@ pub(super) fn write_def(out: &mut String, decl: &DefDecl, ctx: &TexContext) {
     let tex_name = verso_symbolic::parse_expr(&decl.name)
         .map(|e| e.to_tex())
         .unwrap_or_else(|_| decl.name.clone());
-    writeln!(out, "\\begin{{equation}}").unwrap();
+    let label = declaration_equation_label("def", &decl.name)
+        .expect("def declarations should always have equation labels");
+    writeln!(out, "\\begin{{equation}} \\label{{{}}}", label).unwrap();
     writeln!(out, "  {} \\mathrel{{:=}} {}", tex_name, decl.value.to_tex()).unwrap();
     writeln!(out, "\\end{{equation}}").unwrap();
 }
@@ -246,5 +242,12 @@ pub(super) fn write_description(out: &mut String, desc: &str, ctx: &TexContext) 
             writeln!(out).unwrap();
         }
         Err(_) => writeln!(out, "{}", escape_prose(desc)).unwrap(),
+    }
+}
+
+fn write_sym_display(out: &mut String, display: &str, ctx: &TexContext) {
+    match parse_prose_fragments(display) {
+        Ok(frags) => write_prose_fragments(out, &frags, ctx),
+        Err(_) => out.push_str(&escape_prose(display)),
     }
 }

@@ -7,6 +7,24 @@ pub struct SymbolInfo {
     pub kind: String,
     pub detail: String,
     pub line: usize,
+    pub reference_label: Option<String>,
+}
+
+fn hex_encode_label_component(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    for byte in text.as_bytes() {
+        use std::fmt::Write;
+        write!(out, "{:02x}", byte).unwrap();
+    }
+    out
+}
+
+/// Build the equation label for declarations that render as numbered equations.
+pub fn declaration_equation_label(kind: &str, name: &str) -> Option<String> {
+    match kind {
+        "var" | "def" => Some(format!("eq:{}:{}", kind, hex_encode_label_component(name))),
+        _ => None,
+    }
 }
 
 /// Convert a section title to a URL-friendly slug for use as a label.
@@ -204,6 +222,7 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
                     kind: "var".to_string(),
                     detail,
                     line: decl.span.line,
+                    reference_label: declaration_equation_label("var", &decl.var_name),
                 });
             }
             Block::Def(decl) => {
@@ -217,6 +236,7 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
                     kind: "def".to_string(),
                     detail,
                     line: decl.span.line,
+                    reference_label: declaration_equation_label("def", &decl.name),
                 });
             }
             Block::Func(decl) => {
@@ -231,6 +251,7 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
                     kind: "func".to_string(),
                     detail,
                     line: decl.span.line,
+                    reference_label: None,
                 });
             }
             Block::Claim(claim) => {
@@ -239,6 +260,7 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
                     kind: "claim".to_string(),
                     detail: format!("{} = {}", claim.lhs, claim.rhs),
                     line: claim.span.line,
+                    reference_label: Some(format!("eq:{}", claim.name)),
                 });
             }
             _ => {}

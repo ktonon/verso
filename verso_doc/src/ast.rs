@@ -211,7 +211,7 @@ pub enum ProseFragment {
         url: String,
         display: Option<String>,
     },
-    /// Symbol declaration display: sym`name` or sym`name|override description`.
+    /// Symbol declaration reference: sym`name` or sym`name|override display`.
     Sym {
         name: String,
         display: Option<String>,

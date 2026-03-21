@@ -52,7 +52,7 @@ def F := m * a
   Newton's second law.
 ```
 
-This replaces both `!const` (simple bindings) and `!definition` (named definitions). The name on the left of `:=` is the identifier. The value is substituted in subsequent expressions and registered as a rewrite rule. The optional description appears in LSP hover and `sym` output.
+This replaces both `!const` (simple bindings) and `!definition` (named definitions). The name on the left of `:=` is the identifier. The value is substituted in subsequent expressions and registered as a rewrite rule. The optional description appears in LSP hover, while `sym` uses the declaration as a compact inline reference.
 
 For paper output, `def` renders as a numbered equation (like old `!definition`). The left-side name serves as the label for cross-references.
 

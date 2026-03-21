@@ -1,5 +1,6 @@
 use super::*;
 use crate::parse::parse_document;
+use crate::tex_queries::declaration_equation_label;
 
 #[test]
 fn compile_section() {
@@ -728,10 +729,20 @@ fn compile_sym_var() {
     let src = "var v [L T^-1]\n  Velocity.\n\nHere: sym`v`";
     let doc = parse_document(src).unwrap();
     let tex = compile_to_tex(&doc);
-    assert!(tex.contains("$v$"), "should render symbol as math: {}", tex);
+    let label = declaration_equation_label("var", "v").unwrap();
     assert!(
-        tex.contains("Velocity."),
-        "should include description: {}",
+        tex.contains(&format!("\\begin{{equation}} \\label{{{}}}", label)),
+        "var declaration should be labeled for referencing: {}",
+        tex
+    );
+    assert!(
+        tex.contains(&format!("Here: $v$~\\eqref{{{}}}", label)),
+        "sym should render as a compact declaration reference: {}",
+        tex
+    );
+    assert!(
+        !tex.contains("Velocity.\\par"),
+        "sym should not inline the declaration description in prose: {}",
         tex
     );
 }
@@ -741,19 +752,11 @@ fn compile_sym_with_override() {
     let src = "var v [L T^-1]\n  Velocity.\n\nHere: sym`v|Speed of the particle.`";
     let doc = parse_document(src).unwrap();
     let tex = compile_to_tex(&doc);
+    let label = declaration_equation_label("var", "v").unwrap();
     assert!(
-        tex.contains("Speed of the particle."),
-        "should use override: {}",
+        tex.contains(&format!("Here: Speed of the particle.~\\eqref{{{}}}", label)),
+        "override should replace the default symbol display while keeping the reference: {}",
         tex
-    );
-    let sym_line = tex
-        .lines()
-        .find(|line| line.contains("Speed of the particle."))
-        .unwrap();
-    assert!(
-        !sym_line.contains("Velocity."),
-        "sym line should not contain declared desc: {}",
-        sym_line
     );
 }
 
@@ -762,18 +765,30 @@ fn compile_sym_prefers_exact_match_over_base() {
     let src = "var ℓ_{n} [L]\n  Characteristic length at rung math`n`.\ndef ℓ_{n-1} := ℓ_{n} / σ\n  Characteristic length scaling\n\n- sym`ℓ_{n-1}`";
     let doc = parse_document(src).unwrap();
     let tex = compile_to_tex(&doc);
+    let label = declaration_equation_label("def", "ℓ_{n-1}").unwrap();
     assert!(
-        tex.contains("Characteristic length scaling"),
-        "sym should resolve to the exact-match def, not the base-match var: {}",
+        tex.contains(&format!("$\\ell_{{n-1}}$~\\eqref{{{}}}", label)),
+        "sym should resolve to the exact-match def declaration reference, not the base-match var: {}",
         tex
     );
 }
 
 #[test]
-fn compile_sym_def_detail_uses_latex() {
+fn compile_sym_def_renders_compact_reference() {
     let src = "var ℓ_{n} [L]\ndef ℓ_{n-1} := ℓ_{n} / σ\n\n- sym`ℓ_{n-1}`";
     let doc = parse_document(src).unwrap();
     let tex = compile_to_tex(&doc);
+    let label = declaration_equation_label("def", "ℓ_{n-1}").unwrap();
+    assert!(
+        tex.contains(&format!("$\\ell_{{n-1}}$~\\eqref{{{}}}", label)),
+        "def references should stay compact and point to the numbered declaration: {}",
+        tex
+    );
+    assert!(
+        !tex.contains("\\ell_{n} / \\sigma"),
+        "sym should not inline the definition body into prose: {}",
+        tex
+    );
     assert!(
         !tex.contains("ℓ"),
         "should not contain raw unicode ℓ in output: {}",

@@ -69,7 +69,7 @@ Within prose, the following inline constructs are recognized:
 - claim backticks: equation reference producing a numbered reference
 - ref backticks: section cross-reference with optional display text
 - url backticks: hyperlinks with optional display text
-- sym backticks: renders a declared symbol with its type and description
+- sym backticks: renders a compact declaration reference
 
 #### Inline Math
 
@@ -88,11 +88,11 @@ tex`\vec{v}` renders a vector.
 
 #### Symbol Display
 
-Use sym backticks to render a declared symbol with its type information
-and description. The symbol must be declared earlier via a var, def,
-or func statement. For example, sym`v` renders the variable along
-with its dimension and description. An override description can be
-provided after a pipe: sym`v|the speed of the particle`.
+Use sym backticks to render a declared symbol inline without expanding its
+full declaration prose. For variables and definitions, sym`name` renders the
+symbol and a reference to its numbered declaration equation. The symbol must
+be declared earlier via a var, def, or func statement. An override display can
+be provided after a pipe: sym`v|the speed of the particle`.
 
 ### Text Formatting
 
