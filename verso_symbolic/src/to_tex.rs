@@ -7,15 +7,7 @@ use crate::unicode;
 /// Convert a name that may contain unicode characters to LaTeX.
 /// Single unicode chars are looked up in the unicode table; ASCII names pass through.
 fn name_to_latex(name: &str) -> String {
-    let mut result = String::new();
-    for ch in name.chars() {
-        if let Some(latex) = unicode::to_latex(ch) {
-            result.push_str(latex);
-        } else {
-            result.push(ch);
-        }
-    }
-    result
+    unicode::replace_unicode_with_latex(name)
 }
 
 fn frac_pi_to_tex(r: &Rational) -> String {
@@ -39,7 +31,7 @@ pub trait ToTex {
 
 impl ToTex for Index {
     fn to_tex(&self) -> String {
-        self.name.clone()
+        name_to_latex(&self.name)
     }
 }
 
@@ -521,6 +513,12 @@ mod tests {
     fn to_tex_unicode_var_with_indices() {
         let t = tensor("μ", vec![lower("i")]);
         assert_eq!(t.to_tex(), "\\mu_{i}");
+    }
+
+    #[test]
+    fn to_tex_geometric_unicode_var() {
+        assert_eq!(scalar("⟂").to_tex(), "\\perp");
+        assert_eq!(scalar("∥").to_tex(), "\\parallel");
     }
 
     #[test]

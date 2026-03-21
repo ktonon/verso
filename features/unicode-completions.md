@@ -41,6 +41,8 @@ Start with the characters most useful for mathematical physics:
 
 **Math operators**: partial (∂), nabla (∇), inf/infinity (∞), sqrt (√), sum (∑), prod (∏), integral (∫), pm (±), mp (∓), times (×), cdot (·), leq (≤), geq (≥), neq (≠), approx (≈), equiv (≡), in (∈), notin (∉), subset (⊂), supset (⊃), forall (∀), exists (∃), hbar (ℏ)
 
+**Geometric relations**: parallel (∥), perp (⟂)
+
 **Arrows**: to/rightarrow (→), leftarrow (←), leftrightarrow (↔), implies (⇒), iff (⇔), mapsto (↦)
 
 Extensible — new entries can be added to the table without code changes.
@@ -89,15 +91,18 @@ Implemented in 4 phases:
 
 1. **Shared unicode table** (`verso_symbolic/src/unicode.rs`): 64 entries covering Greek letters (lowercase + uppercase), math operators, and arrows. Each entry is a `(name, char, latex)` triple. Functions: `lookup`, `to_latex`, `completions`, `replace_all`.
 
-2. **REPL integration** (`verso_symbolic/src/repl.rs`): `replace_all` is called at the top of `Session::eval` before any other processing. The expression tokenizer (`parser.rs`) was extended to recognize non-ASCII alphabetic characters as single-char identifiers (e.g., `μ` → `Token::Ident("μ")`). `π` remains special-cased as `Token::Pi`.
+2. **REPL integration** (`verso_symbolic/src/repl.rs`): `replace_all` is called at the top of `Session::eval` before any other processing. The expression tokenizer (`parser.rs`) was extended to recognize non-ASCII symbolic characters used as identifiers (e.g., `μ`, `∥`, `⟂`) as single-char identifiers. `π` remains special-cased as `Token::Pi`.
 
-3. **LaTeX integration** (`verso_symbolic/src/to_tex.rs`): Added `name_to_latex` helper that converts unicode chars in variable names to LaTeX commands via the shared table. Applied to `ExprKind::Var` rendering.
+3. **LaTeX integration** (`verso_symbolic/src/to_tex.rs`, `verso_doc/src/tex_prose.rs`): Added a shared unicode-to-LaTeX conversion path for symbolic names and document-side raw `tex` fragments. This now covers `ExprKind::Var` rendering, tensor indices, and inline `tex` content emitted by the paper compiler.
 
-4. **VSCode/LSP integration** (`verso_doc/src/bin/verso.rs`): Added `CompletionProvider` with `:` trigger character. Returns all unicode entries as `CompletionItem`s with character preview in `detail` field.
+4. **VSCode/LSP integration** (`verso_doc/src/bin/verso.rs`): Added `CompletionProvider` with `:` trigger character. Returns all unicode entries as `CompletionItem`s with character preview in `detail` field. The completion handler now converts LSP UTF-16 cursor positions to byte offsets before scanning the line, so repeated `:name:` completions still trigger correctly after earlier unicode insertions on the same line.
+
+The completion table has since been extended with geometric relation symbols used in ERD notation, including `:parallel:` → `∥` and `:perp:` → `⟂`. Because the table is shared, those additions automatically apply to REPL replacement, VS Code completions, symbolic math rendering, and document-side inline `tex` rendering.
 
 ## Verification
 
 - `cargo test --release -p verso_symbolic -- unicode` exercises the lookup/replace/to_latex functions
+- `cargo test -p verso_doc completion_context` verifies unicode completion range handling in the LSP server
 - REPL e2e tests verify `:mu:` → `μ` replacement in expressions
-- LaTeX output tests verify `μ` → `\mu` in generated `.tex` files
+- LaTeX output tests verify unicode math symbols convert in both symbolic expressions and document-side inline `tex` fragments
 - Manual verification of VSCode completion popup behavior

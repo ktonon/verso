@@ -130,7 +130,12 @@ pub(super) fn write_prose_fragments(
                 write!(out, "${} = {}$", lhs.to_tex(), rhs.to_tex()).unwrap();
             }
             ProseFragment::Tex(raw) => {
-                write!(out, "${}$", raw).unwrap();
+                write!(
+                    out,
+                    "${}$",
+                    verso_symbolic::unicode::replace_unicode_with_latex(raw)
+                )
+                .unwrap();
             }
             ProseFragment::ClaimRef(name) => {
                 write!(out, "\\eqref{{eq:{}}}", name).unwrap();

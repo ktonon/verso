@@ -23,6 +23,28 @@ fn compile_inline_math_equality() {
 }
 
 #[test]
+fn compile_inline_math_geometric_unicode() {
+    let doc = parse_document("Speeds are math`c_n^{∥}` and math`c_n^{⟂}`.").unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("Speeds are $c^{\\parallel}_{n}$ and $c^{\\perp}_{n}$."),
+        "inline math should convert unicode geometric symbols to LaTeX: {}",
+        tex
+    );
+}
+
+#[test]
+fn compile_inline_tex_geometric_unicode() {
+    let doc = parse_document("Speeds are tex`c_n^{∥}` and tex`c_n^{⟂}`.").unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("Speeds are $c_n^{\\parallel}$ and $c_n^{\\perp}$."),
+        "inline raw tex should convert unicode geometric symbols to LaTeX: {}",
+        tex
+    );
+}
+
+#[test]
 fn compile_var_renders_equation() {
     let src = "var v [L T^-1]\n  Velocity.";
     let doc = parse_document(src).unwrap();

@@ -49,7 +49,9 @@ static TABLE: &[UnicodeEntry] = &[
     UnicodeEntry { name: "notin", char: '∉', latex: "\\notin" },
     UnicodeEntry { name: "nu", char: 'ν', latex: "\\nu" },
     UnicodeEntry { name: "omega", char: 'ω', latex: "\\omega" },
+    UnicodeEntry { name: "parallel", char: '∥', latex: "\\parallel" },
     UnicodeEntry { name: "partial", char: '∂', latex: "\\partial" },
+    UnicodeEntry { name: "perp", char: '⟂', latex: "\\perp" },
     UnicodeEntry { name: "phi", char: 'φ', latex: "\\phi" },
     UnicodeEntry { name: "pi", char: 'π', latex: "\\pi" },
     UnicodeEntry { name: "pm", char: '±', latex: "\\pm" },
@@ -90,6 +92,19 @@ pub fn lookup(name: &str) -> Option<char> {
 /// Get the LaTeX command for a unicode character.
 pub fn to_latex(c: char) -> Option<&'static str> {
     TABLE.iter().find(|e| e.char == c).map(|e| e.latex)
+}
+
+/// Replace known unicode math symbols with their LaTeX equivalents.
+pub fn replace_unicode_with_latex(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if let Some(latex) = to_latex(ch) {
+            result.push_str(latex);
+        } else {
+            result.push(ch);
+        }
+    }
+    result
 }
 
 /// Return all entries whose name starts with the given prefix.
@@ -176,6 +191,8 @@ mod tests {
         assert_eq!(lookup("nabla"), Some('∇'));
         assert_eq!(lookup("inf"), Some('∞'));
         assert_eq!(lookup("hbar"), Some('ℏ'));
+        assert_eq!(lookup("parallel"), Some('∥'));
+        assert_eq!(lookup("perp"), Some('⟂'));
     }
 
     #[test]
@@ -207,12 +224,22 @@ mod tests {
         assert_eq!(to_latex('∇'), Some("\\nabla"));
         assert_eq!(to_latex('∞'), Some("\\infty"));
         assert_eq!(to_latex('≤'), Some("\\leq"));
+        assert_eq!(to_latex('∥'), Some("\\parallel"));
+        assert_eq!(to_latex('⟂'), Some("\\perp"));
     }
 
     #[test]
     fn to_latex_unknown_char() {
         assert_eq!(to_latex('x'), None);
         assert_eq!(to_latex('A'), None);
+    }
+
+    #[test]
+    fn replace_unicode_with_latex_in_expression() {
+        assert_eq!(
+            replace_unicode_with_latex("c_n^{∥} and c_n^{⟂}"),
+            "c_n^{\\parallel} and c_n^{\\perp}"
+        );
     }
 
     // -- completions --
@@ -233,7 +260,9 @@ mod tests {
         assert!(names.contains(&"partial"));
         assert!(names.contains(&"phi"));
         assert!(names.contains(&"pi"));
+        assert!(names.contains(&"parallel"));
         assert!(names.contains(&"pm"));
+        assert!(names.contains(&"perp"));
         assert!(names.contains(&"prod"));
         assert!(names.contains(&"psi"));
     }
@@ -265,6 +294,11 @@ mod tests {
     #[test]
     fn replace_all_in_expression() {
         assert_eq!(replace_all(":partial:f/:partial:x"), "∂f/∂x");
+    }
+
+    #[test]
+    fn replace_all_parallel_and_perp() {
+        assert_eq!(replace_all(":parallel: and :perp:"), "∥ and ⟂");
     }
 
     #[test]

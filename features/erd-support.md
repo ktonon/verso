@@ -8,7 +8,7 @@ This feature tracks the verso extensions needed to author and verify ERD's mathe
 
 ## Dependencies
 
-- **[unicode-completions](unicode-completions.md)**: Landed. ERD now uses `math` tags for simple Greek letter variables (`σ`, `μ`, `K`, `ρ_{0}`).
+- **[unicode-completions](unicode-completions.md)**: Landed. ERD now uses `math` tags for simple Greek letter variables (`σ`, `μ`, `K`, `ρ_{0}`), and the shared unicode table now also covers geometric relation symbols such as `∥` and `⟂` for editor completion and TeX rendering across both symbolic expressions and document-side inline `tex` fragments.
 
 ## Needed Capabilities
 

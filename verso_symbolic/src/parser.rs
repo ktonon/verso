@@ -119,9 +119,9 @@ fn tokenize(src: &str) -> Result<Vec<(Token, Span)>, ParseError> {
             continue;
         }
 
-        // Unicode alphabetic characters (Greek letters, etc.) as single-char identifiers.
+        // Unicode single-char identifiers used in symbolic math.
         // π is excluded since it's handled as Token::Pi below.
-        if ch.is_alphabetic() && !ch.is_ascii() && ch != 'π' {
+        if ((ch.is_alphabetic() && !ch.is_ascii()) || matches!(ch, '∥' | '⟂')) && ch != 'π' {
             let start = pos;
             chars.next();
             pos += 1;
@@ -975,6 +975,24 @@ mod tests {
                 mul(ln(scalar("x")), inv(ln(constant(10.0))))
             )
         );
+    }
+
+    #[test]
+    fn parse_unicode_perp_identifier() {
+        let expr = parse_expr("⟂").unwrap();
+        assert_eq!(expr, scalar("⟂"));
+    }
+
+    #[test]
+    fn parse_unicode_parallel_superscript() {
+        let expr = parse_expr("c_n^{∥}").unwrap();
+        assert_eq!(expr, tensor("c", vec![lower("n"), upper("∥")]));
+    }
+
+    #[test]
+    fn parse_unicode_perp_superscript() {
+        let expr = parse_expr("c_n^{⟂}").unwrap();
+        assert_eq!(expr, tensor("c", vec![lower("n"), upper("⟂")]));
     }
 
     #[test]

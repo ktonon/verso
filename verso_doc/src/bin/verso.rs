@@ -313,6 +313,64 @@ fn output_is_tex(output_path: &Path) -> bool {
         .is_some_and(|extension| extension == "tex")
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UnicodeCompletionContext {
+    typed_prefix: String,
+    replace_start_utf16: u32,
+    replace_end_utf16: u32,
+}
+
+/// Convert a UTF-16 character offset (as sent by the LSP client) to a
+/// UTF-8 byte offset into the given string.
+fn utf16_offset_to_byte(text: &str, utf16_col: usize) -> usize {
+    let mut utf16_count = 0;
+    for (byte_idx, ch) in text.char_indices() {
+        if utf16_count >= utf16_col {
+            return byte_idx;
+        }
+        utf16_count += ch.len_utf16();
+    }
+    text.len()
+}
+
+/// Convert a UTF-8 byte offset on a character boundary into a UTF-16 offset.
+fn byte_offset_to_utf16(text: &str, byte_col: usize) -> usize {
+    let mut utf16_count = 0;
+    for (byte_idx, ch) in text.char_indices() {
+        if byte_idx >= byte_col {
+            return utf16_count;
+        }
+        utf16_count += ch.len_utf16();
+    }
+    utf16_count
+}
+
+fn completion_context_for_line(
+    line_text: &str,
+    cursor_utf16: usize,
+) -> Option<UnicodeCompletionContext> {
+    let cursor_byte = utf16_offset_to_byte(line_text, cursor_utf16);
+    let before_cursor = &line_text[..cursor_byte.min(line_text.len())];
+
+    let colon_byte = before_cursor.rfind(':')?;
+    let typed_prefix = before_cursor[colon_byte + 1..].to_string();
+
+    let has_closing_colon = line_text
+        .get(cursor_byte..)
+        .is_some_and(|suffix| suffix.starts_with(':'));
+    let replace_end_byte = if has_closing_colon {
+        cursor_byte + ':'.len_utf8()
+    } else {
+        cursor_byte
+    };
+
+    Some(UnicodeCompletionContext {
+        typed_prefix,
+        replace_start_utf16: byte_offset_to_utf16(line_text, colon_byte) as u32,
+        replace_end_utf16: byte_offset_to_utf16(line_text, replace_end_byte) as u32,
+    })
+}
+
 fn cmd_build(file: &str, output: Option<&str>) {
     use std::process::Command;
     use verso_doc::compile_tex::compile_to_tex;
@@ -554,7 +612,10 @@ fn watch_and_run(tasks: Vec<WatchTask>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{output_is_tex, plan_config_builds, resolve_single_build_output};
+    use super::{
+        completion_context_for_line, output_is_tex, plan_config_builds,
+        resolve_single_build_output,
+    };
     use std::path::Path;
     use verso_doc::config::{ResolvedConfig, ResolvedPaper};
 
@@ -639,6 +700,41 @@ mod tests {
     fn output_is_tex_detects_tex_extension() {
         assert!(output_is_tex(Path::new("build/paper.tex")));
         assert!(!output_is_tex(Path::new("build/paper.pdf")));
+    }
+
+    #[test]
+    fn completion_context_for_ascii_trigger() {
+        let ctx = completion_context_for_line("Use :par", "Use :par".encode_utf16().count())
+            .expect("completion context");
+
+        assert_eq!(ctx.typed_prefix, "par");
+        assert_eq!(ctx.replace_start_utf16, 4);
+        assert_eq!(ctx.replace_end_utf16, 8);
+    }
+
+    #[test]
+    fn completion_context_after_unicode_uses_utf16_positions() {
+        let line = "μ :per";
+        let ctx = completion_context_for_line(line, line.encode_utf16().count())
+            .expect("completion context");
+
+        assert_eq!(ctx.typed_prefix, "per");
+        assert_eq!(ctx.replace_start_utf16, 2);
+        assert_eq!(ctx.replace_end_utf16, 6);
+    }
+
+    #[test]
+    fn completion_context_extends_through_closing_colon() {
+        let line = "μ :per:";
+        let cursor = line
+            .strip_suffix(':')
+            .map(|prefix| prefix.encode_utf16().count())
+            .expect("cursor before closing colon");
+        let ctx = completion_context_for_line(line, cursor).expect("completion context");
+
+        assert_eq!(ctx.typed_prefix, "per");
+        assert_eq!(ctx.replace_start_utf16, 2);
+        assert_eq!(ctx.replace_end_utf16, 7);
     }
 }
 
@@ -729,45 +825,28 @@ async fn cmd_lsp() {
             let pos = params.text_document_position.position;
             let uri = &params.text_document_position.text_document.uri;
 
-            // Find the `:` that started this completion trigger by reading the document
             let docs = self.documents.read().unwrap();
             let Some(text) = docs.get(uri) else {
                 return Ok(None);
             };
 
             let line_text = text.lines().nth(pos.line as usize).unwrap_or("");
-            let col = pos.character as usize;
-            let before_cursor = &line_text[..col.min(line_text.len())];
-
-            // Scan backwards from cursor to find the opening `:`
-            let colon_col = match before_cursor.rfind(':') {
-                Some(idx) => idx,
-                None => return Ok(None),
-            };
-
-            // The prefix typed so far (between `:` and cursor)
-            let typed_prefix = &before_cursor[colon_col + 1..];
-
-            // Check if there's a closing `:` right at the cursor
-            let has_closing_colon = line_text.get(col..col + 1) == Some(":");
-            let end_character = if has_closing_colon {
-                pos.character + 1
-            } else {
-                pos.character
+            let Some(ctx) = completion_context_for_line(line_text, pos.character as usize) else {
+                return Ok(None);
             };
 
             let replace_range = Range {
                 start: Position {
                     line: pos.line,
-                    character: colon_col as u32,
+                    character: ctx.replace_start_utf16,
                 },
                 end: Position {
                     line: pos.line,
-                    character: end_character,
+                    character: ctx.replace_end_utf16,
                 },
             };
 
-            let items: Vec<CompletionItem> = verso_symbolic::unicode::completions(typed_prefix)
+            let items: Vec<CompletionItem> = verso_symbolic::unicode::completions(&ctx.typed_prefix)
                 .into_iter()
                 .map(|(name, ch)| {
                     let label = format!(":{}:", name);
@@ -1242,19 +1321,6 @@ async fn cmd_lsp() {
         }
 
         diagnostics
-    }
-
-    /// Convert a UTF-16 character offset (as sent by the LSP client) to a
-    /// UTF-8 byte offset into the given string.
-    fn utf16_offset_to_byte(text: &str, utf16_col: usize) -> usize {
-        let mut utf16_count = 0;
-        for (byte_idx, ch) in text.char_indices() {
-            if utf16_count >= utf16_col {
-                return byte_idx;
-            }
-            utf16_count += ch.len_utf16();
-        }
-        text.len()
     }
 
     fn line_range(line: usize) -> Range {
