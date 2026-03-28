@@ -2,6 +2,8 @@
 
 **Verifiable Source** — a document format for writing scientific papers with machine-verified mathematics.
 
+> **Alpha software.** Verso is under active development and may introduce breaking changes without notice.
+
 Verso treats a research paper as source code: it compiles to LaTeX/PDF, and its mathematical claims are automatically verified during the build.
 
 ## Quick start
