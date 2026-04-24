@@ -1,10 +1,10 @@
 {
-  "name": "verso-lang",
-  "displayName": "Verso Language Support",
-  "description": "Language support for .verso documents — verified math papers",
+  "name": "ogma-lang",
+  "displayName": "Ogma Language Support",
+  "description": "Language support for .ogma documents — verified math papers",
   "version": "0.1.0",
   "license": "MIT",
-  "publisher": "verso",
+  "publisher": "ogma",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -16,44 +16,44 @@
   "contributes": {
     "languages": [
       {
-        "id": "verso",
+        "id": "ogma",
         "extensions": [
-          ".verso"
+          ".ogma"
         ],
         "aliases": [
-          "Verso",
-          "verso"
+          "Ogma",
+          "ogma"
         ],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "verso",
-        "scopeName": "source.verso",
-        "path": "./syntaxes/verso.tmLanguage.json"
+        "language": "ogma",
+        "scopeName": "source.ogma",
+        "path": "./syntaxes/ogma.tmLanguage.json"
       }
     ],
     "snippets": [
       {
-        "language": "verso",
-        "path": "./snippets/verso.json"
+        "language": "ogma",
+        "path": "./snippets/ogma.json"
       }
     ],
     "configurationDefaults": {
-      "[verso]": {
+      "[ogma]": {
         "editor.tabSize": 3,
         "editor.insertSpaces": false,
         "editor.wordWrap": "on"
       }
     },
     "configuration": {
-      "title": "Verso",
+      "title": "Ogma",
       "properties": {
-        "verso.serverPath": {
+        "ogma.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the verso binary. If empty, searches PATH and workspace target/release/."
+          "description": "Path to the ogma binary. If empty, searches PATH and workspace target/release/."
         }
       }
     }
@@ -61,7 +61,7 @@
   "scripts": {
     "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
-    "test": "vscode-tmgrammar-snap -g syntaxes/verso.tmLanguage.json tests/snap-*.verso",
+    "test": "vscode-tmgrammar-snap -g syntaxes/ogma.tmLanguage.json tests/snap-*.ogma",
     "package": "npm run compile && vsce package"
   },
   "dependencies": {

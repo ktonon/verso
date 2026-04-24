@@ -1,0 +1,211 @@
+>The velocity math`v [L T^-1]` is measured.
+#^^^^^^^^^^^^^ source.ogma
+#             ^^^^ source.ogma keyword.other.tag.math.ogma
+#                 ^ source.ogma string.other.begin.ogma
+#                  ^^ source.ogma string.other.math.ogma
+#                    ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#                     ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma storage.type.dimension.ogma
+#                      ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma
+#                       ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma storage.type.dimension.ogma
+#                        ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#                         ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#                          ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma constant.numeric.decimal.ogma
+#                           ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+#                            ^ source.ogma string.other.end.ogma
+#                             ^^^^^^^^^^^^^^ source.ogma
+>Speed is math`3*10^8 [m/s]`.
+#^^^^^^^^^ source.ogma
+#         ^^^^ source.ogma keyword.other.tag.math.ogma
+#             ^ source.ogma string.other.begin.ogma
+#              ^ source.ogma string.other.math.ogma constant.numeric.decimal.ogma
+#               ^ source.ogma string.other.math.ogma keyword.operator.arithmetic.ogma
+#                ^^ source.ogma string.other.math.ogma constant.numeric.decimal.ogma
+#                  ^ source.ogma string.other.math.ogma keyword.operator.power.ogma
+#                   ^ source.ogma string.other.math.ogma constant.numeric.decimal.ogma
+#                    ^ source.ogma string.other.math.ogma
+#                     ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#                      ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma storage.type.unit.ogma
+#                       ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#                        ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma storage.type.unit.ogma
+#                         ^ source.ogma string.other.math.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+#                          ^ source.ogma string.other.end.ogma
+#                           ^^ source.ogma
+>Gravity exceeds math`2*10^10c`.
+#^^^^^^^^^^^^^^^^ source.ogma
+#                ^^^^ source.ogma keyword.other.tag.math.ogma
+#                    ^ source.ogma string.other.begin.ogma
+#                     ^ source.ogma string.other.math.ogma constant.numeric.decimal.ogma
+#                      ^ source.ogma string.other.math.ogma keyword.operator.arithmetic.ogma
+#                       ^^ source.ogma string.other.math.ogma constant.numeric.decimal.ogma
+#                         ^ source.ogma string.other.math.ogma keyword.operator.power.ogma
+#                          ^^ source.ogma string.other.math.ogma constant.numeric.decimal.ogma
+#                            ^ source.ogma string.other.math.ogma
+#                             ^ source.ogma string.other.end.ogma
+#                              ^^ source.ogma
+>A citation cite`einstein1905` here.
+#^^^^^^^^^^^ source.ogma
+#           ^^^^ source.ogma keyword.other.tag.cite.ogma
+#               ^ source.ogma string.other.begin.ogma
+#                ^^^^^^^^^^^^ source.ogma string.other.citation.ogma
+#                            ^ source.ogma string.other.end.ogma
+#                             ^^^^^^^ source.ogma
+>See claim`pythagorean` for details.
+#^^^^ source.ogma
+#    ^^^^^ source.ogma keyword.other.tag.claim.ogma
+#         ^ source.ogma string.other.begin.ogma
+#          ^^^^^^^^^^^ source.ogma entity.name.function.claim-ref.ogma
+#                     ^ source.ogma string.other.end.ogma
+#                      ^^^^^^^^^^^^^^ source.ogma
+>Using tex`\alpha` for greek.
+#^^^^^^ source.ogma
+#      ^^^ source.ogma keyword.other.tag.tex.ogma
+#         ^ source.ogma string.other.begin.ogma
+#          ^^^^^^ source.ogma string.other.tex.ogma
+#                ^ source.ogma string.other.end.ogma
+#                 ^^^^^^^^^^^^ source.ogma
+>A cross-ref ref`earth-and-the-solar-system|Hydrogen creation` here.
+#^^^^^^^^^^^^ source.ogma
+#            ^^^ source.ogma keyword.other.tag.ref.ogma
+#               ^ source.ogma string.other.begin.ogma
+#                ^^^^^^^^^^^^^^^^^^^^^^^^^^ source.ogma entity.name.tag.cross-ref.ogma
+#                                          ^ source.ogma punctuation.separator.pipe.ogma
+#                                           ^^^^^^^^^^^^^^^^^ source.ogma string.other.display-text.ogma
+#                                                            ^ source.ogma string.other.end.ogma
+#                                                             ^^^^^^^ source.ogma
+>A plain ref ref`some-label` here.
+#^^^^^^^^^^^^ source.ogma
+#            ^^^ source.ogma keyword.other.tag.ref.ogma
+#               ^ source.ogma string.other.begin.ogma
+#                ^^^^^^^^^^ source.ogma entity.name.tag.cross-ref.ogma
+#                          ^ source.ogma string.other.end.ogma
+#                           ^^^^^^^ source.ogma
+>Visit url`https://example.com|Example Site` now.
+#^^^^^^ source.ogma
+#      ^^^ source.ogma keyword.other.tag.url.ogma
+#         ^ source.ogma string.other.begin.ogma
+#          ^^^^^^^^^^^^^^^^^^^ source.ogma markup.underline.link.ogma
+#                             ^ source.ogma punctuation.separator.pipe.ogma
+#                              ^^^^^^^^^^^^ source.ogma string.other.display-text.ogma
+#                                          ^ source.ogma string.other.end.ogma
+#                                           ^^^^^^ source.ogma
+>## Absolute Time label`absolute-time`
+#^^ source.ogma markup.heading.2.ogma punctuation.definition.heading.ogma
+#  ^ source.ogma markup.heading.2.ogma
+#   ^^^^^^^^^^^^^^ source.ogma markup.heading.2.ogma
+#                 ^^^^^ source.ogma markup.heading.2.ogma keyword.other.tag.label.ogma
+#                      ^ source.ogma markup.heading.2.ogma string.other.begin.ogma
+#                       ^^^^^^^^^^^^^ source.ogma markup.heading.2.ogma entity.name.tag.label.ogma
+#                                    ^ source.ogma markup.heading.2.ogma string.other.end.ogma
+>var v [L T^-1]
+#^^^ source.ogma keyword.control.directive.var.ogma
+#   ^ source.ogma
+#    ^ source.ogma variable.parameter.var.ogma
+#     ^ source.ogma
+#      ^^^^^^^^ source.ogma storage.type.dimension.ogma
+>var F [M L T^-2]
+#^^^ source.ogma keyword.control.directive.var.ogma
+#   ^ source.ogma
+#    ^ source.ogma variable.parameter.var.ogma
+#     ^ source.ogma
+#      ^^^^^^^^^^ source.ogma storage.type.dimension.ogma
+>def c := 3*10^8
+#^^^ source.ogma keyword.control.directive.def.ogma
+#   ^ source.ogma
+#    ^ source.ogma variable.parameter.def.ogma
+#     ^ source.ogma
+#      ^^ source.ogma keyword.operator.definition.ogma
+#        ^ source.ogma
+#         ^ source.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#          ^ source.ogma meta.expression.rhs.ogma keyword.operator.arithmetic.ogma
+#           ^^ source.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#             ^ source.ogma meta.expression.rhs.ogma keyword.operator.power.ogma
+#              ^ source.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+>func KE(m, v) := (1/2)*m*v^2
+#^^^^ source.ogma keyword.control.directive.func.ogma
+#    ^ source.ogma
+#     ^^ source.ogma entity.name.function.ogma
+#       ^ source.ogma
+#        ^^^^ source.ogma variable.parameter.func.ogma
+#            ^^ source.ogma
+#              ^^ source.ogma keyword.operator.assignment.ogma
+#                ^ source.ogma
+#                 ^ source.ogma meta.expression.rhs.ogma punctuation.brackets.round.ogma
+#                  ^ source.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#                   ^ source.ogma meta.expression.rhs.ogma keyword.operator.arithmetic.ogma
+#                    ^ source.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#                     ^ source.ogma meta.expression.rhs.ogma punctuation.brackets.round.ogma
+#                      ^ source.ogma meta.expression.rhs.ogma keyword.operator.arithmetic.ogma
+#                       ^ source.ogma meta.expression.rhs.ogma
+#                        ^ source.ogma meta.expression.rhs.ogma keyword.operator.arithmetic.ogma
+#                         ^ source.ogma meta.expression.rhs.ogma
+#                          ^ source.ogma meta.expression.rhs.ogma keyword.operator.power.ogma
+#                           ^ source.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+>- A bullet item with math`x^2`.
+#^ source.ogma markup.list.unnumbered.ogma punctuation.definition.list.begin.ogma
+# ^ source.ogma
+#  ^^^^^^^^^^^^^^^^^^^ source.ogma meta.list.item.ogma
+#                     ^^^^ source.ogma meta.list.item.ogma keyword.other.tag.math.ogma
+#                         ^ source.ogma meta.list.item.ogma string.other.begin.ogma
+#                          ^ source.ogma meta.list.item.ogma string.other.math.ogma
+#                           ^ source.ogma meta.list.item.ogma string.other.math.ogma keyword.operator.power.ogma
+#                            ^ source.ogma meta.list.item.ogma string.other.math.ogma constant.numeric.decimal.ogma
+#                             ^ source.ogma meta.list.item.ogma string.other.end.ogma
+#                              ^ source.ogma meta.list.item.ogma
+>1. A numbered item.
+#^^ source.ogma markup.list.numbered.ogma punctuation.definition.list.begin.ogma
+#  ^ source.ogma
+#   ^^^^^^^^^^^^^^^^ source.ogma meta.list.item.ogma
+>!table Elements
+#^^^^^^ source.ogma meta.block.table.ogma keyword.control.directive.table.ogma
+#      ^ source.ogma meta.block.table.ogma
+#       ^^^^^^^^ source.ogma meta.block.table.ogma entity.name.section.table.ogma
+>  | Name | Status |
+#^^ source.ogma meta.block.table.ogma
+#  ^ source.ogma meta.block.table.ogma keyword.operator.table.ogma
+#   ^^^^^^ source.ogma meta.block.table.ogma
+#         ^ source.ogma meta.block.table.ogma keyword.operator.table.ogma
+#          ^^^^^^^^ source.ogma meta.block.table.ogma
+#                  ^ source.ogma meta.block.table.ogma keyword.operator.table.ogma
+>  |------|--------|
+#^^ source.ogma meta.block.table.ogma
+#  ^^^^^^^^^^^^^^^^^ source.ogma meta.block.table.ogma comment.line.ogma
+>  | Alpha | active |
+#^^ source.ogma meta.block.table.ogma
+#  ^ source.ogma meta.block.table.ogma keyword.operator.table.ogma
+#   ^^^^^^^ source.ogma meta.block.table.ogma
+#          ^ source.ogma meta.block.table.ogma keyword.operator.table.ogma
+#           ^^^^^^^^ source.ogma meta.block.table.ogma
+#                   ^ source.ogma meta.block.table.ogma keyword.operator.table.ogma
+>expect_fail bad_dim [dimension_mismatch]
+#^^^^^^^^^^^ source.ogma meta.block.expect-fail.ogma keyword.control.directive.expect-fail.ogma
+#           ^ source.ogma meta.block.expect-fail.ogma
+#            ^^^^^^^ source.ogma meta.block.expect-fail.ogma entity.name.function.expect-fail.ogma
+#                   ^ source.ogma meta.block.expect-fail.ogma
+#                    ^^^^^^^^^^^^^^^^^^^^ source.ogma meta.block.expect-fail.ogma support.type.expect-fail.ogma
+>  var v [L T^-1]
+#^^ source.ogma meta.block.expect-fail.ogma
+#  ^^^ source.ogma meta.block.expect-fail.ogma keyword.control.directive.var.ogma
+#     ^ source.ogma meta.block.expect-fail.ogma
+#      ^ source.ogma meta.block.expect-fail.ogma variable.parameter.var.ogma
+#       ^ source.ogma meta.block.expect-fail.ogma
+#        ^^^^^^^^ source.ogma meta.block.expect-fail.ogma storage.type.dimension.ogma
+>  var a [L T^-2]
+#^^ source.ogma meta.block.expect-fail.ogma
+#  ^^^ source.ogma meta.block.expect-fail.ogma keyword.control.directive.var.ogma
+#     ^ source.ogma meta.block.expect-fail.ogma
+#      ^ source.ogma meta.block.expect-fail.ogma variable.parameter.var.ogma
+#       ^ source.ogma meta.block.expect-fail.ogma
+#        ^^^^^^^^ source.ogma meta.block.expect-fail.ogma storage.type.dimension.ogma
+>  claim bad
+#^^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#  ^^^^^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma keyword.control.directive.claim.ogma
+#       ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#        ^^^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma entity.name.function.claim.ogma
+>    v = a
+#^^^^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#    ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma meta.expression.lhs.ogma
+#     ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#      ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma keyword.operator.comparison.ogma
+#       ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#        ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma meta.expression.rhs.ogma
+>

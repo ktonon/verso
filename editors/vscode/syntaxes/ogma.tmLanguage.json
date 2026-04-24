@@ -1,0 +1,1129 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Ogma",
+  "scopeName": "source.ogma",
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#heading"
+    },
+    {
+      "include": "#math-block"
+    },
+    {
+      "include": "#directive-claim"
+    },
+    {
+      "include": "#directive-proof"
+    },
+    {
+      "include": "#directive-var"
+    },
+    {
+      "include": "#directive-def"
+    },
+    {
+      "include": "#directive-func"
+    },
+    {
+      "include": "#directive-expect-fail"
+    },
+    {
+      "include": "#directive-bibliography"
+    },
+    {
+      "include": "#directive-figure"
+    },
+    {
+      "include": "#directive-table"
+    },
+    {
+      "include": "#directive-toc"
+    },
+    {
+      "include": "#directive-center"
+    },
+    {
+      "include": "#directive-pagebreak"
+    },
+    {
+      "include": "#directive-include"
+    },
+    {
+      "include": "#directive-use"
+    },
+    {
+      "include": "#directive-metadata"
+    },
+    {
+      "include": "#directive-environment"
+    },
+    {
+      "include": "#block-quote"
+    },
+    {
+      "include": "#list-bullet"
+    },
+    {
+      "include": "#list-numbered"
+    },
+    {
+      "include": "#prose-inline"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "match": "^%.*$",
+      "name": "comment.line.percentage.ogma"
+    },
+    "heading": {
+      "patterns": [
+        {
+          "begin": "^(#{4})\\s+",
+          "end": "$",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.heading.ogma"
+            }
+          },
+          "name": "markup.heading.4.ogma",
+          "patterns": [
+            {
+              "include": "#tag-label"
+            },
+            {
+              "include": "#quoted-string"
+            }
+          ]
+        },
+        {
+          "begin": "^(#{3})\\s+",
+          "end": "$",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.heading.ogma"
+            }
+          },
+          "name": "markup.heading.3.ogma",
+          "patterns": [
+            {
+              "include": "#tag-label"
+            },
+            {
+              "include": "#quoted-string"
+            }
+          ]
+        },
+        {
+          "begin": "^(#{2})\\s+",
+          "end": "$",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.heading.ogma"
+            }
+          },
+          "name": "markup.heading.2.ogma",
+          "patterns": [
+            {
+              "include": "#tag-label"
+            },
+            {
+              "include": "#quoted-string"
+            }
+          ]
+        },
+        {
+          "begin": "^(#)\\s+",
+          "end": "$",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.heading.ogma"
+            }
+          },
+          "name": "markup.heading.1.ogma",
+          "patterns": [
+            {
+              "include": "#tag-label"
+            },
+            {
+              "include": "#quoted-string"
+            }
+          ]
+        }
+      ]
+    },
+    "math-block": {
+      "begin": "^(```math)\\s*$",
+      "end": "^(```)\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.fenced.begin.ogma"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "keyword.control.fenced.end.ogma"
+        }
+      },
+      "name": "meta.block.math.ogma",
+      "patterns": [
+        {
+          "include": "#math-expression"
+        }
+      ]
+    },
+    "directive-claim": {
+      "begin": "^(claim)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.claim.ogma"
+        },
+        "2": {
+          "name": "entity.name.function.claim.ogma"
+        }
+      },
+      "name": "meta.block.claim.ogma",
+      "patterns": [
+        {
+          "include": "#claim-body"
+        }
+      ]
+    },
+    "claim-body": {
+      "match": "^\\s+(.+?)\\s*(>=|<=|=|>|<)\\s*(.+)$",
+      "captures": {
+        "1": {
+          "name": "meta.expression.lhs.ogma",
+          "patterns": [
+            {
+              "include": "#math-expression"
+            }
+          ]
+        },
+        "2": {
+          "name": "keyword.operator.comparison.ogma"
+        },
+        "3": {
+          "name": "meta.expression.rhs.ogma",
+          "patterns": [
+            {
+              "include": "#math-expression"
+            }
+          ]
+        }
+      }
+    },
+    "directive-proof": {
+      "begin": "^(proof)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.proof.ogma"
+        },
+        "2": {
+          "name": "entity.name.function.proof.ogma"
+        }
+      },
+      "name": "meta.block.proof.ogma",
+      "patterns": [
+        {
+          "include": "#proof-step"
+        }
+      ]
+    },
+    "proof-step": {
+      "patterns": [
+        {
+          "match": "^\\s+(=)\\s*(.+?)\\s*(;\\s*.+)?$",
+          "captures": {
+            "1": {
+              "name": "keyword.operator.proof-step.ogma"
+            },
+            "2": {
+              "name": "meta.expression.ogma",
+              "patterns": [
+                {
+                  "include": "#math-expression"
+                }
+              ]
+            },
+            "3": {
+              "name": "comment.line.justification.ogma"
+            }
+          }
+        },
+        {
+          "match": "^\\s+(.+?)\\s*(;\\s*.+)?$",
+          "captures": {
+            "1": {
+              "name": "meta.expression.ogma",
+              "patterns": [
+                {
+                  "include": "#math-expression"
+                }
+              ]
+            },
+            "2": {
+              "name": "comment.line.justification.ogma"
+            }
+          }
+        }
+      ]
+    },
+    "directive-var": {
+      "match": "^(var)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.var.ogma"
+        },
+        "2": {
+          "name": "variable.parameter.var.ogma"
+        },
+        "3": {
+          "name": "storage.type.dimension.ogma"
+        }
+      }
+    },
+    "directive-def": {
+      "match": "^(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=)\\s*(.+)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.def.ogma"
+        },
+        "2": {
+          "name": "variable.parameter.def.ogma"
+        },
+        "3": {
+          "name": "storage.type.dimension.ogma"
+        },
+        "4": {
+          "name": "keyword.operator.definition.ogma"
+        },
+        "5": {
+          "name": "meta.expression.rhs.ogma",
+          "patterns": [
+            {
+              "include": "#math-expression"
+            }
+          ]
+        }
+      }
+    },
+    "directive-func": {
+      "match": "^(func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(:=)\\s*(.+)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.func.ogma"
+        },
+        "2": {
+          "name": "entity.name.function.ogma"
+        },
+        "3": {
+          "name": "variable.parameter.func.ogma"
+        },
+        "4": {
+          "name": "keyword.operator.assignment.ogma"
+        },
+        "5": {
+          "name": "meta.expression.rhs.ogma",
+          "patterns": [
+            {
+              "include": "#math-expression"
+            }
+          ]
+        }
+      }
+    },
+    "directive-expect-fail": {
+      "begin": "^(expect_fail)\\s+(\\S+)\\s+(\\[(?:symbolic|comparison_false|comparison_unknown|dimension_mismatch|dimension_error)\\])\\s*$",
+      "end": "^(?=\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.expect-fail.ogma"
+        },
+        "2": {
+          "name": "entity.name.function.expect-fail.ogma"
+        },
+        "3": {
+          "name": "support.type.expect-fail.ogma"
+        }
+      },
+      "name": "meta.block.expect-fail.ogma",
+      "patterns": [
+        {
+          "include": "#indented-claim"
+        },
+        {
+          "include": "#indented-var"
+        },
+        {
+          "include": "#indented-def"
+        },
+        {
+          "include": "#indented-func"
+        },
+        {
+          "include": "#indented-proof"
+        }
+      ]
+    },
+    "indented-var": {
+      "match": "^\\s+(var)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.var.ogma"
+        },
+        "2": {
+          "name": "variable.parameter.var.ogma"
+        },
+        "3": {
+          "name": "storage.type.dimension.ogma"
+        }
+      }
+    },
+    "indented-def": {
+      "match": "^\\s+(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=)\\s*(.+)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.def.ogma"
+        },
+        "2": {
+          "name": "variable.parameter.def.ogma"
+        },
+        "3": {
+          "name": "storage.type.dimension.ogma"
+        },
+        "4": {
+          "name": "keyword.operator.definition.ogma"
+        },
+        "5": {
+          "name": "meta.expression.rhs.ogma",
+          "patterns": [
+            {
+              "include": "#math-expression"
+            }
+          ]
+        }
+      }
+    },
+    "indented-func": {
+      "match": "^\\s+(func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(:=)\\s*(.+)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.func.ogma"
+        },
+        "2": {
+          "name": "entity.name.function.ogma"
+        },
+        "3": {
+          "name": "variable.parameter.func.ogma"
+        },
+        "4": {
+          "name": "keyword.operator.assignment.ogma"
+        },
+        "5": {
+          "name": "meta.expression.rhs.ogma",
+          "patterns": [
+            {
+              "include": "#math-expression"
+            }
+          ]
+        }
+      }
+    },
+    "indented-claim": {
+      "begin": "^\\s+(claim)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\s{0,2}\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.claim.ogma"
+        },
+        "2": {
+          "name": "entity.name.function.claim.ogma"
+        }
+      },
+      "name": "meta.block.claim.ogma",
+      "patterns": [
+        {
+          "include": "#claim-body"
+        }
+      ]
+    },
+    "indented-proof": {
+      "begin": "^\\s+(proof)\\s+(\\S+)\\s*$",
+      "end": "^(?=\\s{0,2}\\S|$(?!\\s))",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.proof.ogma"
+        },
+        "2": {
+          "name": "entity.name.function.proof.ogma"
+        }
+      },
+      "name": "meta.block.proof.ogma",
+      "patterns": [
+        {
+          "include": "#proof-step"
+        }
+      ]
+    },
+    "directive-bibliography": {
+      "match": "^(!bibliography)\\s+(.+)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.bibliography.ogma"
+        },
+        "2": {
+          "name": "string.unquoted.path.ogma"
+        }
+      }
+    },
+    "directive-figure": {
+      "begin": "^(!figure)\\s+(.+)$",
+      "end": "^(?!\\s)|^\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.figure.ogma"
+        },
+        "2": {
+          "name": "string.unquoted.path.ogma"
+        }
+      },
+      "name": "meta.block.figure.ogma",
+      "patterns": [
+        {
+          "match": "^\\s+(caption|label|width)(:)\\s*(.*)$",
+          "captures": {
+            "1": {
+              "name": "keyword.other.key.ogma"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.ogma"
+            },
+            "3": {
+              "name": "string.unquoted.value.ogma"
+            }
+          }
+        }
+      ]
+    },
+    "directive-table": {
+      "begin": "^(!table)(?:\\s+(.+))?\\s*$",
+      "end": "^(?!\\s)|^\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.table.ogma"
+        },
+        "2": {
+          "name": "entity.name.section.table.ogma"
+        }
+      },
+      "name": "meta.block.table.ogma",
+      "patterns": [
+        {
+          "match": "^\\s+(label)(:)\\s*(.*)$",
+          "captures": {
+            "1": {
+              "name": "keyword.other.key.ogma"
+            },
+            "2": {
+              "name": "punctuation.separator.key-value.ogma"
+            },
+            "3": {
+              "name": "string.unquoted.value.ogma"
+            }
+          }
+        },
+        {
+          "include": "#table-rows"
+        }
+      ]
+    },
+    "table-rows": {
+      "patterns": [
+        {
+          "comment": "Separator row: |---|---|",
+          "match": "^\\s*(\\|[-:\\s|]+\\|)\\s*$",
+          "captures": {
+            "1": {
+              "name": "comment.line.ogma"
+            }
+          }
+        },
+        {
+          "match": "(\\|)",
+          "name": "keyword.operator.table.ogma"
+        }
+      ]
+    },
+    "directive-toc": {
+      "match": "^(!toc)\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.toc.ogma"
+        }
+      }
+    },
+    "directive-center": {
+      "match": "^(!center)\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.center.ogma"
+        }
+      }
+    },
+    "directive-pagebreak": {
+      "match": "^(!pagebreak)\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.pagebreak.ogma"
+        }
+      }
+    },
+    "directive-include": {
+      "match": "^(!include)\\s+(.+)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.include.ogma"
+        },
+        "2": {
+          "name": "string.unquoted.path.ogma"
+        }
+      }
+    },
+    "directive-use": {
+      "match": "^(use)\\s+(.+)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.use.ogma"
+        },
+        "2": {
+          "name": "string.unquoted.path.ogma"
+        }
+      }
+    },
+    "directive-metadata": {
+      "patterns": [
+        {
+          "match": "^(!title)\\s+(.+)$",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.title.ogma"
+            },
+            "2": {
+              "name": "entity.name.section.title.ogma"
+            }
+          }
+        },
+        {
+          "begin": "^(!title)\\s*$",
+          "end": "^(?!\\s|$)",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.directive.title.ogma"
+            }
+          },
+          "name": "meta.block.title.ogma",
+          "patterns": [
+            {
+              "match": "^\\s+(.+)$",
+              "captures": {
+                "1": {
+                  "name": "entity.name.section.title.ogma"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "match": "^(!author)\\s+(.+)$",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.author.ogma"
+            },
+            "2": {
+              "name": "string.other.author.ogma"
+            }
+          }
+        },
+        {
+          "match": "^(!date)\\s*(.*)$",
+          "captures": {
+            "1": {
+              "name": "keyword.control.directive.date.ogma"
+            },
+            "2": {
+              "name": "constant.other.date.ogma"
+            }
+          }
+        },
+        {
+          "begin": "^(!abstract)\\s*$",
+          "end": "^(?!\\s)|^\\s*$",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.directive.abstract.ogma"
+            }
+          },
+          "name": "meta.block.abstract.ogma",
+          "patterns": [
+            {
+              "include": "#prose-inline"
+            }
+          ]
+        }
+      ]
+    },
+    "directive-environment": {
+      "begin": "^(!(?:theorem|lemma|corollary|remark|example))(?:\\s+(.+))?\\s*$",
+      "end": "^(?!\\s)|^\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.environment.ogma"
+        },
+        "2": {
+          "name": "entity.name.section.environment.ogma"
+        }
+      },
+      "name": "meta.block.environment.ogma",
+      "patterns": [
+        {
+          "include": "#prose-inline"
+        }
+      ]
+    },
+    "block-quote": {
+      "match": "^(>)\\s?(.*)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.definition.quote.ogma"
+        },
+        "2": {
+          "name": "markup.quote.ogma",
+          "patterns": [
+            {
+              "include": "#prose-inline"
+            }
+          ]
+        }
+      }
+    },
+    "list-bullet": {
+      "match": "^(\\s*)(-)\\s+(.+)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.whitespace.ogma"
+        },
+        "2": {
+          "name": "markup.list.unnumbered.ogma punctuation.definition.list.begin.ogma"
+        },
+        "3": {
+          "name": "meta.list.item.ogma",
+          "patterns": [
+            {
+              "include": "#prose-inline"
+            }
+          ]
+        }
+      }
+    },
+    "list-numbered": {
+      "match": "^(\\s*)(\\d+\\.)\\s+(.+)$",
+      "captures": {
+        "1": {
+          "name": "punctuation.whitespace.ogma"
+        },
+        "2": {
+          "name": "markup.list.numbered.ogma punctuation.definition.list.begin.ogma"
+        },
+        "3": {
+          "name": "meta.list.item.ogma",
+          "patterns": [
+            {
+              "include": "#prose-inline"
+            }
+          ]
+        }
+      }
+    },
+    "prose-inline": {
+      "patterns": [
+        {
+          "include": "#tag-math"
+        },
+        {
+          "include": "#tag-tex"
+        },
+        {
+          "include": "#tag-claim"
+        },
+        {
+          "include": "#tag-cite"
+        },
+        {
+          "include": "#tag-ref"
+        },
+        {
+          "include": "#tag-url"
+        },
+        {
+          "include": "#tag-sym"
+        },
+        {
+          "include": "#quoted-string"
+        },
+        {
+          "include": "#footnote"
+        },
+        {
+          "include": "#bold-italic"
+        },
+        {
+          "include": "#bold"
+        },
+        {
+          "include": "#italic"
+        }
+      ]
+    },
+    "tag-math": {
+      "match": "(math)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tag.math.ogma"
+        },
+        "2": {
+          "name": "string.other.begin.ogma"
+        },
+        "3": {
+          "name": "string.other.math.ogma",
+          "patterns": [
+            {
+              "include": "#math-expression"
+            }
+          ]
+        },
+        "4": {
+          "name": "string.other.end.ogma"
+        }
+      }
+    },
+    "tag-tex": {
+      "match": "(tex)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tag.tex.ogma"
+        },
+        "2": {
+          "name": "string.other.begin.ogma"
+        },
+        "3": {
+          "name": "string.other.tex.ogma"
+        },
+        "4": {
+          "name": "string.other.end.ogma"
+        }
+      }
+    },
+    "tag-claim": {
+      "match": "(claim)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tag.claim.ogma"
+        },
+        "2": {
+          "name": "string.other.begin.ogma"
+        },
+        "3": {
+          "name": "entity.name.function.claim-ref.ogma"
+        },
+        "4": {
+          "name": "string.other.end.ogma"
+        }
+      }
+    },
+    "tag-cite": {
+      "match": "(cite)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tag.cite.ogma"
+        },
+        "2": {
+          "name": "string.other.begin.ogma"
+        },
+        "3": {
+          "name": "string.other.citation.ogma"
+        },
+        "4": {
+          "name": "string.other.end.ogma"
+        }
+      }
+    },
+    "tag-ref": {
+      "match": "(ref)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tag.ref.ogma"
+        },
+        "2": {
+          "name": "string.other.begin.ogma"
+        },
+        "3": {
+          "name": "entity.name.tag.cross-ref.ogma"
+        },
+        "4": {
+          "name": "punctuation.separator.pipe.ogma"
+        },
+        "5": {
+          "name": "string.other.display-text.ogma"
+        },
+        "6": {
+          "name": "string.other.end.ogma"
+        }
+      }
+    },
+    "tag-url": {
+      "match": "(url)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tag.url.ogma"
+        },
+        "2": {
+          "name": "string.other.begin.ogma"
+        },
+        "3": {
+          "name": "markup.underline.link.ogma"
+        },
+        "4": {
+          "name": "punctuation.separator.pipe.ogma"
+        },
+        "5": {
+          "name": "string.other.display-text.ogma"
+        },
+        "6": {
+          "name": "string.other.end.ogma"
+        }
+      }
+    },
+    "tag-sym": {
+      "match": "(sym)(`)((?:[^`|\\\\]|\\\\.)*)(?:(\\|)((?:[^`\\\\]|\\\\.)*))?(`)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tag.sym.ogma"
+        },
+        "2": {
+          "name": "string.other.begin.ogma"
+        },
+        "3": {
+          "name": "entity.name.tag.symbol-ref.ogma"
+        },
+        "4": {
+          "name": "punctuation.separator.pipe.ogma"
+        },
+        "5": {
+          "name": "string.other.display-text.ogma"
+        },
+        "6": {
+          "name": "string.other.end.ogma"
+        }
+      }
+    },
+    "tag-label": {
+      "match": "(label)(`)((?:[^`\\\\]|\\\\.)*)(`)",
+      "captures": {
+        "1": {
+          "name": "keyword.other.tag.label.ogma"
+        },
+        "2": {
+          "name": "string.other.begin.ogma"
+        },
+        "3": {
+          "name": "entity.name.tag.label.ogma"
+        },
+        "4": {
+          "name": "string.other.end.ogma"
+        }
+      }
+    },
+    "quoted-string": {
+      "match": "\"([^\"]*)\"",
+      "name": "markup.italic.quote.ogma"
+    },
+    "footnote": {
+      "begin": "(\\^)(\\[)",
+      "end": "(\\])",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.other.footnote.ogma"
+        },
+        "2": {
+          "name": "punctuation.definition.footnote.begin.ogma"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.footnote.end.ogma"
+        }
+      },
+      "name": "markup.other.footnote.ogma",
+      "patterns": [
+        {
+          "include": "#prose-inline"
+        }
+      ]
+    },
+    "bold-italic": {
+      "begin": "(\\*{3})(?=\\S)",
+      "end": "(\\*{3})",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.bold.italic.ogma"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.bold.italic.ogma"
+        }
+      },
+      "name": "markup.bold.ogma",
+      "patterns": [
+        {
+          "begin": "(?<=\\*{3})",
+          "end": "(?=\\*{3})",
+          "name": "markup.italic.ogma",
+          "patterns": [
+            {
+              "include": "#prose-inline"
+            }
+          ]
+        }
+      ]
+    },
+    "bold": {
+      "begin": "(\\*{2})(?=\\S)",
+      "end": "(\\*{2})",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.bold.ogma"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.bold.ogma"
+        }
+      },
+      "name": "markup.bold.ogma",
+      "patterns": [
+        {
+          "include": "#prose-inline"
+        }
+      ]
+    },
+    "italic": {
+      "begin": "(\\*)(?=[^\\s*])",
+      "end": "(\\*)(?!\\*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.italic.ogma"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.italic.ogma"
+        }
+      },
+      "name": "markup.italic.ogma",
+      "patterns": [
+        {
+          "include": "#prose-inline"
+        }
+      ]
+    },
+    "math-expression": {
+      "patterns": [
+        {
+          "include": "#bracket-annotation"
+        },
+        {
+          "match": "\\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|sqrt|exp|log|ln|abs|det|tr)\\b",
+          "name": "entity.name.function.math.ogma"
+        },
+        {
+          "match": "\\b(pi|π)\\b",
+          "name": "constant.language.pi.ogma"
+        },
+        {
+          "match": "\\be\\b",
+          "name": "constant.language.euler.ogma"
+        },
+        {
+          "match": "\\b\\d[\\d_]*(\\.[\\d_]+)?",
+          "name": "constant.numeric.decimal.ogma"
+        },
+        {
+          "match": "\\^",
+          "name": "keyword.operator.power.ogma"
+        },
+        {
+          "match": "[+\\-*/=]",
+          "name": "keyword.operator.arithmetic.ogma"
+        },
+        {
+          "match": "[()]",
+          "name": "punctuation.brackets.round.ogma"
+        },
+        {
+          "match": "&",
+          "name": "keyword.operator.alignment.ogma"
+        }
+      ]
+    },
+    "bracket-annotation": {
+      "begin": "(\\[)",
+      "end": "(\\])",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.bracket.begin.ogma"
+        }
+      },
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.bracket.end.ogma"
+        }
+      },
+      "name": "meta.bracket-annotation.ogma",
+      "patterns": [
+        {
+          "comment": "Base dimension symbols: L, M, T, Theta, I, N, J",
+          "match": "\\b(L|M|T|Theta|I|N|J)\\b",
+          "name": "storage.type.dimension.ogma"
+        },
+        {
+          "comment": "SI derived units",
+          "match": "\\b(Hz|Pa|Ohm)\\b",
+          "name": "storage.type.unit.ogma"
+        },
+        {
+          "comment": "SI base and derived unit symbols (single/multi-char)",
+          "match": "\\b[pnμmckMGT]?(m|g|s|K|A|mol|cd|N|J|W|C|V)\\b",
+          "name": "storage.type.unit.ogma"
+        },
+        {
+          "match": "\\b(kg)\\b",
+          "name": "storage.type.unit.ogma"
+        },
+        {
+          "match": "\\b\\d+\\b",
+          "name": "constant.numeric.decimal.ogma"
+        },
+        {
+          "match": "[\\^/\\*\\-]",
+          "name": "keyword.operator.ogma"
+        }
+      ]
+    }
+  }
+}

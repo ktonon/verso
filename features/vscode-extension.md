@@ -2,20 +2,20 @@
 
 ## Goal
 
-Transform the Verso VSCode extension from a minimal LSP client into a polished
+Transform the Ogma VSCode extension from a minimal LSP client into a polished
 editing experience with syntax highlighting, correct language configuration,
 code folding, and snippets.
 
 ## Current State (Audit)
 
 The extension currently provides:
-- **LSP client** connecting to `verso_lsp` for diagnostics (parse errors, claim verification, dimensional analysis)
-- **File association** for `.verso` files
+- **LSP client** connecting to `ogma_lsp` for diagnostics (parse errors, claim verification, dimensional analysis)
+- **File association** for `.ogma` files
 - **Minimal language config** with bracket/paren auto-closing
 
 What's missing or broken:
-- **No syntax highlighting** — `.verso` files render as plain text
-- **Wrong comment syntax** — configured as `//` but Verso uses `%`
+- **No syntax highlighting** — `.ogma` files render as plain text
+- **Wrong comment syntax** — configured as `//` but Ogma uses `%`
 - **No code folding** — blocks, environments, lists can't be collapsed
 - **Missing bracket pairs** — no `{ }` matching
 - **No snippets** — no templates for common structures
@@ -28,7 +28,7 @@ What's missing or broken:
 | 1 | Fix language configuration (comments, brackets, folding) | **completed** |
 | 2 | TextMate grammar: structure and directives | **completed** |
 | 3 | TextMate grammar: inline constructs and expressions | **completed** |
-| 4 | Snippets for common Verso constructs | **completed** |
+| 4 | Snippets for common Ogma constructs | **completed** |
 
 ## Plan
 
@@ -47,10 +47,10 @@ Fix incorrect settings and add missing features to `language-configuration.json`
   - Start: `!claim`, `!proof`, `!theorem`, `!lemma`, `!definition`, `!corollary`, `!remark`, `!example`, ` ```math `
   - End: blank line or closing ` ``` `
 - Add `surroundingPairs` for brackets, parens, braces, backticks, quotes
-- Add `wordPattern` for Verso identifiers
+- Add `wordPattern` for Ogma identifiers
 
 **Tests:**
-- Manual: open `.verso` file, verify `Cmd+/` inserts `% ` not `// `
+- Manual: open `.ogma` file, verify `Cmd+/` inserts `% ` not `// `
 - Manual: verify `{` auto-closes to `}`
 - Manual: verify folding arrows appear on claims, proofs, environments
 
@@ -63,29 +63,29 @@ Fix incorrect settings and add missing features to `language-configuration.json`
 Create a TextMate grammar for block-level syntax highlighting.
 
 **Key files:**
-- `editors/vscode/syntaxes/verso.tmLanguage.json` (new)
+- `editors/vscode/syntaxes/ogma.tmLanguage.json` (new)
 - `editors/vscode/package.json` — register grammar under `contributes.grammars`
 
 **Scopes to define:**
 
 | ERD construct | TextMate scope |
 |--------------|----------------|
-| `# Heading` | `markup.heading.N.verso` (N=1-4) |
-| `% comment` | `comment.line.percentage.verso` |
-| `!claim name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
-| `!proof name` | `keyword.control.directive.verso` + `entity.name.tag.verso` |
-| `!var name [dims]` | `keyword.control.directive.var.verso` + `variable.parameter.var.verso` + `storage.type.dimension.verso` |
-| `!const name = expr` | `keyword.control.directive.const.verso` + `variable.parameter.const.verso` + `keyword.operator.assignment.verso` |
-| `!func name(params) = expr` | `keyword.control.directive.func.verso` + `entity.name.function.verso` + `variable.parameter.func.verso` |
-| `!bibliography path` | `keyword.control.directive.verso` + `string.unquoted.verso` |
-| `!theorem Title` | `keyword.control.directive.verso` + `entity.name.section.verso` |
+| `# Heading` | `markup.heading.N.ogma` (N=1-4) |
+| `% comment` | `comment.line.percentage.ogma` |
+| `!claim name` | `keyword.control.directive.ogma` + `entity.name.tag.ogma` |
+| `!proof name` | `keyword.control.directive.ogma` + `entity.name.tag.ogma` |
+| `!var name [dims]` | `keyword.control.directive.var.ogma` + `variable.parameter.var.ogma` + `storage.type.dimension.ogma` |
+| `!const name = expr` | `keyword.control.directive.const.ogma` + `variable.parameter.const.ogma` + `keyword.operator.assignment.ogma` |
+| `!func name(params) = expr` | `keyword.control.directive.func.ogma` + `entity.name.function.ogma` + `variable.parameter.func.ogma` |
+| `!bibliography path` | `keyword.control.directive.ogma` + `string.unquoted.ogma` |
+| `!theorem Title` | `keyword.control.directive.ogma` + `entity.name.section.ogma` |
 | (same for `!lemma`, `!definition`, `!corollary`, `!remark`, `!example`) | same pattern |
-| ` ```math ` | `punctuation.definition.fenced.verso` |
-| `> block quote` | `markup.quote.verso` |
-| `- list item` | `markup.list.unnumbered.verso` |
-| `1. list item` | `markup.list.numbered.verso` |
-| `= step` (in proofs) | `keyword.operator.proof-step.verso` |
-| `; justification` | `comment.line.justification.verso` |
+| ` ```math ` | `punctuation.definition.fenced.ogma` |
+| `> block quote` | `markup.quote.ogma` |
+| `- list item` | `markup.list.unnumbered.ogma` |
+| `1. list item` | `markup.list.numbered.ogma` |
+| `= step` (in proofs) | `keyword.operator.proof-step.ogma` |
+| `; justification` | `comment.line.justification.ogma` |
 
 **Design decisions:**
 - Use standard TextMate scope naming conventions so existing color themes work out of the box
@@ -94,7 +94,7 @@ Create a TextMate grammar for block-level syntax highlighting.
 - Grammar is a single JSON file using `patterns` and `repository` for organization
 
 **Tests:**
-- Manual: open an `.verso` file and verify headings, directives, and comments are colored
+- Manual: open an `.ogma` file and verify headings, directives, and comments are colored
 - Verify grammar loads without errors in Developer Tools console
 
 **Estimated scope:** ~200 lines.
@@ -106,28 +106,28 @@ Create a TextMate grammar for block-level syntax highlighting.
 Extend the grammar with inline highlighting within prose and math contexts.
 
 **Key files:**
-- `editors/vscode/syntaxes/verso.tmLanguage.json`
+- `editors/vscode/syntaxes/ogma.tmLanguage.json`
 
 **Scopes to add:**
 
 | ERD construct | TextMate scope |
 |--------------|----------------|
-| `` math`...` `` | `markup.inline.math.verso` (tag: `support.function.tag.verso`, content: `meta.embedded.math.verso`) |
-| `` tex`...` `` | `markup.inline.tex.verso` |
-| `` claim`...` `` | `markup.inline.claim-ref.verso` |
-| `` cite`...` `` | `markup.inline.citation.verso` |
-| `**bold**` | `markup.bold.verso` |
-| `*italic*` | `markup.italic.verso` |
-| `^[footnote]` | `markup.other.footnote.verso` |
+| `` math`...` `` | `markup.inline.math.ogma` (tag: `support.function.tag.ogma`, content: `meta.embedded.math.ogma`) |
+| `` tex`...` `` | `markup.inline.tex.ogma` |
+| `` claim`...` `` | `markup.inline.claim-ref.ogma` |
+| `` cite`...` `` | `markup.inline.citation.ogma` |
+| `**bold**` | `markup.bold.ogma` |
+| `*italic*` | `markup.italic.ogma` |
+| `^[footnote]` | `markup.other.footnote.ogma` |
 | Claim body expressions | operators, numbers, functions, variables |
 
 **Expression sub-grammar (inside claims, proofs, math blocks):**
-- Numbers: `constant.numeric.verso`
-- Operators (`+`, `-`, `*`, `/`, `**`, `^`, `=`): `keyword.operator.verso`
-- Known functions (`sin`, `cos`, `sqrt`, etc.): `support.function.math.verso`
-- Constants (`pi`, `e`): `constant.language.verso`
-- Variables: `variable.other.verso`
-- Parentheses/brackets: `punctuation.verso`
+- Numbers: `constant.numeric.ogma`
+- Operators (`+`, `-`, `*`, `/`, `**`, `^`, `=`): `keyword.operator.ogma`
+- Known functions (`sin`, `cos`, `sqrt`, etc.): `support.function.math.ogma`
+- Constants (`pi`, `e`): `constant.language.ogma`
+- Variables: `variable.other.ogma`
+- Parentheses/brackets: `punctuation.ogma`
 
 **Design decisions:**
 - Expression highlighting is shared between claims, proofs, and math blocks via a `#math-expression` repository rule
@@ -145,10 +145,10 @@ Extend the grammar with inline highlighting within prose and math contexts.
 
 ### Phase 4: Snippets (M4)
 
-Add code snippets for common Verso constructs.
+Add code snippets for common Ogma constructs.
 
 **Key files:**
-- `editors/vscode/snippets/verso.json` (new)
+- `editors/vscode/snippets/ogma.json` (new)
 - `editors/vscode/package.json` — register under `contributes.snippets`
 
 **Snippets:**
@@ -185,6 +185,6 @@ adds convenience features. Each phase is independently shippable.
 
 After each phase:
 1. Run `npm run vscode:install` to rebuild and reinstall
-2. Open an `.verso` file (e.g. `verso_doc/tests/fixtures/dimensional.verso`)
+2. Open an `.ogma` file (e.g. `ogma_doc/tests/fixtures/dimensional.ogma`)
 3. Verify the feature works as described in the phase tests
 4. Check Developer Tools console for grammar/extension errors

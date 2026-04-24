@@ -2,7 +2,7 @@
 
 ## Context
 
-The Verso project currently splits ML work between Rust and Python:
+The Ogma project currently splits ML work between Rust and Python:
 
 - **Rust**: Expression AST, rule engine, tokenization, validation binary, training data generation
 - **Python**: PyTorch transformer model, supervised training, REINFORCE training, evaluation orchestration
@@ -17,7 +17,7 @@ Additionally, there is a **complexity cost** in maintaining synchronized data co
 ## Current Architecture
 
 ```
-Rust (verso_symbolic)              Python (verso_training)
+Rust (ogma_symbolic)              Python (ogma_training)
 ─────────────────────            ─────────────────────
 gen_data binary                  train.py (supervised)
   → vocab.json ──────────────→  vocab.py (reads vocab)

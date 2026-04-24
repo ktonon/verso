@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add internal cross-referencing to Verso documents so authors can link to sections
+Add internal cross-referencing to Ogma documents so authors can link to sections
 (and eventually theorem-like environments) using `\hyperref` in the compiled
 LaTeX output.
 
@@ -60,7 +60,7 @@ Compiles to `\hyperref[earth-and-the-solar-system]{Hydrogen creation in planets 
 
 #### Full example
 
-```verso
+```ogma
 ## Earth and the Solar System
 
 Planets form through accretion in protoplanetary disks.
@@ -91,16 +91,16 @@ Planets form through accretion in protoplanetary disks.
 ### Phase 1: Section labels and ref tag (M1)
 
 **Key files:**
-- `verso_doc/src/ast.rs` — add `ProseFragment::Ref { label, display: Option<String> }`
-- `verso_doc/src/parse.rs` — add `"ref"` to `find_tagged_backtick` tag list; parse
+- `ogma_doc/src/ast.rs` — add `ProseFragment::Ref { label, display: Option<String> }`
+- `ogma_doc/src/parse.rs` — add `"ref"` to `find_tagged_backtick` tag list; parse
   `ref`label`` and `ref`label|text`` (split on first `|`)
-- `verso_doc/src/compile_tex.rs`:
+- `ogma_doc/src/compile_tex.rs`:
   - Add `slugify(title) -> String` function
   - Headings emit `\label{slug}` after `\section{Title}`
   - Build section label→title map for auto-resolving ref display text
   - `Ref` compiles to `\hyperref[label]{text}`
   - Add `\usepackage{hyperref}` to preamble when refs are present
-- `verso_doc/src/report.rs` — handle `Ref` in `prose_to_string` if needed
+- `ogma_doc/src/report.rs` — handle `Ref` in `prose_to_string` if needed
 
 **Design decisions:**
 - No `sec:` prefix on labels — matches user's LaTeX convention directly
@@ -139,5 +139,5 @@ Planets form through accretion in protoplanetary disks.
 ## Verification
 
 ```bash
-cargo test --package verso_doc
+cargo test --package ogma_doc
 ```

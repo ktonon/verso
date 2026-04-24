@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/ktonon/ogma/main/schema/v0.1.0/ogma.schema.json",
+  "title": "Ogma Configuration",
+  "description": "Configuration for a ogma project (.ogma.jsonc or .ogma.json)",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference (auto-managed by ogma)"
+    },
+    "ogma": {
+      "type": "string",
+      "description": "Version of ogma that last successfully processed this project (auto-managed by ogma)"
+    },
+    "outputDirectory": {
+      "type": "string",
+      "description": "Output directory for build artifacts",
+      "default": "."
+    },
+    "input": {
+      "type": "string",
+      "description": "Path to the main .ogma file (for single-paper projects)"
+    },
+    "papers": {
+      "type": "array",
+      "description": "List of papers to build (for multi-paper projects)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Path to the .ogma file"
+          },
+          "output": {
+            "type": "string",
+            "description": "Output filename stem (no extension). Defaults to the input filename stem"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "tests": {
+      "type": "array",
+      "description": "Test roots — checked by 'ogma check' but not built by 'ogma build'",
+      "items": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "string",
+            "description": "Path to the test .ogma file"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "input"
+      ]
+    },
+    {
+      "required": [
+        "papers"
+      ]
+    }
+  ],
+  "additionalProperties": false
+}

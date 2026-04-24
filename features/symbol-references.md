@@ -13,13 +13,13 @@ Make `sym` useful inside flowing prose by turning it into a compact declaration 
 
 ## Implementation Notes
 
-- Added `declaration_equation_label()` in `verso_doc/src/tex_queries.rs` to generate stable ASCII-safe labels for numbered declaration equations.
+- Added `declaration_equation_label()` in `ogma_doc/src/tex_queries.rs` to generate stable ASCII-safe labels for numbered declaration equations.
 - `collect_symbols()` now stores an optional `reference_label` on each symbol so prose rendering can reuse the same target that the compiler emits.
 - `write_var()` and `write_def()` now emit `\\label{...}` on their numbered equations.
-- `ProseFragment::Sym` in `verso_doc/src/tex_prose.rs` now renders compact references instead of appending declaration detail and description text.
+- `ProseFragment::Sym` in `ogma_doc/src/tex_prose.rs` now renders compact references instead of appending declaration detail and description text.
 - Override text in `sym` continues to go through prose parsing, so emphasis and other inline formatting still work before the reference.
 
 ## Verification
 
-- `cargo test -p verso_doc compile_sym_`
+- `cargo test -p ogma_doc compile_sym_`
 - `npm test`

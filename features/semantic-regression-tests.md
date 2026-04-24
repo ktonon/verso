@@ -2,9 +2,9 @@
 
 ## Goal
 
-Make verso useful as a semantic regression harness for papers by supporting dedicated test documents that validate symbolic declarations, defs, claims, proofs, and dimensional consistency without treating those documents as publishable papers.
+Make ogma useful as a semantic regression harness for papers by supporting dedicated test documents that validate symbolic declarations, defs, claims, proofs, and dimensional consistency without treating those documents as publishable papers.
 
-A motivating use case is ERD-style work, where a `paper.test.verso` root would exercise the symbolic layer of a paper independently of the main narrative document.
+A motivating use case is ERD-style work, where a `paper.test.ogma` root would exercise the symbolic layer of a paper independently of the main narrative document.
 
 This feature is not about proving the physics of a paper correct. It is about catching regressions in the paper's symbolic layer: renamed symbols, broken defs, dimension mismatches, and proof failures.
 
@@ -12,13 +12,13 @@ This feature is not about proving the physics of a paper correct. It is about ca
 
 ### Phase 1: Symbol-only import (`use`) — COMPLETE
 
-Implemented in `resolve_includes()` in parse.rs. `use path.verso` reads the target file through the same resolution pipeline as `!include` (circular detection, recursive resolution), then `extract_declarations()` filters to only var/def/func lines and their indented body (descriptions). The rest of the pipeline (verify, compile, LSP) is unchanged — they see the inlined declarations as if they were written directly.
+Implemented in `resolve_includes()` in parse.rs. `use path.ogma` reads the target file through the same resolution pipeline as `!include` (circular detection, recursive resolution), then `extract_declarations()` filters to only var/def/func lines and their indented body (descriptions). The rest of the pipeline (verify, compile, LSP) is unchanged — they see the inlined declarations as if they were written directly.
 
-Key files: `verso_doc/src/parse.rs` (resolve_file, extract_declarations), `editors/vscode/syntaxes/verso.tmLanguage.json` (directive-use).
+Key files: `ogma_doc/src/parse.rs` (resolve_file, extract_declarations), `editors/vscode/syntaxes/ogma.tmLanguage.json` (directive-use).
 
 ```
-use src/notation.verso
-use src/dynamics.verso
+use src/notation.ogma
+use src/dynamics.ogma
 
 claim scaling_consistent
   ℓ_{n-1} * σ = ℓ_{n}
@@ -26,20 +26,20 @@ claim scaling_consistent
 
 ### Phase 2: Test roots in config — COMPLETE
 
-Added `tests` field to `.verso.jsonc` config. `verso check` includes test roots via `check_inputs()`; `verso build` uses `inputs()` which excludes them. JSON schema updated. `verso init` template includes commented-out example.
+Added `tests` field to `.ogma.jsonc` config. `ogma check` includes test roots via `check_inputs()`; `ogma build` uses `inputs()` which excludes them. JSON schema updated. `ogma init` template includes commented-out example.
 
 ```jsonc
 {
   "papers": [
-    { "input": "src/paper.verso", "output": "paper" }
+    { "input": "src/paper.ogma", "output": "paper" }
   ],
   "tests": [
-    { "input": "src/paper.test.verso" }
+    { "input": "src/paper.test.ogma" }
   ]
 }
 ```
 
-Key files: `verso_doc/src/config.rs` (TestConfig, check_inputs), `verso_doc/src/bin/verso.rs` (check command), `schema/v0.1.0/verso.schema.json`.
+Key files: `ogma_doc/src/config.rs` (TestConfig, check_inputs), `ogma_doc/src/bin/ogma.rs` (check command), `schema/v0.1.0/ogma.schema.json`.
 
 ### Phase 3: `expect_fail` — COMPLETE
 
@@ -53,11 +53,11 @@ expect_fail wrong_dimension
     v = a
 ```
 
-Key files: `verso_doc/src/ast.rs` (ExpectFail variant), `verso_doc/src/parse.rs` (parsing), `verso_doc/src/verify.rs` (verify_expect_fail, verify_blocks), `verso_doc/src/report.rs` (display), `verso_doc/src/bin/verso.rs` (LSP diagnostics).
+Key files: `ogma_doc/src/ast.rs` (ExpectFail variant), `ogma_doc/src/parse.rs` (parsing), `ogma_doc/src/verify.rs` (verify_expect_fail, verify_blocks), `ogma_doc/src/report.rs` (display), `ogma_doc/src/bin/ogma.rs` (LSP diagnostics).
 
 ### Phase 4: Machine-readable output (defer)
 
-Add `verso check --json` for CI and git hooks. Defer until CI integration is actually needed — the human-readable output is sufficient for initial use.
+Add `ogma check --json` for CI and git hooks. Defer until CI integration is actually needed — the human-readable output is sufficient for initial use.
 
 ### Phase 5: Selective execution (defer)
 
@@ -65,9 +65,9 @@ Add selective test execution (specific test root or changed-only tests). Defer u
 
 ## Implementation Notes
 
-Verso already provides enough symbolic machinery to make a narrow semantic regression harness useful: defs can be expanded, dimensions can be checked, and proof chains can be validated. The missing piece is ergonomics.
+Ogma already provides enough symbolic machinery to make a narrow semantic regression harness useful: defs can be expanded, dimensions can be checked, and proof chains can be validated. The missing piece is ergonomics.
 
-As-is, users can approximate this by adding another paper root such as `paper.test.verso`, but the fit is awkward because papers and tests share the same config and build model.
+As-is, users can approximate this by adding another paper root such as `paper.test.ogma`, but the fit is awkward because papers and tests share the same config and build model.
 
 Key implementation considerations:
 - `use` needs to parse the target file, extract `Block::Var`, `Block::Def`, and `Block::Func` declarations, and inject them into the current document's symbol table without emitting any content.
@@ -77,9 +77,9 @@ Key implementation considerations:
 ## Verification
 
 - A `use` statement imports symbols from another file and makes them available for claims and proofs.
-- A project can declare a test root in `.verso.jsonc` that is checked but not built as a publishable paper.
+- A project can declare a test root in `.ogma.jsonc` that is checked but not built as a publishable paper.
 - At least one `expect_fail` example works and reports success only when the intended failure occurs.
 
 ## Deferred Verification
 
-- `verso check --json` emits stable machine-readable results (Phase 4, deferred).
+- `ogma check --json` emits stable machine-readable results (Phase 4, deferred).

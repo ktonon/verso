@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make `verso_symbolic` strictly typed with respect to physical dimensions and type information. The symbolic core should distinguish:
+Make `ogma_symbolic` strictly typed with respect to physical dimensions and type information. The symbolic core should distinguish:
 - dimensionless values, such as `4.5` with type `[1]`
 - explicitly typed values, such as `4.5 [m]` with type `[L]`
 - unresolved internal states that exist only before elaboration or across explicitly lossy boundaries
@@ -162,7 +162,7 @@ This is the heaviest phase (touches every Expr construction site), but the span-
 #### Phase 5 — Consumer integration
 
 - REPL: display `Ty` alongside results (already partially done via `infer_type`/`format_type_suffix`)
-- `verso_doc` verification: `verify_claim`/`verify_proof` consume elaborated expressions
+- `ogma_doc` verification: `verify_claim`/`verify_proof` consume elaborated expressions
 - LSP diagnostics: use `Ty` for hover-over type display
 - Regression tests for declarations, claims, proof steps, and unit-bearing constants
 
@@ -170,14 +170,14 @@ This is the heaviest phase (touches every Expr construction site), but the span-
 
 | File | Current state | Changes needed |
 |------|--------------|----------------|
-| `verso_symbolic/src/expr.rs` | `Expr { kind, span }`, `ExprKind::Var { dim: Option<Dimension> }` | Add `ty: Ty` field, `Ty` enum, update `PartialEq` to ignore `ty` |
-| `verso_symbolic/src/context.rs` | `check_dim` walks tree bottom-up, `DimEnv` stores declared dims, `DimError` carries `Span` | Add `elaborate()`, refactor `check_dim` to validate `Ty` fields |
-| `verso_symbolic/src/parser.rs` | Attaches inline dims to Var, wraps numeric+unit as Quantity, enforces dim-on-vars/unit-on-numbers constraint | No changes needed — parser continues producing `Ty::Unresolved`; elaboration is separate |
-| `verso_symbolic/src/rule.rs` | `Pattern::substitute` hardcodes `dim: None` on Var reconstruction | Store and restore `Ty` through `Bindings` |
-| `verso_symbolic/src/search.rs` | `eval_constants`, `simplify`, `all_rewrites_depth` rebuild expressions without type consideration | Propagate `Ty` through expression reconstruction |
-| `verso_symbolic/src/token.rs` | `tokenize` drops Quantity units, `detokenize` sets `dim: None` | Use explicit `strip_types` projection; document as lossy |
-| `verso_symbolic/src/training_data.rs` | ML vocabulary is untyped | Document untyped boundary; optionally add type tokens |
-| `verso_doc/src/verify.rs` | Calls `check_dims` for claim verification | Consume elaborated expressions with `Ty` |
+| `ogma_symbolic/src/expr.rs` | `Expr { kind, span }`, `ExprKind::Var { dim: Option<Dimension> }` | Add `ty: Ty` field, `Ty` enum, update `PartialEq` to ignore `ty` |
+| `ogma_symbolic/src/context.rs` | `check_dim` walks tree bottom-up, `DimEnv` stores declared dims, `DimError` carries `Span` | Add `elaborate()`, refactor `check_dim` to validate `Ty` fields |
+| `ogma_symbolic/src/parser.rs` | Attaches inline dims to Var, wraps numeric+unit as Quantity, enforces dim-on-vars/unit-on-numbers constraint | No changes needed — parser continues producing `Ty::Unresolved`; elaboration is separate |
+| `ogma_symbolic/src/rule.rs` | `Pattern::substitute` hardcodes `dim: None` on Var reconstruction | Store and restore `Ty` through `Bindings` |
+| `ogma_symbolic/src/search.rs` | `eval_constants`, `simplify`, `all_rewrites_depth` rebuild expressions without type consideration | Propagate `Ty` through expression reconstruction |
+| `ogma_symbolic/src/token.rs` | `tokenize` drops Quantity units, `detokenize` sets `dim: None` | Use explicit `strip_types` projection; document as lossy |
+| `ogma_symbolic/src/training_data.rs` | ML vocabulary is untyped | Document untyped boundary; optionally add type tokens |
+| `ogma_doc/src/verify.rs` | Calls `check_dims` for claim verification | Consume elaborated expressions with `Ty` |
 
 ## Implementation Notes
 
@@ -261,8 +261,8 @@ Editor hover/type display is still deferred; the current editor integration only
 Automated:
 
 ```bash
-cargo test -p verso_symbolic
-cargo test -p verso_doc
+cargo test -p ogma_symbolic
+cargo test -p ogma_doc
 npm test
 ```
 
@@ -282,8 +282,8 @@ Manual checks:
 - Ill-typed equalities are rejected before symbolic or numerical equivalence fallback
 
 Completed this session:
-- `cargo test -p verso_symbolic`
-- `cargo test -p verso_doc`
+- `cargo test -p ogma_symbolic`
+- `cargo test -p ogma_doc`
 
 New automated coverage added:
 - elaboration marks plain literals as `Ty::Concrete([1])`

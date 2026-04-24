@@ -1,0 +1,131 @@
+>claim inline_dim
+#^^^^^ source.ogma meta.block.claim.ogma keyword.control.directive.claim.ogma
+#     ^ source.ogma meta.block.claim.ogma
+#      ^^^^^^^^^^ source.ogma meta.block.claim.ogma entity.name.function.claim.ogma
+>  v [L T^-1] = v [L T^-1]
+#^^ source.ogma meta.block.claim.ogma
+#  ^^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma
+#    ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#     ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma storage.type.dimension.ogma
+#      ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma
+#       ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma storage.type.dimension.ogma
+#        ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#         ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#          ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma constant.numeric.decimal.ogma
+#           ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+#            ^ source.ogma meta.block.claim.ogma
+#             ^ source.ogma meta.block.claim.ogma keyword.operator.comparison.ogma
+#              ^ source.ogma meta.block.claim.ogma
+#               ^^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma
+#                 ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#                  ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma storage.type.dimension.ogma
+#                   ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma
+#                    ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma storage.type.dimension.ogma
+#                     ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#                      ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#                       ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma constant.numeric.decimal.ogma
+#                        ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+>
+>claim compound_unit
+#^^^^^ source.ogma meta.block.claim.ogma keyword.control.directive.claim.ogma
+#     ^ source.ogma meta.block.claim.ogma
+#      ^^^^^^^^^^^^^ source.ogma meta.block.claim.ogma entity.name.function.claim.ogma
+>  3*10^8 [m/s] = 3*10^8 [m/s]
+#^^ source.ogma meta.block.claim.ogma
+#  ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma constant.numeric.decimal.ogma
+#   ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma keyword.operator.arithmetic.ogma
+#    ^^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma constant.numeric.decimal.ogma
+#      ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma keyword.operator.power.ogma
+#       ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma constant.numeric.decimal.ogma
+#        ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma
+#         ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#          ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma storage.type.unit.ogma
+#           ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#            ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma storage.type.unit.ogma
+#             ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+#              ^ source.ogma meta.block.claim.ogma
+#               ^ source.ogma meta.block.claim.ogma keyword.operator.comparison.ogma
+#                ^ source.ogma meta.block.claim.ogma
+#                 ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#                  ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma keyword.operator.arithmetic.ogma
+#                   ^^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#                     ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma keyword.operator.power.ogma
+#                      ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#                       ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma
+#                        ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#                         ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma storage.type.unit.ogma
+#                          ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma keyword.operator.ogma
+#                           ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma storage.type.unit.ogma
+#                            ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+>
+>claim si_prefix
+#^^^^^ source.ogma meta.block.claim.ogma keyword.control.directive.claim.ogma
+#     ^ source.ogma meta.block.claim.ogma
+#      ^^^^^^^^^ source.ogma meta.block.claim.ogma entity.name.function.claim.ogma
+>  1 [km] = 1000 [m]
+#^^ source.ogma meta.block.claim.ogma
+#  ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma constant.numeric.decimal.ogma
+#   ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma
+#    ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#     ^^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma storage.type.unit.ogma
+#       ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+#        ^ source.ogma meta.block.claim.ogma
+#         ^ source.ogma meta.block.claim.ogma keyword.operator.comparison.ogma
+#          ^ source.ogma meta.block.claim.ogma
+#           ^^^^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#               ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma
+#                ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#                 ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma storage.type.unit.ogma
+#                  ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+>
+>claim derived_unit
+#^^^^^ source.ogma meta.block.claim.ogma keyword.control.directive.claim.ogma
+#     ^ source.ogma meta.block.claim.ogma
+#      ^^^^^^^^^^^^ source.ogma meta.block.claim.ogma entity.name.function.claim.ogma
+>  10 [N] = 10 [N]
+#^^ source.ogma meta.block.claim.ogma
+#  ^^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma constant.numeric.decimal.ogma
+#    ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma
+#     ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#      ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma storage.type.dimension.ogma
+#       ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+#        ^ source.ogma meta.block.claim.ogma
+#         ^ source.ogma meta.block.claim.ogma keyword.operator.comparison.ogma
+#          ^ source.ogma meta.block.claim.ogma
+#           ^^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+#             ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma
+#              ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.begin.ogma
+#               ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma storage.type.dimension.ogma
+#                ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma meta.bracket-annotation.ogma punctuation.definition.bracket.end.ogma
+>
+>claim lower_bound
+#^^^^^ source.ogma meta.block.claim.ogma keyword.control.directive.claim.ogma
+#     ^ source.ogma meta.block.claim.ogma
+#      ^^^^^^^^^^^ source.ogma meta.block.claim.ogma entity.name.function.claim.ogma
+>  x >= 1
+#^^ source.ogma meta.block.claim.ogma
+#  ^ source.ogma meta.block.claim.ogma meta.expression.lhs.ogma
+#   ^ source.ogma meta.block.claim.ogma
+#    ^^ source.ogma meta.block.claim.ogma keyword.operator.comparison.ogma
+#      ^ source.ogma meta.block.claim.ogma
+#       ^ source.ogma meta.block.claim.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+>
+>expect_fail bad_threshold [comparison_false]
+#^^^^^^^^^^^ source.ogma meta.block.expect-fail.ogma keyword.control.directive.expect-fail.ogma
+#           ^ source.ogma meta.block.expect-fail.ogma
+#            ^^^^^^^^^^^^^ source.ogma meta.block.expect-fail.ogma entity.name.function.expect-fail.ogma
+#                         ^ source.ogma meta.block.expect-fail.ogma
+#                          ^^^^^^^^^^^^^^^^^^ source.ogma meta.block.expect-fail.ogma support.type.expect-fail.ogma
+>  claim bad
+#^^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#  ^^^^^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma keyword.control.directive.claim.ogma
+#       ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#        ^^^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma entity.name.function.claim.ogma
+>    1 > 2
+#^^^^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#    ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma meta.expression.lhs.ogma constant.numeric.decimal.ogma
+#     ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#      ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma keyword.operator.comparison.ogma
+#       ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma
+#        ^ source.ogma meta.block.expect-fail.ogma meta.block.claim.ogma meta.expression.rhs.ogma constant.numeric.decimal.ogma
+>

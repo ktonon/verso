@@ -52,7 +52,7 @@ Added `DimError::span()` accessor and `format_dim_error(error, source, prefix_wi
 
 ### Scope
 
-This feature covers REPL-only underline support. Document verification (`report.rs`) and LSP diagnostics (`verso.rs`) still report line-level errors without expression-level span underlines. Extending to documents would require threading source text through the verification pipeline — left as future work.
+This feature covers REPL-only underline support. Document verification (`report.rs`) and LSP diagnostics (`ogma.rs`) still report line-level errors without expression-level span underlines. Extending to documents would require threading source text through the verification pipeline — left as future work.
 
 ## Verification
 

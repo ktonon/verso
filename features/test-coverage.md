@@ -2,7 +2,7 @@
 
 ## Goal
 
-Improve test coverage across `verso_symbolic` and `verso_doc` library crates, prioritized by correctness impact and ROI.
+Improve test coverage across `ogma_symbolic` and `ogma_doc` library crates, prioritized by correctness impact and ROI.
 
 ## Baseline (2026-03-15)
 
@@ -48,7 +48,7 @@ Overall: **77.9% line coverage** (16,071 lines, 3,549 missed)
 
 ## Implementation Notes
 
-- Binary entry points (repl.rs, verso.rs, gen_data.rs) are excluded — 0% is expected
+- Binary entry points (repl.rs, ogma.rs, gen_data.rs) are excluded — 0% is expected
 - Run `npm run coverage:summary` to check progress
 - Run `npm run coverage` for HTML report at `target/llvm-cov/html/index.html`
 

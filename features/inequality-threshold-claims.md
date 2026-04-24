@@ -2,11 +2,11 @@
 
 ## Goal
 
-Add first-class support for inequality-style claims in Verso so papers can state and check threshold conditions such as confinement onset, stability bounds, and admissibility regions.
+Add first-class support for inequality-style claims in Ogma so papers can state and check threshold conditions such as confinement onset, stability bounds, and admissibility regions.
 
 The immediate motivating case is ERD, where the next kernel step wants statements like `Λ > 1` and `Π_{in} >= Π_{el}`. These are not full PDE claims; they are constitutive or regime-defining inequalities that should be expressible and checkable in the same document workflow as equality claims.
 
-This first slice should be conservative. Verso should reject nonsense, preserve the comparison operator in diagnostics, and prove comparisons only when it can do so honestly. It should not overstate what has been established.
+This first slice should be conservative. Ogma should reject nonsense, preserve the comparison operator in diagnostics, and prove comparisons only when it can do so honestly. It should not overstate what has been established.
 
 ## Plan
 
@@ -23,7 +23,7 @@ Initial scope should exclude chained comparisons such as `0 < x < 1`.
 
 Example:
 
-```verso
+```ogma
 claim confinement_onset
   Λ > 1
 
@@ -50,7 +50,7 @@ Verification should proceed in this order:
 2. If both sides reduce to comparable constants, decide the comparison exactly
 3. Otherwise report the comparison as unknown rather than guessing
 
-This v1 should explicitly avoid numerical sampling and variable-domain syntax. Those can be added later once Verso has a principled assumption model.
+This v1 should explicitly avoid numerical sampling and variable-domain syntax. Those can be added later once Ogma has a principled assumption model.
 
 ## Implementation Notes
 
@@ -67,7 +67,7 @@ Design constraints:
 - avoid numerical fallback until the project has a principled assumption/domain model
 - avoid bundling domain syntax into this feature; treat it as a separate later feature
 
-ERD is the motivating driver, but this feature should generalize cleanly to other scientific papers. The goal is not to make Verso say “true” for more inequalities; the goal is to let authors write comparison claims precisely while keeping the verifier epistemically honest.
+ERD is the motivating driver, but this feature should generalize cleanly to other scientific papers. The goal is not to make Ogma say “true” for more inequalities; the goal is to let authors write comparison claims precisely while keeping the verifier epistemically honest.
 
 - 2026-03-19: Phase 1 landed by extending `claim` parsing to accept `>`, `>=`,
   `<`, and `<=`, representing the relation explicitly in the AST, and preserving
@@ -95,7 +95,7 @@ Status:
 - `expect_fail` can target a false inequality with a stable reason such as `comparison_false`
 - No numerical sampling is used in this first implementation slice
 - Focused implementation checks:
-  - `cargo test -p verso_doc comparison_`
-  - `cargo test -p verso_doc expect_fail_passes_on_comparison`
-  - `cargo test -p verso_doc --lib`
-  - `cargo test -p verso_doc --bin verso`
+  - `cargo test -p ogma_doc comparison_`
+  - `cargo test -p ogma_doc expect_fail_passes_on_comparison`
+  - `cargo test -p ogma_doc --lib`
+  - `cargo test -p ogma_doc --bin ogma`

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Improve the user experience of the verso REPL for mathematicians and physicists. Address confusing behavior, missing numeric evaluation, and parser limitations that make the tool harder to use interactively.
+Improve the user experience of the ogma REPL for mathematicians and physicists. Address confusing behavior, missing numeric evaluation, and parser limitations that make the tool harder to use interactively.
 
 ## Plan
 
@@ -35,4 +35,4 @@ Improve the user experience of the verso REPL for mathematicians and physicists.
 
 ## Verification
 
-- `cargo test --release -p verso_symbolic -- repl::tests` exercises all e2e session tests including the bug-fix tests.
+- `cargo test --release -p ogma_symbolic -- repl::tests` exercises all e2e session tests including the bug-fix tests.

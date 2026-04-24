@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add SI unit support to verso expressions so that numeric values can carry unit annotations (e.g., `3*10^8 [m/s]`), enabling dimensional verification through units and unit-aware arithmetic with automatic SI prefix selection for display.
+Add SI unit support to ogma expressions so that numeric values can carry unit annotations (e.g., `3*10^8 [m/s]`), enabling dimensional verification through units and unit-aware arithmetic with automatic SI prefix selection for display.
 
 ## Plan
 
@@ -13,7 +13,7 @@ Add SI unit support to verso expressions so that numeric values can carry unit a
 - `c [m/s]` — SYNTAX ERROR (variable requires dimension, not unit)
 - `3 [L]` — SYNTAX ERROR (number requires unit, not dimension)
 
-### Unit types (`verso_symbolic/src/unit.rs`)
+### Unit types (`ogma_symbolic/src/unit.rs`)
 
 - `BaseUnit` enum: m(L), g(M, scale 0.001), s(T), K(Theta), A(I), mol(N), cd(J)
 - `DerivedUnit` table: N, J, W, Pa, Hz, C, V, Ohm
@@ -41,21 +41,21 @@ All values convert to canonical base SI form internally. Display chooses suitabl
 ## Implementation Notes
 
 ### Created files
-- `verso_symbolic/src/unit.rs` — core unit types and parsing (10 tests)
-- `verso_symbolic/src/dim.rs` — Dimension type moved from verso_doc (shared across crates)
+- `ogma_symbolic/src/unit.rs` — core unit types and parsing (10 tests)
+- `ogma_symbolic/src/dim.rs` — Dimension type moved from ogma_doc (shared across crates)
 
 ### Modified files
-- `verso_symbolic/src/lib.rs` — added `pub mod unit`, `pub mod dim`, re-exports
-- `verso_symbolic/src/expr.rs` — `Quantity(Box<Expr>, Unit)` variant, `quantity()` constructor
-- `verso_symbolic/src/parser.rs` — context-sensitive bracket parsing with `parse_unit_bracket`, `expr_has_vars` helper, improved error messages for dimension/unit mismatches
-- `verso_symbolic/src/fmt.rs` — Display and colored output for Quantity
-- `verso_symbolic/src/to_tex.rs` — LaTeX rendering: `{value} \; \mathrm{{unit}}`
-- `verso_doc/src/dim.rs` — `check_dim` for Quantity returns `unit.dimension`; uses verso_symbolic::Dimension
-- `verso_doc/src/eval.rs` — `eval_f64` for Quantity: `eval(inner) * unit.scale`
-- `verso_symbolic/src/search.rs` — pass-through for Quantity
-- `verso_symbolic/src/token.rs` — pass-through for Quantity
-- `verso_symbolic/src/gen_expr.rs` — Quantity as leaf
-- `verso_symbolic/src/random_search.rs` — Quantity as leaf
+- `ogma_symbolic/src/lib.rs` — added `pub mod unit`, `pub mod dim`, re-exports
+- `ogma_symbolic/src/expr.rs` — `Quantity(Box<Expr>, Unit)` variant, `quantity()` constructor
+- `ogma_symbolic/src/parser.rs` — context-sensitive bracket parsing with `parse_unit_bracket`, `expr_has_vars` helper, improved error messages for dimension/unit mismatches
+- `ogma_symbolic/src/fmt.rs` — Display and colored output for Quantity
+- `ogma_symbolic/src/to_tex.rs` — LaTeX rendering: `{value} \; \mathrm{{unit}}`
+- `ogma_doc/src/dim.rs` — `check_dim` for Quantity returns `unit.dimension`; uses ogma_symbolic::Dimension
+- `ogma_doc/src/eval.rs` — `eval_f64` for Quantity: `eval(inner) * unit.scale`
+- `ogma_symbolic/src/search.rs` — pass-through for Quantity
+- `ogma_symbolic/src/token.rs` — pass-through for Quantity
+- `ogma_symbolic/src/gen_expr.rs` — Quantity as leaf
+- `ogma_symbolic/src/random_search.rs` — Quantity as leaf
 
 ### Key design decisions
 - Brackets at the multiplicative level: `3*10^8 [m/s]` wraps the entire multiplicative expression
@@ -66,7 +66,7 @@ All values convert to canonical base SI form internally. Display chooses suitabl
 ## Verification
 
 ```bash
-cd /Users/ktonon/repos/verso && cargo test --release
+cd /Users/ktonon/repos/ogma && cargo test --release
 ```
 
 All tests pass (723+). Integration tests verify:

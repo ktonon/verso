@@ -1,3 +1,3 @@
 [workspace]
-members = ["verso_doc", "verso_symbolic", "verso_training"]
+members = ["ogma_doc", "ogma_symbolic", "ogma_training"]
 resolver = "2"

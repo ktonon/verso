@@ -19,9 +19,9 @@ REPL commands and document directives use `!` as their prefix (`!var`, `!const`,
 
 ### LaTeX transpilation
 
-Verso source files contain literal unicode characters (e.g., `μ`, `∂`, `∇`). When transpiling to LaTeX, these must be converted to the appropriate LaTeX commands:
+Ogma source files contain literal unicode characters (e.g., `μ`, `∂`, `∇`). When transpiling to LaTeX, these must be converted to the appropriate LaTeX commands:
 
-| Verso source | LaTeX output |
+| Ogma source | LaTeX output |
 |-------------|-------------|
 | `μ` | `\mu` |
 | `∂f/∂x` | `\partial f / \partial x` |
@@ -51,7 +51,7 @@ Extensible — new entries can be added to the table without code changes.
 
 ### Shared unicode table
 
-- New module `verso_symbolic/src/unicode.rs`
+- New module `ogma_symbolic/src/unicode.rs`
 - Table entry: `(name: &str, char: char, latex: &str)`
 - `pub fn lookup(name: &str) -> Option<char>` — name → unicode char
 - `pub fn to_latex(c: char) -> Option<&str>` — unicode char → LaTeX command
@@ -89,20 +89,20 @@ Extensible — new entries can be added to the table without code changes.
 
 Implemented in 4 phases:
 
-1. **Shared unicode table** (`verso_symbolic/src/unicode.rs`): 64 entries covering Greek letters (lowercase + uppercase), math operators, and arrows. Each entry is a `(name, char, latex)` triple. Functions: `lookup`, `to_latex`, `completions`, `replace_all`.
+1. **Shared unicode table** (`ogma_symbolic/src/unicode.rs`): 64 entries covering Greek letters (lowercase + uppercase), math operators, and arrows. Each entry is a `(name, char, latex)` triple. Functions: `lookup`, `to_latex`, `completions`, `replace_all`.
 
-2. **REPL integration** (`verso_symbolic/src/repl.rs`): `replace_all` is called at the top of `Session::eval` before any other processing. The expression tokenizer (`parser.rs`) was extended to recognize non-ASCII symbolic characters used as identifiers (e.g., `μ`, `∥`, `⟂`) as single-char identifiers. `π` remains special-cased as `Token::Pi`.
+2. **REPL integration** (`ogma_symbolic/src/repl.rs`): `replace_all` is called at the top of `Session::eval` before any other processing. The expression tokenizer (`parser.rs`) was extended to recognize non-ASCII symbolic characters used as identifiers (e.g., `μ`, `∥`, `⟂`) as single-char identifiers. `π` remains special-cased as `Token::Pi`.
 
-3. **LaTeX integration** (`verso_symbolic/src/to_tex.rs`, `verso_doc/src/tex_prose.rs`): Added a shared unicode-to-LaTeX conversion path for symbolic names and document-side raw `tex` fragments. This now covers `ExprKind::Var` rendering, tensor indices, and inline `tex` content emitted by the paper compiler.
+3. **LaTeX integration** (`ogma_symbolic/src/to_tex.rs`, `ogma_doc/src/tex_prose.rs`): Added a shared unicode-to-LaTeX conversion path for symbolic names and document-side raw `tex` fragments. This now covers `ExprKind::Var` rendering, tensor indices, and inline `tex` content emitted by the paper compiler.
 
-4. **VSCode/LSP integration** (`verso_doc/src/bin/verso.rs`): Added `CompletionProvider` with `:` trigger character. Returns all unicode entries as `CompletionItem`s with character preview in `detail` field. The completion handler now converts LSP UTF-16 cursor positions to byte offsets before scanning the line, so repeated `:name:` completions still trigger correctly after earlier unicode insertions on the same line.
+4. **VSCode/LSP integration** (`ogma_doc/src/bin/ogma.rs`): Added `CompletionProvider` with `:` trigger character. Returns all unicode entries as `CompletionItem`s with character preview in `detail` field. The completion handler now converts LSP UTF-16 cursor positions to byte offsets before scanning the line, so repeated `:name:` completions still trigger correctly after earlier unicode insertions on the same line.
 
 The completion table has since been extended with geometric relation symbols used in ERD notation, including `:parallel:` → `∥` and `:perp:` → `⟂`. Because the table is shared, those additions automatically apply to REPL replacement, VS Code completions, symbolic math rendering, and document-side inline `tex` rendering.
 
 ## Verification
 
-- `cargo test --release -p verso_symbolic -- unicode` exercises the lookup/replace/to_latex functions
-- `cargo test -p verso_doc completion_context` verifies unicode completion range handling in the LSP server
+- `cargo test --release -p ogma_symbolic -- unicode` exercises the lookup/replace/to_latex functions
+- `cargo test -p ogma_doc completion_context` verifies unicode completion range handling in the LSP server
 - REPL e2e tests verify `:mu:` → `μ` replacement in expressions
 - LaTeX output tests verify unicode math symbols convert in both symbolic expressions and document-side inline `tex` fragments
 - Manual verification of VSCode completion popup behavior

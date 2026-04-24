@@ -1,12 +1,12 @@
-# Verso Project
+# Ogma Project
 
 A paper-writing tool with machine-verified mathematics, built in Rust.
 
 ## Project Structure
 
 ```
-verso/
-├── verso_symbolic/  # Core symbolic math library (Rust)
+ogma/
+├── ogma_symbolic/  # Core symbolic math library (Rust)
 │   ├── src/
 │   │   ├── expr.rs      # Expression AST (Const, Named, Var, Add, Mul, Neg, Inv, Pow, Fn)
 │   │   ├── rule.rs      # Pattern matching and rewriting rules
@@ -16,7 +16,7 @@ verso/
 │   │   ├── to_tex.rs    # LaTeX output
 │   │   └── bin/repl.rs  # Interactive REPL
 │   └── Cargo.toml
-├── verso_training/  # ML training pipeline (Rust + Burn)
+├── ogma_training/  # ML training pipeline (Rust + Burn)
 │   ├── src/
 │   │   ├── model.rs     # Transformer encoder-decoder (Burn Module)
 │   │   ├── train.rs     # Supervised training loop
@@ -27,7 +27,7 @@ verso/
 │   │   ├── config.rs    # CLI configs (TrainConfig, RLConfig, EvalConfig)
 │   │   └── schedule.rs  # Cosine LR schedule with warmup
 │   └── Cargo.toml
-└── verso_doc/       # Document parser, LaTeX compiler, verifier, LSP
+└── ogma_doc/       # Document parser, LaTeX compiler, verifier, LSP
 ```
 
 ## Key Design Principles
@@ -110,26 +110,26 @@ npm run repl:beam
 ## Document Features
 
 ### Multi-file Documents
-- `!include path.verso` — inlines the entire file at the include point
-- `use path.verso` — imports only declarations (var, def, func) without prose or claims
+- `!include path.ogma` — inlines the entire file at the include point
+- `use path.ogma` — imports only declarations (var, def, func) without prose or claims
 
 ### Semantic Regression Tests
-- `.verso.jsonc` supports a `"tests"` array: test roots are checked by `verso check` but not built by `verso build`
+- `.ogma.jsonc` supports a `"tests"` array: test roots are checked by `ogma check` but not built by `ogma build`
 - `expect_fail name` — block containing inner declarations/claims that passes only when at least one inner check fails
 
-### Config (.verso.jsonc)
+### Config (.ogma.jsonc)
 ```jsonc
 {
-  "input": "paper.verso",          // or "papers": [{ "input": "..." }]
+  "input": "paper.ogma",          // or "papers": [{ "input": "..." }]
   "outputDirectory": "build",
-  "tests": [{ "input": "paper.test.verso" }]
+  "tests": [{ "input": "paper.test.ogma" }]
 }
 ```
 
 ## Testing
 
 ```bash
-cargo test --package verso_symbolic
+cargo test --package ogma_symbolic
 ```
 
 ## Common Patterns

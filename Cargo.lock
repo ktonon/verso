@@ -4228,6 +4228,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "ogma_doc"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "notify",
+ "notify-debouncer-mini",
+ "ogma_symbolic",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-lsp",
+]
+
+[[package]]
+name = "ogma_symbolic"
+version = "0.1.0"
+dependencies = [
+ "rand 0.10.0",
+ "rayon",
+ "rustyline",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ogma_training"
+version = "0.1.0"
+dependencies = [
+ "burn",
+ "clap",
+ "ogma_symbolic",
+ "rand 0.10.0",
+ "rustyline",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6456,44 +6494,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "verso_doc"
-version = "0.1.0"
-dependencies = [
- "clap",
- "notify",
- "notify-debouncer-mini",
- "serde",
- "serde_json",
- "tokio",
- "tower-lsp",
- "verso_symbolic",
-]
-
-[[package]]
-name = "verso_symbolic"
-version = "0.1.0"
-dependencies = [
- "rand 0.10.0",
- "rayon",
- "rustyline",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "verso_training"
-version = "0.1.0"
-dependencies = [
- "burn",
- "clap",
- "rand 0.10.0",
- "rustyline",
- "serde",
- "serde_json",
- "verso_symbolic",
-]
 
 [[package]]
 name = "void"

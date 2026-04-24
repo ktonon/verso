@@ -2,13 +2,13 @@
 
 ## Goal
 
-Unify the statement syntax across the REPL and paper writer, treating verso as a language rather than a collection of directives. Drop the `!` prefix from statements (language constructs) while keeping it for REPL-only commands (tool controls). Introduce `:=` as the definition operator, replacing `!const` and `!definition` with `def`. Align vocabulary across both surfaces.
+Unify the statement syntax across the REPL and paper writer, treating ogma as a language rather than a collection of directives. Drop the `!` prefix from statements (language constructs) while keeping it for REPL-only commands (tool controls). Introduce `:=` as the definition operator, replacing `!const` and `!definition` with `def`. Align vocabulary across both surfaces.
 
 ## Plan
 
 ### Phase 1: Parser — drop `!` from statements, introduce `:=`
 
-Update the document parser (`verso_doc/src/parse.rs`) and REPL parser (`verso_symbolic/src/repl.rs`) to recognize the new syntax. Both `!`-prefixed and bare forms need to be handled during transition testing, but the old syntax is removed, not deprecated.
+Update the document parser (`ogma_doc/src/parse.rs`) and REPL parser (`ogma_symbolic/src/repl.rs`) to recognize the new syntax. Both `!`-prefixed and bare forms need to be handled during transition testing, but the old syntax is removed, not deprecated.
 
 **Statements (shared language, no `!` prefix):**
 
@@ -35,9 +35,9 @@ Update the document parser (`verso_doc/src/parse.rs`) and REPL parser (`verso_sy
 **Reserved words:** `var`, `def`, `func`, `claim`, `proof`. These are reserved at line-start only (in documents) or as the first token (in REPL). They can still appear in prose mid-paragraph.
 
 Changes needed:
-- `verso_doc/src/parse.rs` — update line-start detection for all statement types
-- `verso_symbolic/src/repl.rs` — update `Session::eval` to handle bare keywords and `:=`
-- `verso_symbolic/src/parser.rs` — add `:=` token support for REPL implicit defs
+- `ogma_doc/src/parse.rs` — update line-start detection for all statement types
+- `ogma_symbolic/src/repl.rs` — update `Session::eval` to handle bare keywords and `:=`
+- `ogma_symbolic/src/parser.rs` — add `:=` token support for REPL implicit defs
 - All test fixtures and inline test strings
 
 ### Phase 2: Definition semantics — merge `!const` and `!definition` into `def`
@@ -57,20 +57,20 @@ This replaces both `!const` (simple bindings) and `!definition` (named definitio
 For paper output, `def` renders as a numbered equation (like old `!definition`). The left-side name serves as the label for cross-references.
 
 Changes needed:
-- `verso_doc/src/ast.rs` — merge `ConstDecl` and `Definition` into a unified `DefDecl` variant
-- `verso_doc/src/parse.rs` — parse `def name := expr` with optional indented description
-- `verso_doc/src/compile_tex.rs` — render `def` as numbered equation
-- `verso_doc/src/verify.rs` — handle `def` in verification (dim-checked, not symbolically verified)
-- `verso_symbolic/src/repl.rs` — `:=` handling for implicit defs
-- `verso_symbolic/src/context.rs` — unified `declare_def` or similar
+- `ogma_doc/src/ast.rs` — merge `ConstDecl` and `Definition` into a unified `DefDecl` variant
+- `ogma_doc/src/parse.rs` — parse `def name := expr` with optional indented description
+- `ogma_doc/src/compile_tex.rs` — render `def` as numbered equation
+- `ogma_doc/src/verify.rs` — handle `def` in verification (dim-checked, not symbolically verified)
+- `ogma_symbolic/src/repl.rs` — `:=` handling for implicit defs
+- `ogma_symbolic/src/context.rs` — unified `declare_def` or similar
 
 ### Phase 3: func uses `:=`
 
 Update `func` declarations to use `:=` instead of `=`.
 
 Changes needed:
-- `verso_doc/src/parse.rs` — expect `:=` in func body
-- `verso_symbolic/src/repl.rs` — update func parsing
+- `ogma_doc/src/parse.rs` — expect `:=` in func body
+- `ogma_symbolic/src/repl.rs` — update func parsing
 - Test fixtures
 
 ### Phase 4: Update VS Code extension
@@ -78,20 +78,20 @@ Changes needed:
 Update the TextMate grammar, snippets, and LSP integration.
 
 Changes needed:
-- `editors/vscode/syntaxes/verso.tmLanguage.json` — update patterns for all statement types (drop `!`, add `:=`)
-- `editors/vscode/snippets/verso.json` — update snippets
-- `verso_doc/src/bin/verso.rs` — update LSP hover/goto for new syntax
-- `verso_doc/src/compile_tex.rs` — update `find_decl_line` for new syntax
+- `editors/vscode/syntaxes/ogma.tmLanguage.json` — update patterns for all statement types (drop `!`, add `:=`)
+- `editors/vscode/snippets/ogma.json` — update snippets
+- `ogma_doc/src/bin/ogma.rs` — update LSP hover/goto for new syntax
+- `ogma_doc/src/compile_tex.rs` — update `find_decl_line` for new syntax
 
 ### Phase 5: Update syntax guide and docs
 
 Update the syntax guide to reflect the new syntax and serve as the canonical reference.
 
 Changes needed:
-- `verso_doc/tests/fixtures/syntax_guide.verso` — rewrite all examples
+- `ogma_doc/tests/fixtures/syntax_guide.ogma` — rewrite all examples
 - `CLAUDE.md` — update project documentation
-- REPL help text (`verso_symbolic/src/repl.rs`) — update `?` output
-- Any other `.verso` test fixtures
+- REPL help text (`ogma_symbolic/src/repl.rs`) — update `?` output
+- Any other `.ogma` test fixtures
 
 ## Implementation Notes
 
@@ -100,7 +100,7 @@ Changes needed:
 - Document metadata directives (`!title`, `!abstract`, `!table`, etc.) keep `!` prefix
 - Parser uses `trimmed == "keyword" || trimmed.starts_with("keyword ")` for safe matching
 - REPL help now distinguishes "Statements" (no `!`) from "Commands" (`!`)
-- Updated all test fixtures (`.verso` files, inline test strings in parse.rs, compile_tex.rs, verify.rs, repl.rs)
+- Updated all test fixtures (`.ogma` files, inline test strings in parse.rs, compile_tex.rs, verify.rs, repl.rs)
 
 ### Phase 2 (completed)
 - Renamed `ConstDecl` → `DefDecl`, `Block::Const` → `Block::Def` throughout AST
@@ -137,8 +137,8 @@ Changes needed:
 ## Verification
 
 - `npm test` — all unit tests pass
-- `cargo test -p verso_doc` — document parser and compiler tests
-- `cargo test -p verso_symbolic -- repl::tests` — REPL session tests
+- `cargo test -p ogma_doc` — document parser and compiler tests
+- `cargo test -p ogma_symbolic -- repl::tests` — REPL session tests
 - Syntax guide compiles without errors
 - VS Code extension highlights new syntax correctly
 - REPL `?` help reflects new commands

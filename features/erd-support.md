@@ -2,9 +2,9 @@
 
 ## Goal
 
-Support the Emergent Rung Dynamics (ERD) paper — a mathematical physics paper that serves as a provisional implementation of the ERMS framework. ERD models wave dynamics in elastic media, confinement conditions, energy balance, and scale-recursive relations. Verso's current symbolic engine handles algebraic identities, trigonometric relations, and dimensional analysis, but ERD will require capabilities that don't yet exist.
+Support the Emergent Rung Dynamics (ERD) paper — a mathematical physics paper that serves as a provisional implementation of the ERMS framework. ERD models wave dynamics in elastic media, confinement conditions, energy balance, and scale-recursive relations. Ogma's current symbolic engine handles algebraic identities, trigonometric relations, and dimensional analysis, but ERD will require capabilities that don't yet exist.
 
-This feature tracks the verso extensions needed to author and verify ERD's mathematical content.
+This feature tracks the ogma extensions needed to author and verify ERD's mathematical content.
 
 ## Dependencies
 
@@ -14,7 +14,7 @@ This feature tracks the verso extensions needed to author and verify ERD's mathe
 
 ### Priority 1: Derivatives and differential equations
 
-ERD's core object is a wave equation in an elastic medium. At minimum, verso needs:
+ERD's core object is a wave equation in an elastic medium. At minimum, ogma needs:
 
 - **Partial derivative notation**: `∂f/∂x`, `∂²f/∂x²` — representable in the AST and renderable to LaTeX
 - **Ordinary derivatives**: `df/dx`, `d²f/dx²`
@@ -60,7 +60,7 @@ Threshold transitions (e.g., confinement onset) may need:
 
 To be determined as ERD work reveals which capabilities are needed first. The priorities above reflect expected ordering based on the paper's structure (wave equations come before stability analysis, which comes before conservation integrals).
 
-Each capability should be designed to integrate with verso's existing verification pipeline:
+Each capability should be designed to integrate with ogma's existing verification pipeline:
 1. AST representation (new `ExprKind` variants or syntax)
 2. LaTeX rendering
 3. Dimensional analysis (extend `elaborate_expr`)
@@ -72,6 +72,6 @@ Not yet started. This feature will be updated as ERD authoring proceeds and spec
 
 ## Verification
 
-- ERD paper claims that exercise each new capability pass `verso check`
+- ERD paper claims that exercise each new capability pass `ogma check`
 - Existing tests continue to pass (no regressions)
 - LaTeX output renders correctly for new notation

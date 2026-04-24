@@ -2,8 +2,8 @@
 
 ## Goal
 
-Make Verso output complete, submission-ready LaTeX without manual post-processing.
-Today ~50-70% of a real physics paper can be written in Verso; the rest (metadata,
+Make Ogma output complete, submission-ready LaTeX without manual post-processing.
+Today ~50-70% of a real physics paper can be written in Ogma; the rest (metadata,
 figures, tables, custom formatting) requires editing the generated LaTeX by hand.
 This feature tracks closing those gaps.
 
@@ -39,9 +39,9 @@ Add directives for front matter that compile to standard LaTeX title block.
 ```
 
 **Key files:**
-- `verso_doc/src/ast.rs` — add `Block::Title`, `Block::Author`, `Block::Date`, `Block::Abstract`
-- `verso_doc/src/parse.rs` — detect `!title`, `!author`, `!date`, `!abstract` directives
-- `verso_doc/src/compile_tex.rs` — emit `\title{}`, `\author{}`, `\date{}`, `\begin{abstract}...\end{abstract}`, `\maketitle`
+- `ogma_doc/src/ast.rs` — add `Block::Title`, `Block::Author`, `Block::Date`, `Block::Abstract`
+- `ogma_doc/src/parse.rs` — detect `!title`, `!author`, `!date`, `!abstract` directives
+- `ogma_doc/src/compile_tex.rs` — emit `\title{}`, `\author{}`, `\date{}`, `\begin{abstract}...\end{abstract}`, `\maketitle`
 
 **Design decisions:**
 - Multiple `!author` directives are joined with `\and`
@@ -72,9 +72,9 @@ Add a figure directive for including images with captions and labels.
 ```
 
 **Key files:**
-- `verso_doc/src/ast.rs` — add `Block::Figure { path, caption, label, width }`
-- `verso_doc/src/parse.rs` — detect `!figure` directive, parse key-value body
-- `verso_doc/src/compile_tex.rs` — emit `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
+- `ogma_doc/src/ast.rs` — add `Block::Figure { path, caption, label, width }`
+- `ogma_doc/src/parse.rs` — detect `!figure` directive, parse key-value body
+- `ogma_doc/src/compile_tex.rs` — emit `\begin{figure}[htbp]` with `\includegraphics`, `\caption`, `\label`
 
 **Design decisions:**
 - `\usepackage{graphicx}` added conditionally
@@ -100,9 +100,9 @@ Add markdown-style table syntax.
 ```
 
 **Key files:**
-- `verso_doc/src/ast.rs` — add `Block::Table { title, rows, label }`
-- `verso_doc/src/parse.rs` — detect `!table` directive, parse `|`-delimited rows
-- `verso_doc/src/compile_tex.rs` — emit `\begin{table}[htbp]` with `tabular`
+- `ogma_doc/src/ast.rs` — add `Block::Table { title, rows, label }`
+- `ogma_doc/src/parse.rs` — detect `!table` directive, parse `|`-delimited rows
+- `ogma_doc/src/compile_tex.rs` — emit `\begin{table}[htbp]` with `tabular`
 
 **Design decisions:**
 - Second row must be separator (`|---|---|`) to mark header
@@ -113,21 +113,21 @@ Add markdown-style table syntax.
 
 ### M4: Default preamble
 
-The compiler generates a complete LaTeX preamble with sensible defaults (11pt article, geometry, microtype, etc.). Documents do not specify packages — verso chooses reasonable defaults. Conditional packages (hyperref, graphicx, wrapfig) are included only when needed.
+The compiler generates a complete LaTeX preamble with sensible defaults (11pt article, geometry, microtype, etc.). Documents do not specify packages — ogma chooses reasonable defaults. Conditional packages (hyperref, graphicx, wrapfig) are included only when needed.
 
 **Key files:**
-- `verso_doc/src/compile_tex.rs` — hardcoded default preamble with all standard packages and layout settings
+- `ogma_doc/src/compile_tex.rs` — hardcoded default preamble with all standard packages and layout settings
 
 ---
 
 ### M5: Multi-file include
 
-Allow splitting a document across multiple `.verso` files.
+Allow splitting a document across multiple `.ogma` files.
 
 **Syntax:**
 ```
-!include chapters/introduction.verso
-!include chapters/methods.verso
+!include chapters/introduction.ogma
+!include chapters/methods.ogma
 ```
 
 **Design decisions:**
@@ -143,8 +143,8 @@ Allow splitting a document across multiple `.verso` files.
 Add warnings when `ref`label`` doesn't match any section or labeled block.
 
 **Key files:**
-- `verso_doc/src/compile_tex.rs` or a new `lint.rs` — collect all labels, check all refs
-- `verso_doc/src/bin/verso_lsp.rs` — emit diagnostics for unresolved refs
+- `ogma_doc/src/compile_tex.rs` or a new `lint.rs` — collect all labels, check all refs
+- `ogma_doc/src/bin/ogma_lsp.rs` — emit diagnostics for unresolved refs
 
 ---
 
@@ -208,8 +208,8 @@ Compiles to `\newpage`.
 - Added `resolve_includes()` function: recursively expands `!include path` lines, resolving paths relative to including file
 - Added `parse_document_from_file()` entry point that resolves includes then parses
 - Circular include detection via `seen` path set
-- Updated `verso_compile`, `verso_check`, `verso_watch` binaries to use `parse_document_from_file`
-- `verso_lsp` stays with `parse_document` (receives text from editor, not file path)
+- Updated `ogma_compile`, `ogma_check`, `ogma_watch` binaries to use `parse_document_from_file`
+- `ogma_lsp` stays with `parse_document` (receives text from editor, not file path)
 - VSCode grammar: `directive-include` rule
 - Tests: 4 tests (basic, circular error, missing file error, nested includes)
 
@@ -218,7 +218,7 @@ Compiles to `\newpage`.
 - Compiler generates a complete default preamble: 11pt article, geometry, fontenc, inputenc, lmodern, microtype, amsmath, amsthm, xcolor, framed, bookmark
 - Conditional packages: hyperref (when refs/urls used), graphicx + wrapfig (when figures present)
 - Layout defaults: no parindent, 6pt parskip, 3em emergencystretch, tocdepth 3
-- Removed `:class` and `:usepackage` directives — verso chooses reasonable defaults
+- Removed `:class` and `:usepackage` directives — ogma chooses reasonable defaults
 - Tests: 1 compile test for default preamble
 
 ### M3: Tables (completed)
@@ -237,5 +237,5 @@ Compiles to `\newpage`.
 
 ```bash
 npm test                            # full test suite
-npm run compile -- file.verso         # compile and inspect LaTeX output
+npm run compile -- file.ogma         # compile and inspect LaTeX output
 ```
