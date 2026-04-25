@@ -1,6 +1,17 @@
 import * as fs from "fs";
 import * as path from "path";
-import { ExtensionContext, workspace } from "vscode";
+import {
+  CancellationToken,
+  DocumentLink,
+  DocumentLinkProvider,
+  ExtensionContext,
+  languages,
+  Position,
+  Range,
+  TextDocument,
+  Uri,
+  workspace,
+} from "vscode";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -46,7 +57,42 @@ function findServerPath(): string {
   return "ogma";
 }
 
-export function activate(_context: ExtensionContext) {
+const includeLinkProvider: DocumentLinkProvider = {
+  provideDocumentLinks(
+    document: TextDocument,
+    _token: CancellationToken
+  ): DocumentLink[] {
+    const links: DocumentLink[] = [];
+    const docDir = path.dirname(document.uri.fsPath);
+    const re = /^\s*(?:!include|use)\s+(\S.*?)\s*$/;
+    for (let i = 0; i < document.lineCount; i++) {
+      const line = document.lineAt(i).text;
+      const m = re.exec(line);
+      if (!m) continue;
+      const target = m[1];
+      const start = line.indexOf(target, m[0].indexOf(target));
+      if (start < 0) continue;
+      const range = new Range(
+        new Position(i, start),
+        new Position(i, start + target.length)
+      );
+      const resolved = path.isAbsolute(target)
+        ? target
+        : path.join(docDir, target);
+      links.push(new DocumentLink(range, Uri.file(resolved)));
+    }
+    return links;
+  },
+};
+
+export function activate(context: ExtensionContext) {
+  context.subscriptions.push(
+    languages.registerDocumentLinkProvider(
+      { scheme: "file", language: "ogma" },
+      includeLinkProvider
+    )
+  );
+
   const serverPath = findServerPath();
 
   const serverOptions: ServerOptions = {
