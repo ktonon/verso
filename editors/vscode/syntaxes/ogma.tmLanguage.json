@@ -88,7 +88,8 @@
               "name": "punctuation.definition.heading.ogma"
             }
           },
-          "name": "markup.heading.4.ogma",
+          "name": "markup.heading.4.ogma entity.name.section.ogma",
+          "contentName": "entity.name.section.ogma",
           "patterns": [
             {
               "include": "#tag-label"
@@ -106,7 +107,8 @@
               "name": "punctuation.definition.heading.ogma"
             }
           },
-          "name": "markup.heading.3.ogma",
+          "name": "markup.heading.3.ogma entity.name.section.ogma",
+          "contentName": "entity.name.section.ogma",
           "patterns": [
             {
               "include": "#tag-label"
@@ -124,7 +126,8 @@
               "name": "punctuation.definition.heading.ogma"
             }
           },
-          "name": "markup.heading.2.ogma",
+          "name": "markup.heading.2.ogma entity.name.section.ogma",
+          "contentName": "entity.name.section.ogma",
           "patterns": [
             {
               "include": "#tag-label"
@@ -142,7 +145,8 @@
               "name": "punctuation.definition.heading.ogma"
             }
           },
-          "name": "markup.heading.1.ogma",
+          "name": "markup.heading.1.ogma entity.name.section.ogma",
+          "contentName": "entity.name.section.ogma",
           "patterns": [
             {
               "include": "#tag-label"
