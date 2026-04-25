@@ -64,7 +64,7 @@ const includeLinkProvider: DocumentLinkProvider = {
   ): DocumentLink[] {
     const links: DocumentLink[] = [];
     const docDir = path.dirname(document.uri.fsPath);
-    const re = /^\s*(?:!include|use)\s+(\S.*?)\s*$/;
+    const re = /^\s*(?:!include|!bibliography|use)\s+(\S.*?)\s*$/;
     for (let i = 0; i < document.lineCount; i++) {
       const line = document.lineAt(i).text;
       const m = re.exec(line);
