@@ -202,7 +202,7 @@ fn compile_cite() {
 fn compile_bibliography() {
     let doc = parse_document("!bibliography refs.bib").unwrap();
     let tex = compile_to_tex(&doc);
-    assert!(tex.contains("\\bibliographystyle{plain}"));
+    assert!(tex.contains("\\bibliographystyle{unsrt}"));
     assert!(tex.contains("\\bibliography{refs}"));
     let bib_pos = tex.find("\\bibliography{refs}").unwrap();
     let end_pos = tex.find("\\end{document}").unwrap();

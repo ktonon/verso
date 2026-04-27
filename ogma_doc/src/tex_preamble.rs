@@ -122,7 +122,7 @@ pub(super) fn write_bibliography(out: &mut String, doc: &Document) {
         if let Block::Bibliography { path, .. } = block {
             writeln!(out).unwrap();
             let bib_name = path.strip_suffix(".bib").unwrap_or(path);
-            writeln!(out, "\\bibliographystyle{{plain}}").unwrap();
+            writeln!(out, "\\bibliographystyle{{unsrt}}").unwrap();
             writeln!(out, "\\bibliography{{{}}}", bib_name).unwrap();
         }
     }
