@@ -75,6 +75,8 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool) {
     writeln!(out, "\\usepackage{{longtable}}").unwrap();
     writeln!(out, "\\usepackage{{graphicx}}").unwrap();
     writeln!(out, "\\usepackage{{wrapfig}}").unwrap();
+    writeln!(out, "\\usepackage{{tikz}}").unwrap();
+    writeln!(out, "\\usetikzlibrary{{arrows.meta,positioning,calc}}").unwrap();
 
     writeln!(out).unwrap();
     writeln!(out, "\\setlength{{\\parindent}}{{0pt}}").unwrap();
