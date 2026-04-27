@@ -1277,9 +1277,14 @@ pub fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocE
                 InlineMatch::Tag(tag_match) => {
                     match tag_match.tag {
                         "math" => {
-                            if let Some(eq_pos) = tag_match.content.find('=') {
+                            let split = tag_match
+                                .content
+                                .char_indices()
+                                .find(|(_, c)| *c == '=' || *c == '≡');
+                            if let Some((eq_pos, eq_ch)) = split {
                                 let lhs_str = tag_match.content[..eq_pos].trim();
-                                let rhs_str = tag_match.content[eq_pos + 1..].trim();
+                                let rhs_str =
+                                    tag_match.content[eq_pos + eq_ch.len_utf8()..].trim();
                                 let lhs =
                                     parse_expr(lhs_str).map_err(|e| ParseDocError {
                                         line: 0,
@@ -1290,7 +1295,11 @@ pub fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocE
                                         line: 0,
                                         message: format!("inline math`{}`: rhs: {:?}", tag_match.content, e),
                                     })?;
-                                fragments.push(ProseFragment::MathEquality(lhs, rhs));
+                                fragments.push(if eq_ch == '≡' {
+                                    ProseFragment::MathEquivalence(lhs, rhs)
+                                } else {
+                                    ProseFragment::MathEquality(lhs, rhs)
+                                });
                             } else {
                                 let expr =
                                     parse_expr(tag_match.content).map_err(|e| ParseDocError {
@@ -1428,7 +1437,9 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
     for f in fragments {
         match f {
             ProseFragment::Text(t) => s.push_str(t),
-            ProseFragment::Math(_) | ProseFragment::MathEquality(_, _) => s.push_str("[math]"),
+            ProseFragment::Math(_)
+            | ProseFragment::MathEquality(_, _)
+            | ProseFragment::MathEquivalence(_, _) => s.push_str("[math]"),
             ProseFragment::Tex(t) => {
                 s.push_str("tex`");
                 s.push_str(t);
@@ -2305,6 +2316,17 @@ More prose here.
         match &doc.blocks[0] {
             Block::Prose(fragments) => {
                 assert!(matches!(&fragments[1], ProseFragment::MathEquality(_, _)));
+            }
+            other => panic!("expected Prose, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_inline_math_equiv_synonym() {
+        let doc = parse_document("Define math`DYN ≡ Rung_0` here.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert!(matches!(&fragments[1], ProseFragment::MathEquivalence(_, _)));
             }
             other => panic!("expected Prose, got {:?}", other),
         }

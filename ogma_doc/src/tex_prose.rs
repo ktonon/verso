@@ -129,6 +129,9 @@ pub(super) fn write_prose_fragments(
             ProseFragment::MathEquality(lhs, rhs) => {
                 write!(out, "${} = {}$", lhs.to_tex(), rhs.to_tex()).unwrap();
             }
+            ProseFragment::MathEquivalence(lhs, rhs) => {
+                write!(out, "${} \\equiv {}$", lhs.to_tex(), rhs.to_tex()).unwrap();
+            }
             ProseFragment::Tex(raw) => {
                 write!(
                     out,

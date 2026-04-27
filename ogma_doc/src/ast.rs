@@ -189,6 +189,8 @@ pub enum ProseFragment {
     Math(Expr),
     /// Tagged inline math equality: math`lhs = rhs` — rendered as $lhs = rhs$.
     MathEquality(Expr, Expr),
+    /// Tagged inline math equivalence: math`lhs ≡ rhs` — rendered as $lhs \equiv rhs$.
+    MathEquivalence(Expr, Expr),
     /// Tagged inline raw LaTeX: tex`\vec{v}` — passed through as-is.
     Tex(String),
     /// Tagged claim reference: claim`name` — rendered as \eqref{eq:name}.
