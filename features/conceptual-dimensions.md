@@ -55,17 +55,34 @@ Update `ogma_doc/schema/v0.1.0/ogma.schema.json` to document the new `dimensions
 
 User dimension names render as their bare string (no italics, no special font). Let the user override via `tex` blocks if they want a fancier presentation later.
 
+### Naming convention
+
+User dimensions must:
+- Start with an uppercase ASCII letter, followed by letters/digits/underscores (`[A-Z][A-Za-z0-9_]*`).
+- Be descriptive words rather than abbreviations (`Population`, not `Pop`). The single-letter convention is reserved for SI base dims (L, M, T, Θ, I, N, J).
+
+This is a soft convention enforced only at the regex level — we do not block short names, but the schema description and `ogma init` template should call it out.
+
+### REPL
+
+The REPL does **not** support conceptual dimensions. Reading from `.ogma.jsonc` would require the REPL to know about a project context it currently doesn't have. Conceptual types add value to documents, not to algebra exploration. Out of scope.
+
+### Mixing with SI dimensions
+
+A conceptual dimension cannot be combined with any SI dimension or with another conceptual dimension. `[Population L]`, `[Population]^2`, and `[Population Currency]` are all errors. Implementation:
+
+- `Dimension::mul` and `pow` stay infallible (they're used for derivation and intermediate results).
+- Add a `Dimension::validate_conceptual()` method that returns `Err` if the dimension contains any `User` exponent alongside *anything else* (including another `User` exponent or a non-zero SI exponent).
+- Call `validate_conceptual` from the dimension checker when validating a declared `var`/`def`/`func` type and when validating expression dimensions during proof checking.
+
+This means conceptual dims behave as opaque tags: the only legal `Dimension` values containing a `User` variant are `{User(name): 1}`. Anything else is a type error.
+
 ### Errors
 
 - Unknown dimension name with no matching declaration → existing error (`unknown base dimension 'X'`) but extend the message to suggest declaring it in `.ogma.jsonc`.
 - Duplicate declaration in config → reject at config parse time.
-- Empty / non-identifier names in config → reject at config parse time (must match `[A-Za-z][A-Za-z0-9_]*`).
-
-### Open questions
-
-1. **Casing convention** — should we require user dims to start with uppercase to distinguish from SI base dims that are single-letter (or `Theta`)? My lean is yes (matches `Theta`'s precedent).
-2. **REPL** — should the REPL also support conceptual dims? If yes, how are they declared (a `:dim Name` command? read from a config file?). Defer until needed; the REPL today is mostly for symbolic algebra exploration where conceptual types don't add value.
-3. **Dimensionless coercion** — should arithmetic between a conceptual dim and a literal number error or pass? Today `[L]` + `2` errors. Conceptual dims should behave the same way (consistency).
+- Name fails `[A-Z][A-Za-z0-9_]*` → reject at config parse time.
+- Conceptual dim mixed with SI or another conceptual → reject during dimension validation.
 
 ## Implementation Notes
 
