@@ -23,7 +23,14 @@
     "body": [
       "var ${1:name} [${2:dims}]"
     ],
-    "description": "Variable declaration with dimensions"
+    "description": "Variable declaration with SI dimensions"
+  },
+  "Concept": {
+    "prefix": "concept",
+    "body": [
+      "concept ${1:name} [${2:UserDim}]"
+    ],
+    "description": "Conceptual entity (uses a user dimension declared in .ogma.jsonc)"
   },
   "Definition": {
     "prefix": "def",

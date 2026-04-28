@@ -98,7 +98,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Proof(proof) => {
                 write_proof(&mut out, proof);
             }
-            Block::Var(decl) => {
+            Block::Var(decl) | Block::Concept(decl) => {
                 write_var(&mut out, decl, &ctx);
             }
             Block::Def(decl) => {

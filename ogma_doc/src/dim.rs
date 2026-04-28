@@ -33,7 +33,7 @@ fn collect_undeclared_in_blocks(
 ) {
     for block in blocks {
         match block {
-            Block::Var(decl) => {
+            Block::Var(decl) | Block::Concept(decl) => {
                 check_dimension(&decl.dimension, registry, decl.span.line, &decl.var_name, out);
             }
             Block::Def(decl) => {
@@ -75,8 +75,8 @@ mod tests {
     use crate::parse::parse_document;
 
     #[test]
-    fn finds_undeclared_user_dim_in_var() {
-        let doc = parse_document("var n [Population]").unwrap();
+    fn finds_undeclared_user_dim_in_concept() {
+        let doc = parse_document("concept n [Population]").unwrap();
         let registry = HashSet::new();
         let undeclared = find_undeclared_dimensions(&doc, &registry);
         assert_eq!(undeclared.len(), 1);
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn declared_user_dim_passes() {
-        let doc = parse_document("var n [Population]").unwrap();
+        let doc = parse_document("concept n [Population]").unwrap();
         let mut registry = HashSet::new();
         registry.insert("Population".to_string());
         let undeclared = find_undeclared_dimensions(&doc, &registry);

@@ -211,18 +211,23 @@ pub fn collect_symbols(doc: &Document) -> Vec<SymbolInfo> {
     let mut symbols = Vec::new();
     for block in &doc.blocks {
         match block {
-            Block::Var(decl) => {
+            Block::Var(decl) | Block::Concept(decl) => {
                 let mut detail = format!("{}", decl.dimension);
                 if let Some(desc) = &decl.description {
                     detail.push_str("\n\n");
                     detail.push_str(desc);
                 }
+                let kind = if matches!(block, Block::Concept(_)) {
+                    "concept"
+                } else {
+                    "var"
+                };
                 symbols.push(SymbolInfo {
                     name: decl.var_name.clone(),
-                    kind: "var".to_string(),
+                    kind: kind.to_string(),
                     detail,
                     line: decl.span.line,
-                    reference_label: declaration_equation_label("var", &decl.var_name),
+                    reference_label: declaration_equation_label(kind, &decl.var_name),
                 });
             }
             Block::Def(decl) => {

@@ -149,12 +149,17 @@ contain only ASCII letters, digits, and underscores. By convention they
 are descriptive words (Population, not Pop) — single-letter abbreviations
 are reserved for SI base dimensions.
 
-Once declared in the project config, conceptual dimensions are used like
-any other dimension in a var or def declaration:
+Instances of a conceptual dimension are introduced with the concept
+keyword (not var). The two are kept distinct so a glance at the source
+makes the kind of quantity obvious:
 
-var humans [Population]
+concept humans [Population]
   Number of humans in the model.
-var animals [Population]
+concept animals [Population]
+
+The var keyword rejects conceptual dimensions and concept rejects SI
+dimensions. Definitions (def) accept either kind, since the dimension is
+inferred from the right-hand side.
 
 A conceptual dimension is opaque: it cannot be combined with any other
 dimension. The expressions math`humans + animals` and
@@ -163,9 +168,9 @@ dimension T) is rejected, as are math`humans^2` and
 math`humans * animals`. The only legal occurrence of a conceptual
 dimension is alone with exponent 1.
 
-Using an undeclared conceptual dimension name in a var or def produces a
-build error pointing to the offending line and suggesting the name be
-added to .ogma.jsonc.
+Using an undeclared conceptual dimension name in a concept or def
+declaration produces a build error pointing to the offending line and
+suggesting the name be added to .ogma.jsonc.
 
 ### Subscript Semantics label`subscripts`
 

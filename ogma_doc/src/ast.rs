@@ -22,8 +22,13 @@ pub enum Block {
     Claim(Claim),
     /// A proof chain for a named claim.
     Proof(Proof),
-    /// A variable declaration with dimensions: `var varname [dims]`
+    /// A variable declaration with SI dimensions: `var varname [dims]`
     Var(VarDecl),
+    /// A conceptual entity declaration: `concept name [UserDim]`. Distinct
+    /// from `Var` so the parser can reject SI dims here and user dims in
+    /// `var`. Aside from the keyword and the dimension constraint, the
+    /// shape is identical to a variable declaration.
+    Concept(VarDecl),
     /// A definition: `def name := expr`
     Def(DefDecl),
     /// A function declaration: `func name(params) := expr`

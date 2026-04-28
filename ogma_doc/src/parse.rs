@@ -441,14 +441,66 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 line: i + 1,
                 message: format!("var '{}': {}", var_name, e),
             })?;
-            dimension.validate_conceptual().map_err(|e| ParseDocError {
-                line: i + 1,
-                message: format!("var '{}': {}", var_name, e),
-            })?;
+            if dimension.contains_user() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: format!(
+                        "var '{}': conceptual dimension {} requires the 'concept' keyword, not 'var'",
+                        var_name, dimension
+                    ),
+                });
+            }
             let span = Span { line: i + 1 };
             i += 1;
             let description = collect_description(&lines, &mut i);
             blocks.push(Block::Var(VarDecl {
+                var_name,
+                dimension,
+                description,
+                span,
+            }));
+            continue;
+        }
+
+        // Conceptual entity declaration: `concept name [UserDim]`. Mirrors
+        // `var` but requires the dimension to be a single user-declared
+        // conceptual dimension.
+        if trimmed == "concept" || trimmed.starts_with("concept ") {
+            let rest = trimmed.strip_prefix("concept").unwrap().trim();
+            let bracket_pos = rest.find('[').ok_or_else(|| ParseDocError {
+                line: i + 1,
+                message: "concept requires a name and dimension, e.g. concept humans [Population]"
+                    .into(),
+            })?;
+            let var_name = rest[..bracket_pos].trim().to_string();
+            if var_name.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: "concept requires a name".into(),
+                });
+            }
+            let dim_str = rest[bracket_pos..].trim();
+            let dimension = Dimension::parse(dim_str).map_err(|e| ParseDocError {
+                line: i + 1,
+                message: format!("concept '{}': {}", var_name, e),
+            })?;
+            dimension.validate_conceptual().map_err(|e| ParseDocError {
+                line: i + 1,
+                message: format!("concept '{}': {}", var_name, e),
+            })?;
+            if !dimension.contains_user() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: format!(
+                        "concept '{}': dimension {} is a physical dimension; use 'var' instead",
+                        var_name, dimension
+                    ),
+                });
+            }
+            let span = Span { line: i + 1 };
+            i += 1;
+            let description = collect_description(&lines, &mut i);
+            blocks.push(Block::Concept(VarDecl {
                 var_name,
                 dimension,
                 description,
@@ -1824,19 +1876,39 @@ proof pythag
     }
 
     #[test]
-    fn parse_var_with_user_dim() {
-        let doc = parse_document("var n [Population]").unwrap();
+    fn parse_concept_with_user_dim() {
+        let doc = parse_document("concept n [Population]").unwrap();
         match &doc.blocks[0] {
-            Block::Var(v) => {
+            Block::Concept(v) => {
                 assert_eq!(v.dimension.to_string(), "[Population]");
             }
-            other => panic!("expected Var, got {:?}", other),
+            other => panic!("expected Concept, got {:?}", other),
         }
     }
 
     #[test]
-    fn parse_var_rejects_user_dim_combined_with_si() {
-        let err = parse_document("var n [Population L]").unwrap_err();
+    fn parse_var_rejects_user_dim() {
+        let err = parse_document("var n [Population]").unwrap_err();
+        assert!(
+            err.message.contains("'concept' keyword"),
+            "expected redirection to concept keyword, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_concept_rejects_si_dim() {
+        let err = parse_document("concept x [L]").unwrap_err();
+        assert!(
+            err.message.contains("use 'var'"),
+            "expected redirection to var keyword, got: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_concept_rejects_mixed_dim() {
+        let err = parse_document("concept x [Population L]").unwrap_err();
         assert!(
             err.message.contains("conceptual dimension"),
             "expected conceptual mix error, got: {}",

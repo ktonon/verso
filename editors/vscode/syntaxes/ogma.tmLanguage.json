@@ -22,6 +22,9 @@
       "include": "#directive-var"
     },
     {
+      "include": "#directive-concept"
+    },
+    {
       "include": "#directive-def"
     },
     {
@@ -291,6 +294,20 @@
         }
       }
     },
+    "directive-concept": {
+      "match": "^(concept)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.concept.ogma"
+        },
+        "2": {
+          "name": "variable.parameter.concept.ogma"
+        },
+        "3": {
+          "name": "storage.type.dimension.ogma"
+        }
+      }
+    },
     "directive-def": {
       "match": "^(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=)\\s*(.+)$",
       "captures": {
@@ -364,6 +381,9 @@
           "include": "#indented-var"
         },
         {
+          "include": "#indented-concept"
+        },
+        {
           "include": "#indented-def"
         },
         {
@@ -382,6 +402,20 @@
         },
         "2": {
           "name": "variable.parameter.var.ogma"
+        },
+        "3": {
+          "name": "storage.type.dimension.ogma"
+        }
+      }
+    },
+    "indented-concept": {
+      "match": "^\\s+(concept)\\s+(\\S+)\\s+(\\[.+\\])\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.concept.ogma"
+        },
+        "2": {
+          "name": "variable.parameter.concept.ogma"
         },
         "3": {
           "name": "storage.type.dimension.ogma"

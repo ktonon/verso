@@ -217,7 +217,7 @@ fn verify_blocks_in_context(blocks: &[Block], ctx: &mut Context) -> Vec<Verifica
     let mut results = Vec::new();
     for block in blocks {
         match block {
-            Block::Var(decl) => {
+            Block::Var(decl) | Block::Concept(decl) => {
                 ctx.declare_var(&decl.var_name, Some(decl.dimension.clone()));
             }
             Block::Def(decl) => {

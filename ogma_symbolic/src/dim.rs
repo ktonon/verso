@@ -146,6 +146,11 @@ impl Dimension {
         Some(Dimension { exponents: result })
     }
 
+    /// Whether this dimension contains any user-declared base dimension.
+    pub fn contains_user(&self) -> bool {
+        self.exponents.keys().any(|b| b.is_user())
+    }
+
     /// Validate that this dimension respects the conceptual-dimension rules:
     /// any user-declared dimension must appear alone with exponent 1, never
     /// combined with another user dim or with SI dims.

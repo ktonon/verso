@@ -194,6 +194,8 @@ fn extract_declarations(src: &str) -> String {
         let trimmed = lines[i].trim();
         let is_decl = trimmed.starts_with("var ")
             || trimmed == "var"
+            || trimmed.starts_with("concept ")
+            || trimmed == "concept"
             || trimmed.starts_with("def ")
             || trimmed == "def"
             || trimmed.starts_with("func ")
