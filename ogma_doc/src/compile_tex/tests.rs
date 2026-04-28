@@ -422,7 +422,7 @@ fn compile_multiline_title() {
     let src = "!title\n\tLine One\n\tLine Two";
     let doc = parse_document(src).unwrap();
     let tex = compile_to_tex(&doc);
-    assert!(tex.contains("\\title{Line One \\\\\nLine Two}"));
+    assert!(tex.contains("\\title{Line One \\\\\n{\\Large Line Two}}"));
 }
 
 #[test]

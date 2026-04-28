@@ -34,14 +34,21 @@ pub fn compile_to_tex(doc: &Document) -> String {
 
     write_preamble(&mut out, has_refs);
 
-    // Title block in preamble
+    // Title block in preamble. The first line renders at the default \title
+    // size; any subsequent lines are treated as a subtitle and downsized so
+    // they read as a distinct, smaller line.
     if let Some(lines) = metadata.title_lines {
         writeln!(out).unwrap();
-        let title_tex = lines
-            .iter()
+        let mut iter = lines.iter();
+        let mut title_tex = iter
+            .next()
             .map(|l| escape_prose(l))
-            .collect::<Vec<_>>()
-            .join(" \\\\\n");
+            .unwrap_or_default();
+        for line in iter {
+            title_tex.push_str(" \\\\\n{\\Large ");
+            title_tex.push_str(&escape_prose(line));
+            title_tex.push('}');
+        }
         writeln!(out, "\\title{{{}}}", title_tex).unwrap();
     }
     if !metadata.authors.is_empty() {
