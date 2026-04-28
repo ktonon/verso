@@ -44,9 +44,10 @@ pub(super) fn format_date(s: &str) -> String {
 }
 
 /// Escape a dimension string for use in LaTeX math mode.
-/// Base dimension letters (L, M, T, etc.) are set in upright roman type
-/// per physics convention. Exponents are wrapped in braces and spaces
-/// become thin spaces.
+/// Base dimension symbols (L, M, T, Population, etc.) are set in upright
+/// roman type per physics convention; multi-character names are kept as a
+/// single `\mathrm{...}` group so they typeset as a word, not as juxtaposed
+/// letters. Exponents are wrapped in braces and spaces become thin spaces.
 pub(super) fn escape_tex_dim(text: &str) -> String {
     let mut out = String::with_capacity(text.len() * 2);
     let mut chars = text.chars().peekable();
@@ -63,8 +64,22 @@ pub(super) fn escape_tex_dim(text: &str) -> String {
             out.push('}');
         } else if ch == ' ' {
             out.push_str("\\,");
-        } else if ch.is_ascii_alphabetic() {
-            write!(out, "\\mathrm{{{}}}", ch).unwrap();
+        } else if ch.is_ascii_alphabetic() || ch == '_' {
+            // Group an entire identifier (letters, digits, underscores) in a
+            // single \mathrm{} so multi-character user dimensions render as
+            // words rather than letter-by-letter.
+            let mut name = String::new();
+            name.push(ch);
+            while let Some(&next) = chars.peek() {
+                if next.is_ascii_alphanumeric() || next == '_' {
+                    name.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            // Underscores need escaping inside \mathrm to avoid math-mode subscripts.
+            let escaped = name.replace('_', "\\_");
+            write!(out, "\\mathrm{{{}}}", escaped).unwrap();
         } else {
             out.push(ch);
         }
@@ -206,15 +221,27 @@ pub(super) fn write_prose_fragments(
 }
 
 pub(super) fn write_var(out: &mut String, decl: &VarDecl, ctx: &TexContext) {
-    if let Some(desc) = &decl.description {
-        write_description(out, desc, ctx);
-    }
+    write_var_with_kind(out, decl, ctx, "var", "Variable");
+}
+
+pub(super) fn write_concept(out: &mut String, decl: &VarDecl, ctx: &TexContext) {
+    write_var_with_kind(out, decl, ctx, "concept", "Concept");
+}
+
+fn write_var_with_kind(
+    out: &mut String,
+    decl: &VarDecl,
+    ctx: &TexContext,
+    label_key: &str,
+    display_kind: &str,
+) {
     let tex_name = ogma_symbolic::parse_expr(&decl.var_name)
         .map(|e| e.to_tex())
         .unwrap_or_else(|_| decl.var_name.clone());
+    write_kind_header(out, display_kind, &tex_name, decl.description.as_deref(), ctx);
     let dim = format!("{}", decl.dimension);
-    let label = declaration_equation_label("var", &decl.var_name)
-        .expect("var declarations should always have equation labels");
+    let label = declaration_equation_label(label_key, &decl.var_name)
+        .expect("var/concept declarations should always have equation labels");
     writeln!(out, "\\begin{{equation}} \\label{{{}}}", label).unwrap();
     if dim != "1" {
         writeln!(out, "  {} \\quad {}", tex_name, escape_tex_dim(&dim)).unwrap();
@@ -225,17 +252,34 @@ pub(super) fn write_var(out: &mut String, decl: &VarDecl, ctx: &TexContext) {
 }
 
 pub(super) fn write_def(out: &mut String, decl: &DefDecl, ctx: &TexContext) {
-    if let Some(desc) = &decl.description {
-        write_description(out, desc, ctx);
-    }
     let tex_name = ogma_symbolic::parse_expr(&decl.name)
         .map(|e| e.to_tex())
         .unwrap_or_else(|_| decl.name.clone());
+    write_kind_header(out, "Definition", &tex_name, decl.description.as_deref(), ctx);
     let label = declaration_equation_label("def", &decl.name)
         .expect("def declarations should always have equation labels");
     writeln!(out, "\\begin{{equation}} \\label{{{}}}", label).unwrap();
     writeln!(out, "  {} \\mathrel{{:=}} {}", tex_name, decl.value.to_tex()).unwrap();
     writeln!(out, "\\end{{equation}}").unwrap();
+}
+
+/// Emit a header like `\textit{Definition}($\mathrm{g}$): Description.`
+/// The kind word is italic, the symbol is upright (mathrm), and the colon
+/// is dropped when there's no description.
+fn write_kind_header(
+    out: &mut String,
+    kind: &str,
+    tex_name: &str,
+    desc: Option<&str>,
+    ctx: &TexContext,
+) {
+    write!(out, "\\textit{{{}}}($\\mathrm{{{}}}$)", kind, tex_name).unwrap();
+    if let Some(desc) = desc {
+        out.push_str(": ");
+        write_description(out, desc, ctx);
+    } else {
+        writeln!(out).unwrap();
+    }
 }
 
 pub(super) fn write_description(out: &mut String, desc: &str, ctx: &TexContext) {

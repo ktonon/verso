@@ -7,8 +7,8 @@ use crate::tex_preamble::{
     write_preamble, write_theorem_preamble,
 };
 use crate::tex_prose::{
-    escape_prose, format_date, write_def, write_prose, write_prose_fragments, write_var,
-    TexContext,
+    escape_prose, format_date, write_concept, write_def, write_prose, write_prose_fragments,
+    write_var, TexContext,
 };
 use crate::tex_refs::block_has_refs;
 use crate::tex_structure::{write_claim, write_proof, write_section};
@@ -98,8 +98,11 @@ pub fn compile_to_tex(doc: &Document) -> String {
             Block::Proof(proof) => {
                 write_proof(&mut out, proof);
             }
-            Block::Var(decl) | Block::Concept(decl) => {
+            Block::Var(decl) => {
                 write_var(&mut out, decl, &ctx);
+            }
+            Block::Concept(decl) => {
+                write_concept(&mut out, decl, &ctx);
             }
             Block::Def(decl) => {
                 write_def(&mut out, decl, &ctx);

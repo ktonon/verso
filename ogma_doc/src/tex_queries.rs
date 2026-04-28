@@ -22,7 +22,9 @@ fn hex_encode_label_component(text: &str) -> String {
 /// Build the equation label for declarations that render as numbered equations.
 pub fn declaration_equation_label(kind: &str, name: &str) -> Option<String> {
     match kind {
-        "var" | "def" => Some(format!("eq:{}:{}", kind, hex_encode_label_component(name))),
+        "var" | "concept" | "def" => {
+            Some(format!("eq:{}:{}", kind, hex_encode_label_component(name)))
+        }
         _ => None,
     }
 }
