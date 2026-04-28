@@ -24,6 +24,10 @@ pub struct VersoConfig {
     /// Test roots — checked by `ogma check` but not built by `ogma build`.
     #[serde(default)]
     pub tests: Option<Vec<TestConfig>>,
+    /// User-declared conceptual dimensions (e.g. `Population`, `Currency`).
+    /// Names must match `[A-Z][A-Za-z0-9_]*` and be unique.
+    #[serde(default)]
+    pub dimensions: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -56,6 +60,10 @@ pub enum ConfigError {
     OutputHasExtension(String),
     /// JSON parse error
     Parse(String),
+    /// A `dimensions` entry has an invalid name
+    InvalidDimensionName(String),
+    /// A `dimensions` entry is duplicated
+    DuplicateDimension(String),
 }
 
 impl std::fmt::Display for ConfigError {
@@ -74,6 +82,14 @@ impl std::fmt::Display for ConfigError {
                 write!(f, "output '{}' must not contain a file extension", name)
             }
             ConfigError::Parse(msg) => write!(f, "parse error: {}", msg),
+            ConfigError::InvalidDimensionName(name) => write!(
+                f,
+                "invalid conceptual dimension name '{}': must match [A-Z][A-Za-z0-9_]*",
+                name
+            ),
+            ConfigError::DuplicateDimension(name) => {
+                write!(f, "duplicate conceptual dimension '{}'", name)
+            }
         }
     }
 }
@@ -211,10 +227,13 @@ pub fn default_config_content() -> String {
 }
 
 /// A loaded and resolved config with all fields ready to use.
+#[derive(Debug)]
 pub struct ResolvedConfig {
     pub output_dir: String,
     pub papers: Vec<ResolvedPaper>,
     pub tests: Vec<String>,
+    /// Set of declared conceptual dimension names.
+    pub dimensions: std::collections::HashSet<String>,
 }
 
 impl ResolvedConfig {
@@ -344,12 +363,31 @@ pub fn resolve_config(dir: &Path) -> Result<Option<ResolvedConfig>, ConfigError>
         .as_ref()
         .map(|ts| ts.iter().map(|t| t.input.clone()).collect())
         .unwrap_or_default();
+    let dimensions = resolve_dimensions(config.dimensions.as_deref())?;
     let papers = config.resolve()?;
     Ok(Some(ResolvedConfig {
         output_dir: config.output_dir().to_string(),
         papers,
         tests,
+        dimensions,
     }))
+}
+
+fn resolve_dimensions(
+    declared: Option<&[String]>,
+) -> Result<std::collections::HashSet<String>, ConfigError> {
+    let mut set = std::collections::HashSet::new();
+    if let Some(names) = declared {
+        for name in names {
+            if !ogma_symbolic::is_user_dim_name(name) {
+                return Err(ConfigError::InvalidDimensionName(name.clone()));
+            }
+            if !set.insert(name.clone()) {
+                return Err(ConfigError::DuplicateDimension(name.clone()));
+            }
+        }
+    }
+    Ok(set)
 }
 
 /// Read and parse a config file (supports JSONC comments).
@@ -432,6 +470,7 @@ mod tests {
             input: Some("src/paper.ogma".into()),
             papers: None,
             tests: None,
+            dimensions: None,
         };
         let papers = cfg.resolve().unwrap();
         assert_eq!(papers.len(), 1);
@@ -457,6 +496,7 @@ mod tests {
                 },
             ]),
             tests: None,
+            dimensions: None,
         };
         let papers = cfg.resolve().unwrap();
         assert_eq!(papers[0].output, "gateway-sw");
@@ -472,6 +512,7 @@ mod tests {
             input: Some("a.ogma".into()),
             papers: Some(vec![]),
             tests: None,
+            dimensions: None,
         };
         assert_eq!(cfg.resolve().unwrap_err(), ConfigError::InputAndPapers);
     }
@@ -485,6 +526,7 @@ mod tests {
             input: None,
             papers: None,
             tests: None,
+            dimensions: None,
         };
         assert_eq!(cfg.resolve().unwrap_err(), ConfigError::NoInput);
     }
@@ -501,6 +543,7 @@ mod tests {
                 output: Some("a.pdf".into()),
             }]),
             tests: None,
+            dimensions: None,
         };
         assert_eq!(
             cfg.resolve().unwrap_err(),
@@ -517,6 +560,7 @@ mod tests {
             input: Some("paper.ogma".into()),
             papers: None,
             tests: None,
+            dimensions: None,
         };
         assert_eq!(cfg.output_dir(), ".");
     }
@@ -530,6 +574,7 @@ mod tests {
             input: Some("paper.ogma".into()),
             papers: None,
             tests: None,
+            dimensions: None,
         };
         assert_eq!(cfg.output_dir(), "build");
     }
@@ -683,6 +728,7 @@ mod tests {
                 },
             ],
             tests: vec![],
+            dimensions: std::collections::HashSet::new(),
         };
         assert_eq!(config.inputs(), vec!["a.ogma", "b.ogma"]);
     }
@@ -712,6 +758,7 @@ mod tests {
                 output: "paper".to_string(),
             }],
             tests: vec!["paper.test.ogma".to_string()],
+            dimensions: std::collections::HashSet::new(),
         };
         assert_eq!(config.inputs(), vec!["paper.ogma"]);
         assert_eq!(config.check_inputs(), vec!["paper.ogma", "paper.test.ogma"]);
@@ -734,6 +781,55 @@ mod tests {
         assert_eq!(config.inputs(), vec!["paper.ogma"]);
         assert_eq!(config.tests, vec!["paper.test.ogma"]);
         assert_eq!(config.check_inputs(), vec!["paper.ogma", "paper.test.ogma"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_config_with_dimensions() {
+        let dir = unique_temp_dir("resolve-dims");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".ogma.jsonc"),
+            r#"{
+                "input": "paper.ogma",
+                "dimensions": ["Population", "Currency"]
+            }"#,
+        )
+        .unwrap();
+        let config = resolve_config(&dir).unwrap().unwrap();
+        assert!(config.dimensions.contains("Population"));
+        assert!(config.dimensions.contains("Currency"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_config_rejects_invalid_dimension_name() {
+        let dir = unique_temp_dir("invalid-dim");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".ogma.jsonc"),
+            r#"{ "input": "paper.ogma", "dimensions": ["population"] }"#,
+        )
+        .unwrap();
+        let err = resolve_config(&dir).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidDimensionName(_)));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn resolve_config_rejects_duplicate_dimension() {
+        let dir = unique_temp_dir("dup-dim");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(".ogma.jsonc"),
+            r#"{ "input": "paper.ogma", "dimensions": ["Population", "Population"] }"#,
+        )
+        .unwrap();
+        let err = resolve_config(&dir).unwrap_err();
+        assert!(matches!(err, ConfigError::DuplicateDimension(_)));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

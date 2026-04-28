@@ -31,7 +31,7 @@ pub use context::{
     format_dim_error, is_zero, subscript_base, Context, DimEnv, DimError, DimOutcome,
     EqualityResult,
 };
-pub use dim::{BaseDim, Dimension};
+pub use dim::{is_user_dim_name, BaseDim, Dimension};
 pub use eval::{eval_f64, free_vars, spot_check, SpotCheckFailure};
 pub use expr::{
     add, acos, asin, atan, ceil, clamp, classify_mul, constant, cos, cosh, div, e_const, exp,

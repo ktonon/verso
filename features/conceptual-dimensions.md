@@ -86,7 +86,15 @@ This means conceptual dims behave as opaque tags: the only legal `Dimension` val
 
 ## Implementation Notes
 
-_To be filled in during implementation._
+- `BaseDim::User(String)` added to `ogma_symbolic/src/dim.rs`. Removed `Copy` from `BaseDim` (incompatible with `String`); fixed all callsites that relied on dereferencing keys out of `BTreeMap<BaseDim, _>` iteration.
+- Did **not** add `Dimension::parse_with(s, &registry)`. Instead, the parser accepts any name matching `[A-Z][A-Za-z0-9_]*` as a `BaseDim::User`, and registry validation happens post-parse via `find_undeclared_dimensions(&Document, &HashSet<String>)` in `ogma_doc::dim`. This avoids threading the registry through every `Dimension::parse` callsite while still catching unknown names at the CLI entry point.
+- `Dimension::validate_conceptual()` returns `Err` if a dimension contains a user variant alongside anything else, or with exponent ≠ 1.
+- Validation called at:
+  - Parse time, after `Dimension::parse` for `var`/`def` declarations (catches `[Population L]` early).
+  - Dim verifier in `ogma_symbolic::context`, after `Mul`/`Inv`/`Pow` produce a result type. New `DimError::ConceptualMix` variant.
+- Config: `VersoConfig.dimensions: Option<Vec<String>>` → `ResolvedConfig.dimensions: HashSet<String>`. Names validated in `resolve_config` against `is_user_dim_name`; duplicates rejected. New `ConfigError` variants.
+- Schema (`schema/v0.1.0/ogma.schema.json`) updated with `dimensions` field, including the regex pattern and `uniqueItems: true`.
+- Existing tests `parse_unknown_base_dim` and `base_dim_from_str_unknown_returns_none` updated since `[X]` now parses as `BaseDim::User("X")` instead of erroring. Replaced with tests that exercise the new lowercase-rejection and invalid-character-rejection paths.
 
 ## Verification
 

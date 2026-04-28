@@ -1,0 +1,6 @@
+{
+  // Local config so the LSP can resolve conceptual dimensions used in
+  // syntax_guide.ogma. Other fixtures in this directory don't need it.
+  "input": "syntax_guide.ogma",
+  "dimensions": ["Population"]
+}

@@ -441,6 +441,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 line: i + 1,
                 message: format!("var '{}': {}", var_name, e),
             })?;
+            dimension.validate_conceptual().map_err(|e| ParseDocError {
+                line: i + 1,
+                message: format!("var '{}': {}", var_name, e),
+            })?;
             let span = Span { line: i + 1 };
             i += 1;
             let description = collect_description(&lines, &mut i);
@@ -470,6 +474,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                         line: i + 1,
                         message: format!("def '{}': {}", name, e),
                     })?;
+                dimension.validate_conceptual().map_err(|e| ParseDocError {
+                    line: i + 1,
+                    message: format!("def '{}': {}", name, e),
+                })?;
                 (name, Some(dimension))
             } else {
                 (before_assign.to_string(), None)
@@ -1813,6 +1821,27 @@ proof pythag
             }
             _ => panic!("expected Def"),
         }
+    }
+
+    #[test]
+    fn parse_var_with_user_dim() {
+        let doc = parse_document("var n [Population]").unwrap();
+        match &doc.blocks[0] {
+            Block::Var(v) => {
+                assert_eq!(v.dimension.to_string(), "[Population]");
+            }
+            other => panic!("expected Var, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_var_rejects_user_dim_combined_with_si() {
+        let err = parse_document("var n [Population L]").unwrap_err();
+        assert!(
+            err.message.contains("conceptual dimension"),
+            "expected conceptual mix error, got: {}",
+            err.message
+        );
     }
 
     #[test]

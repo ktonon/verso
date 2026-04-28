@@ -214,8 +214,8 @@ fn lookup_derived(symbol: &str) -> Option<(Dimension, f64)> {
     for entry in DERIVED_UNITS {
         if entry.symbol == sym {
             let mut dim = Dimension::dimensionless();
-            for &(base, exp) in entry.dimension {
-                dim = dim.mul(&Dimension::single(base, exp));
+            for (base, exp) in entry.dimension {
+                dim = dim.mul(&Dimension::single(base.clone(), *exp));
             }
             return Some((dim, entry.scale));
         }
@@ -326,31 +326,32 @@ pub fn base_si_display(dim: &Dimension) -> String {
     // Check derived units first
     for entry in DERIVED_UNITS {
         let mut d = Dimension::dimensionless();
-        for &(base, exp) in entry.dimension {
-            d = d.mul(&Dimension::single(base, exp));
+        for (base, exp) in entry.dimension {
+            d = d.mul(&Dimension::single(base.clone(), *exp));
         }
         if d == *dim {
             return entry.symbol.to_string();
         }
     }
 
-    // Build from base SI units
-    let base_sym = |b: &BaseDim| -> &str {
+    // Build from base SI units (or the user dimension's name verbatim).
+    let base_sym = |b: &BaseDim| -> String {
         match b {
-            BaseDim::L => "m",
-            BaseDim::M => "kg",
-            BaseDim::T => "s",
-            BaseDim::Theta => "K",
-            BaseDim::I => "A",
-            BaseDim::N => "mol",
-            BaseDim::J => "cd",
+            BaseDim::L => "m".to_string(),
+            BaseDim::M => "kg".to_string(),
+            BaseDim::T => "s".to_string(),
+            BaseDim::Theta => "K".to_string(),
+            BaseDim::I => "A".to_string(),
+            BaseDim::N => "mol".to_string(),
+            BaseDim::J => "cd".to_string(),
+            BaseDim::User(name) => name.clone(),
         }
     };
 
     let mut num = Vec::new();
     let mut den = Vec::new();
-    for (&b, &e) in dim.exponents() {
-        let sym = base_sym(&b);
+    for (b, &e) in dim.exponents() {
+        let sym = base_sym(b);
         if e > 0 {
             if e == 1 {
                 num.push(sym.to_string());

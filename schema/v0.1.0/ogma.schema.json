@@ -59,6 +59,15 @@
         ],
         "additionalProperties": false
       }
+    },
+    "dimensions": {
+      "type": "array",
+      "description": "User-declared conceptual dimensions (e.g. 'Population'). Each name must match [A-Z][A-Za-z0-9_]* and is treated as an opaque base dimension; conceptual dimensions cannot be combined with SI dimensions or each other.",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Za-z0-9_]*$"
+      },
+      "uniqueItems": true
     }
   },
   "oneOf": [

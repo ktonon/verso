@@ -221,6 +221,7 @@ fn cmd_check(files: &[String]) {
     use ogma_doc::report::ReportFormatter;
     use ogma_doc::verify::verify_document;
 
+    let registry = config_dimensions();
     let mut all_passed = true;
 
     for file in files {
@@ -232,6 +233,18 @@ fn cmd_check(files: &[String]) {
                 continue;
             }
         };
+
+        let undeclared = ogma_doc::dim::find_undeclared_dimensions(&doc, &registry);
+        if !undeclared.is_empty() {
+            for u in &undeclared {
+                eprintln!(
+                    "error: {}:{}: undeclared conceptual dimension '{}' in '{}' (declare it in .ogma.jsonc 'dimensions')",
+                    file, u.line, u.name, u.context
+                );
+            }
+            all_passed = false;
+            continue;
+        }
 
         let report = verify_document(&doc);
         let formatter = ReportFormatter {
@@ -248,6 +261,34 @@ fn cmd_check(files: &[String]) {
     if !all_passed {
         process::exit(1);
     }
+}
+
+/// Load the conceptual dimension registry from `.ogma.jsonc` in cwd, or return
+/// an empty set if no config is present.
+fn config_dimensions() -> std::collections::HashSet<String> {
+    use ogma_doc::config::resolve_config;
+    let cwd = match std::env::current_dir() {
+        Ok(d) => d,
+        Err(_) => return std::collections::HashSet::new(),
+    };
+    match resolve_config(&cwd) {
+        Ok(Some(cfg)) => cfg.dimensions,
+        _ => std::collections::HashSet::new(),
+    }
+}
+
+/// Walk up from `file`'s parent looking for a `.ogma.jsonc` and return its
+/// conceptual dimension registry. Returns an empty set if no config is found.
+fn load_dimensions_for_file(file: &Path) -> std::collections::HashSet<String> {
+    use ogma_doc::config::resolve_config;
+    let mut dir = file.parent();
+    while let Some(d) = dir {
+        if let Ok(Some(cfg)) = resolve_config(d) {
+            return cfg.dimensions;
+        }
+        dir = d.parent();
+    }
+    std::collections::HashSet::new()
 }
 
 fn cmd_build_from_config_resolved(
@@ -388,6 +429,18 @@ fn cmd_build(file: &str, output: Option<&str>) {
             process::exit(1);
         }
     };
+
+    let registry = config_dimensions();
+    let undeclared = ogma_doc::dim::find_undeclared_dimensions(&doc, &registry);
+    if !undeclared.is_empty() {
+        for u in &undeclared {
+            eprintln!(
+                "error: {}:{}: undeclared conceptual dimension '{}' in '{}' (declare it in .ogma.jsonc 'dimensions')",
+                file, u.line, u.name, u.context
+            );
+        }
+        process::exit(1);
+    }
 
     let tex = compile_to_tex(&doc);
 
@@ -629,6 +682,7 @@ mod tests {
                 })
                 .collect(),
             tests: vec![],
+            dimensions: std::collections::HashSet::new(),
         }
     }
 
@@ -1097,6 +1151,24 @@ async fn cmd_lsp() {
                 return diagnostics;
             }
         };
+
+        // Report any conceptual dimension used in the doc that isn't declared
+        // in a `.ogma.jsonc` registry walked up from the file's parent.
+        let registry = file_path
+            .map(load_dimensions_for_file)
+            .unwrap_or_default();
+        for u in ogma_doc::dim::find_undeclared_dimensions(&doc, &registry) {
+            diagnostics.push(Diagnostic {
+                range: line_range(u.line),
+                severity: Some(DiagnosticSeverity::ERROR),
+                message: format!(
+                    "undeclared conceptual dimension '{}' in '{}' (declare it in .ogma.jsonc 'dimensions')",
+                    u.name, u.context
+                ),
+                source: Some("ogma".to_string()),
+                ..Default::default()
+            });
+        }
 
         let report = match std::panic::catch_unwind(|| verify_document(&doc)) {
             Ok(r) => r,

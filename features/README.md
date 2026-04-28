@@ -22,4 +22,4 @@
 | [inequality-threshold-claims.md](inequality-threshold-claims.md) | Inequality and Threshold Claims | 2026-03-18 | 2026-03-19 | completed |
 | [hygiene-march-19.md](hygiene-march-19.md) | Hygiene Review - March 19 | 2026-03-19 | 2026-03-19 | completed |
 | [lean-backend-migration.md](lean-backend-migration.md) | Lean Backend Migration (Deferred) | 2026-04-23 | 2026-04-23 | planned |
-| [conceptual-dimensions.md](conceptual-dimensions.md) | Conceptual Dimensions | 2026-04-25 | 2026-04-27 | planned |
+| [conceptual-dimensions.md](conceptual-dimensions.md) | Conceptual Dimensions | 2026-04-25 | 2026-04-25 | completed |

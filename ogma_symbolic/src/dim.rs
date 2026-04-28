@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-/// Base physical dimensions (SI).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Base physical dimensions (SI), plus user-declared conceptual dimensions.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BaseDim {
     L,     // Length
     M,     // Mass
@@ -11,6 +11,9 @@ pub enum BaseDim {
     I,     // Electric current
     N,     // Amount of substance
     J,     // Luminous intensity
+    /// User-declared conceptual dimension (e.g. `Population`). Must be
+    /// a capitalized identifier matching `[A-Z][A-Za-z0-9_]*`.
+    User(String),
 }
 
 impl BaseDim {
@@ -23,9 +26,26 @@ impl BaseDim {
             "I" => Some(BaseDim::I),
             "N" => Some(BaseDim::N),
             "J" => Some(BaseDim::J),
+            _ if is_user_dim_name(s) => Some(BaseDim::User(s.to_string())),
             _ => None,
         }
     }
+
+    /// Whether this is a user-declared conceptual dimension.
+    pub fn is_user(&self) -> bool {
+        matches!(self, BaseDim::User(_))
+    }
+}
+
+/// User dimension names must start with an uppercase ASCII letter
+/// and contain only ASCII letters, digits, or underscores.
+pub fn is_user_dim_name(s: &str) -> bool {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_uppercase() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 impl fmt::Display for BaseDim {
@@ -38,6 +58,7 @@ impl fmt::Display for BaseDim {
             BaseDim::I => write!(f, "I"),
             BaseDim::N => write!(f, "N"),
             BaseDim::J => write!(f, "J"),
+            BaseDim::User(name) => write!(f, "{}", name),
         }
     }
 }
@@ -77,8 +98,8 @@ impl Dimension {
     /// Multiply dimensions (add exponents).
     pub fn mul(&self, other: &Dimension) -> Dimension {
         let mut result = self.exponents.clone();
-        for (&base, &exp) in &other.exponents {
-            *result.entry(base).or_insert(0) += exp;
+        for (base, &exp) in &other.exponents {
+            *result.entry(base.clone()).or_insert(0) += exp;
         }
         result.retain(|_, e| *e != 0);
         Dimension { exponents: result }
@@ -86,7 +107,11 @@ impl Dimension {
 
     /// Inverse dimension (negate exponents).
     pub fn inv(&self) -> Dimension {
-        let exponents = self.exponents.iter().map(|(&b, &e)| (b, -e)).collect();
+        let exponents = self
+            .exponents
+            .iter()
+            .map(|(b, &e)| (b.clone(), -e))
+            .collect();
         Dimension { exponents }
     }
 
@@ -98,7 +123,7 @@ impl Dimension {
         let exponents = self
             .exponents
             .iter()
-            .map(|(&b, &e)| (b, e * n))
+            .map(|(b, &e)| (b.clone(), e * n))
             .filter(|(_, e)| *e != 0)
             .collect();
         Dimension { exponents }
@@ -109,16 +134,40 @@ impl Dimension {
     pub fn nth_root(&self, n: u32) -> Option<Dimension> {
         let n = n as i32;
         let mut result = BTreeMap::new();
-        for (&b, &e) in &self.exponents {
+        for (b, &e) in &self.exponents {
             if e % n != 0 {
                 return None;
             }
             let divided = e / n;
             if divided != 0 {
-                result.insert(b, divided);
+                result.insert(b.clone(), divided);
             }
         }
         Some(Dimension { exponents: result })
+    }
+
+    /// Validate that this dimension respects the conceptual-dimension rules:
+    /// any user-declared dimension must appear alone with exponent 1, never
+    /// combined with another user dim or with SI dims.
+    pub fn validate_conceptual(&self) -> Result<(), String> {
+        let user_count = self.exponents.keys().filter(|b| b.is_user()).count();
+        if user_count == 0 {
+            return Ok(());
+        }
+        if user_count > 1 || self.exponents.len() > 1 {
+            return Err(format!(
+                "conceptual dimension cannot be combined with other dimensions: {}",
+                self
+            ));
+        }
+        let (base, &exp) = self.exponents.iter().next().unwrap();
+        if exp != 1 {
+            return Err(format!(
+                "conceptual dimension '{}' must have exponent 1, got {}",
+                base, exp
+            ));
+        }
+        Ok(())
     }
 
     /// Parse a dimension from bracket notation: `[M L T^-2]`
@@ -256,8 +305,20 @@ mod tests {
     }
 
     #[test]
-    fn parse_unknown_base_dim() {
-        assert!(Dimension::parse("[X]").is_err());
+    fn parse_invalid_base_dim() {
+        // Lowercase identifiers are not valid base dimension names.
+        assert!(Dimension::parse("[x]").is_err());
+        // Names with invalid characters are rejected.
+        assert!(Dimension::parse("[Foo-Bar]").is_err());
+    }
+
+    #[test]
+    fn parse_user_dim() {
+        let d = Dimension::parse("[Population]").unwrap();
+        assert_eq!(d.to_string(), "[Population]");
+        let (base, exp) = d.exponents().iter().next().unwrap();
+        assert_eq!(base, &BaseDim::User("Population".to_string()));
+        assert_eq!(*exp, 1);
     }
 
     #[test]
@@ -266,8 +327,47 @@ mod tests {
     }
 
     #[test]
-    fn base_dim_from_str_unknown_returns_none() {
-        assert_eq!(BaseDim::from_str("X"), None);
+    fn base_dim_from_str_lowercase_returns_none() {
+        assert_eq!(BaseDim::from_str("x"), None);
         assert_eq!(BaseDim::from_str(""), None);
+        assert_eq!(BaseDim::from_str("Foo-Bar"), None);
+    }
+
+    #[test]
+    fn base_dim_from_str_user() {
+        assert_eq!(
+            BaseDim::from_str("Population"),
+            Some(BaseDim::User("Population".to_string()))
+        );
+    }
+
+    #[test]
+    fn validate_conceptual_lone_user_dim_passes() {
+        assert!(dim("[Population]").validate_conceptual().is_ok());
+    }
+
+    #[test]
+    fn validate_conceptual_lone_si_dim_passes() {
+        assert!(dim("[L]").validate_conceptual().is_ok());
+        assert!(dim("[M L T^-2]").validate_conceptual().is_ok());
+    }
+
+    #[test]
+    fn validate_conceptual_user_combined_with_si_fails() {
+        let mixed = dim("[Population L]");
+        assert!(mixed.validate_conceptual().is_err());
+    }
+
+    #[test]
+    fn validate_conceptual_user_squared_fails() {
+        let squared = dim("[Population]").pow(2);
+        assert!(squared.validate_conceptual().is_err());
+    }
+
+    #[test]
+    fn validate_conceptual_two_user_dims_fails() {
+        let pop = Dimension::single(BaseDim::User("Population".to_string()), 1);
+        let cur = Dimension::single(BaseDim::User("Currency".to_string()), 1);
+        assert!(pop.mul(&cur).validate_conceptual().is_err());
     }
 }

@@ -1120,6 +1120,11 @@
           "name": "storage.type.unit.ogma"
         },
         {
+          "comment": "User-declared conceptual dimensions (e.g. Population). Must come after the SI patterns above so they take precedence.",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b",
+          "name": "support.type.dimension.user.ogma"
+        },
+        {
           "match": "\\b\\d+\\b",
           "name": "constant.numeric.decimal.ogma"
         },

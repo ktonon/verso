@@ -135,6 +135,38 @@ theta symbol (temperature), I (current), N (amount), J (luminosity).
 Exponents are written with the caret: math`v` has dimension L T to the
 minus one. Dimensionless quantities use the bracket notation with 1.
 
+### Conceptual Dimensions label`conceptual-dimensions`
+
+Some quantities have semantic meaning but no SI dimension — populations,
+currencies, probabilities, or any other conceptual quantity that should
+be type-checked but does not measure a physical property. Declare these
+in .ogma.jsonc under the dimensions key:
+
+tex`\verb|"dimensions": ["Population", "Currency"]|`
+
+Conceptual dimension names must start with an uppercase ASCII letter and
+contain only ASCII letters, digits, and underscores. By convention they
+are descriptive words (Population, not Pop) — single-letter abbreviations
+are reserved for SI base dimensions.
+
+Once declared in the project config, conceptual dimensions are used like
+any other dimension in a var or def declaration:
+
+var humans [Population]
+  Number of humans in the model.
+var animals [Population]
+
+A conceptual dimension is opaque: it cannot be combined with any other
+dimension. The expressions math`humans + animals` and
+math`humans = animals` typecheck, but math`humans * t` (where t has
+dimension T) is rejected, as are math`humans^2` and
+math`humans * animals`. The only legal occurrence of a conceptual
+dimension is alone with exponent 1.
+
+Using an undeclared conceptual dimension name in a var or def produces a
+build error pointing to the offending line and suggesting the name be
+added to .ogma.jsonc.
+
 ### Subscript Semantics label`subscripts`
 
 Variable names may include subscripts using underscore-brace notation.

@@ -287,6 +287,12 @@ pub enum DimError {
         inline: Dimension,
         span: Span,
     },
+    /// A conceptual dimension was combined with another dimension or
+    /// raised to a power other than 1.
+    ConceptualMix {
+        dim: Dimension,
+        span: Span,
+    },
 }
 
 impl std::fmt::Display for DimError {
@@ -323,6 +329,11 @@ impl std::fmt::Display for DimError {
                 "'{}' is declared {}, cannot override with inline {}",
                 name, declared, inline
             ),
+            DimError::ConceptualMix { dim, .. } => write!(
+                f,
+                "conceptual dimension cannot be combined with other dimensions: {}",
+                dim
+            ),
         }
     }
 }
@@ -336,6 +347,7 @@ impl DimError {
             DimError::NonDimensionlessFnArg { span, .. } => *span,
             DimError::NonIntegerPower(span) => *span,
             DimError::InlineDimConflict { span, .. } => *span,
+            DimError::ConceptualMix { span, .. } => *span,
         }
     }
 }
@@ -483,7 +495,16 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
             let a = elaborate_expr(a, env)?;
             let b = elaborate_expr(b, env)?;
             let ty = match (ty_dimension(&a.ty), ty_dimension(&b.ty)) {
-                (Some(da), Some(db)) => Ty::Concrete(da.mul(&db)),
+                (Some(da), Some(db)) => {
+                    let result = da.mul(&db);
+                    if result.validate_conceptual().is_err() {
+                        return Err(DimError::ConceptualMix {
+                            dim: result,
+                            span,
+                        });
+                    }
+                    Ty::Concrete(result)
+                }
                 _ => Ty::Unresolved,
             };
             Ok(Expr::spanned_typed(
@@ -503,9 +524,19 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
         }
         ExprKind::Inv(inner) => {
             let inner = elaborate_expr(inner, env)?;
-            let ty = ty_dimension(&inner.ty)
-                .map(|dim| Ty::Concrete(dim.inv()))
-                .unwrap_or(Ty::Unresolved);
+            let ty = match ty_dimension(&inner.ty) {
+                Some(dim) => {
+                    let result = dim.inv();
+                    if result.validate_conceptual().is_err() {
+                        return Err(DimError::ConceptualMix {
+                            dim: result,
+                            span,
+                        });
+                    }
+                    Ty::Concrete(result)
+                }
+                None => Ty::Unresolved,
+            };
             Ok(Expr::spanned_typed(
                 ExprKind::Inv(Box::new(inner)),
                 span,
@@ -528,8 +559,8 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
                     Ty::Concrete(Dimension::dimensionless())
                 }
                 (Some(db), Some(_)) => {
-                    if let Some(n) = expr_as_integer(&exp) {
-                        Ty::Concrete(db.pow(n))
+                    let result = if let Some(n) = expr_as_integer(&exp) {
+                        db.pow(n)
                     } else if let Some(r) = expr_as_rational(&exp) {
                         // Handle rational exponents like 1/2 (sqrt) on dimensional
                         // quantities. Compute dim^(p/q) by raising to p and taking
@@ -538,12 +569,18 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
                         let raised = if r.num() == 1 { db.clone() } else {
                             db.pow(r.num() as i32)
                         };
-                        let result = raised.nth_root(r.den() as u32)
-                            .ok_or(DimError::NonIntegerPower(exp.span))?;
-                        Ty::Concrete(result)
+                        raised.nth_root(r.den() as u32)
+                            .ok_or(DimError::NonIntegerPower(exp.span))?
                     } else {
                         return Err(DimError::NonIntegerPower(exp.span));
+                    };
+                    if result.validate_conceptual().is_err() {
+                        return Err(DimError::ConceptualMix {
+                            dim: result,
+                            span,
+                        });
                     }
+                    Ty::Concrete(result)
                 }
                 _ => Ty::Unresolved,
             };
