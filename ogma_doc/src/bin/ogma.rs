@@ -277,6 +277,47 @@ fn config_dimensions() -> std::collections::HashSet<String> {
     }
 }
 
+/// Parse `text` as an .ogma document and load every entry from every
+/// `!bibliography` it references, resolving paths relative to `file`'s
+/// parent. If the open file is included from a project root document
+/// (paper.ogma or index.ogma in an ancestor directory), parse the root
+/// instead so transitively-included `!bibliography` directives are seen.
+fn load_bib_entries_for_file(file: &Path, text: &str) -> Vec<ogma_doc::bib::BibEntry> {
+    if let Some(root) = find_root_document(file) {
+        if let Ok(doc) = ogma_doc::parse_document_from_file(&root) {
+            let base = root.parent().unwrap_or(Path::new("."));
+            let entries = ogma_doc::bib::collect_bib_entries(&doc, base);
+            if !entries.is_empty() {
+                return entries;
+            }
+        }
+    }
+    let Ok(doc) = ogma_doc::parse_document(text) else {
+        return Vec::new();
+    };
+    let base = file.parent().unwrap_or(Path::new("."));
+    ogma_doc::bib::collect_bib_entries(&doc, base)
+}
+
+/// Walk up from `file_path`'s parent looking for a project root document
+/// (paper.ogma or index.ogma) that isn't `file_path` itself.
+fn find_root_document(file_path: &Path) -> Option<std::path::PathBuf> {
+    let mut dir = file_path.parent()?;
+    let mut best: Option<std::path::PathBuf> = None;
+    loop {
+        for name in &["paper.ogma", "index.ogma"] {
+            let candidate = dir.join(name);
+            if candidate.exists() && candidate != file_path {
+                best = Some(candidate);
+            }
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent,
+            None => return best,
+        }
+    }
+}
+
 /// Walk up from `file`'s parent looking for a `.ogma.jsonc` and return its
 /// conceptual dimension registry. Returns an empty set if no config is found.
 fn load_dimensions_for_file(file: &Path) -> std::collections::HashSet<String> {
@@ -408,6 +449,71 @@ fn completion_context_for_line(
     Some(UnicodeCompletionContext {
         typed_prefix,
         replace_start_utf16: byte_offset_to_utf16(line_text, colon_byte) as u32,
+        replace_end_utf16: byte_offset_to_utf16(line_text, replace_end_byte) as u32,
+    })
+}
+
+/// Context for completion inside a `cite`...`` tag. Captures the partial
+/// key being typed and the byte range to replace.
+#[derive(Debug, PartialEq, Eq)]
+struct CiteCompletionContext {
+    typed_prefix: String,
+    replace_start_utf16: u32,
+    replace_end_utf16: u32,
+}
+
+/// Detect whether the cursor sits inside a `cite`...`` tag, returning the
+/// partial key being typed (the segment after the most recent comma) and
+/// the UTF-16 range that should be replaced when a completion is accepted.
+fn cite_completion_context_for_line(
+    line_text: &str,
+    cursor_utf16: usize,
+) -> Option<CiteCompletionContext> {
+    let cursor_byte = utf16_offset_to_byte(line_text, cursor_utf16);
+    let before_cursor = &line_text[..cursor_byte.min(line_text.len())];
+
+    // Most recent backtick before cursor — the candidate opening backtick.
+    let backtick_byte = before_cursor.rfind('`')?;
+
+    // The four chars immediately before the backtick must spell "cite",
+    // bounded on the left by a non-identifier character or start-of-line.
+    let prefix = &before_cursor[..backtick_byte];
+    let prefix = prefix.strip_suffix("cite")?;
+    if let Some(prev_ch) = prefix.chars().last() {
+        if prev_ch.is_ascii_alphanumeric() || prev_ch == '_' {
+            return None;
+        }
+    }
+
+    // Reject if there's already a closing backtick between the opening one
+    // and the cursor (i.e. cursor is past the tag).
+    let inner = &before_cursor[backtick_byte + 1..];
+    if inner.contains('`') {
+        return None;
+    }
+
+    // Multi-key completion: the prefix being typed is the segment after the
+    // most recent comma (or the whole inner span if no commas yet).
+    let segment_start_in_inner = inner.rfind(',').map(|i| i + 1).unwrap_or(0);
+    let mut segment_byte = backtick_byte + 1 + segment_start_in_inner;
+    // Skip leading whitespace inside the segment when determining what to
+    // replace, so accepting "foo" produces `cite`einstein, foo`` not
+    // `cite`einstein, foo`` with a stray space.
+    let trimmed_inner = &line_text[segment_byte..cursor_byte];
+    let leading_ws = trimmed_inner.len() - trimmed_inner.trim_start().len();
+    segment_byte += leading_ws;
+    let typed_prefix = line_text[segment_byte..cursor_byte].to_string();
+
+    // Replace through a closing backtick or comma if the cursor is sitting
+    // just before one — otherwise just up to the cursor.
+    let replace_end_byte = match line_text[cursor_byte..].chars().next() {
+        Some(c) if c == '`' || c == ',' => cursor_byte,
+        _ => cursor_byte,
+    };
+
+    Some(CiteCompletionContext {
+        typed_prefix,
+        replace_start_utf16: byte_offset_to_utf16(line_text, segment_byte) as u32,
         replace_end_utf16: byte_offset_to_utf16(line_text, replace_end_byte) as u32,
     })
 }
@@ -789,11 +895,55 @@ mod tests {
         assert_eq!(ctx.replace_start_utf16, 2);
         assert_eq!(ctx.replace_end_utf16, 7);
     }
+
+    use super::cite_completion_context_for_line;
+
+    #[test]
+    fn cite_context_inside_empty_tag() {
+        let line = "See cite``";
+        let cursor = line.encode_utf16().count() - 1; // before closing backtick
+        let ctx = cite_completion_context_for_line(line, cursor).expect("cite context");
+        assert_eq!(ctx.typed_prefix, "");
+        assert_eq!(ctx.replace_start_utf16, 9);
+        assert_eq!(ctx.replace_end_utf16, 9);
+    }
+
+    #[test]
+    fn cite_context_with_partial_key() {
+        let line = "See cite`einst`";
+        let cursor = line.encode_utf16().count() - 1; // just before closing backtick
+        let ctx = cite_completion_context_for_line(line, cursor).expect("cite context");
+        assert_eq!(ctx.typed_prefix, "einst");
+        assert_eq!(ctx.replace_start_utf16, 9);
+    }
+
+    #[test]
+    fn cite_context_after_comma_picks_last_segment() {
+        let line = "cite`einstein, boh`";
+        let cursor = line.encode_utf16().count() - 1; // before closing backtick
+        let ctx = cite_completion_context_for_line(line, cursor).expect("cite context");
+        assert_eq!(ctx.typed_prefix, "boh");
+    }
+
+    #[test]
+    fn cite_context_rejects_outside_tag() {
+        // Cursor is past the closing backtick.
+        let line = "cite`einstein` more text";
+        let cursor = line.encode_utf16().count();
+        assert!(cite_completion_context_for_line(line, cursor).is_none());
+    }
+
+    #[test]
+    fn cite_context_rejects_when_prefix_isnt_cite_word() {
+        // "excite" should not trigger cite completion.
+        let line = "excite`foo`";
+        let cursor = line.encode_utf16().count() - 1;
+        assert!(cite_completion_context_for_line(line, cursor).is_none());
+    }
 }
 
 #[tokio::main]
 async fn cmd_lsp() {
-    use std::path::PathBuf;
     use tower_lsp::jsonrpc::Result;
     use tower_lsp::lsp_types::*;
     use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -828,7 +978,11 @@ async fn cmd_lsp() {
                         },
                     )),
                     completion_provider: Some(CompletionOptions {
-                        trigger_characters: Some(vec![":".to_string()]),
+                        trigger_characters: Some(vec![
+                            ":".to_string(),
+                            "`".to_string(),
+                            ",".to_string(),
+                        ]),
                         ..Default::default()
                     }),
                     definition_provider: Some(OneOf::Left(true)),
@@ -878,12 +1032,59 @@ async fn cmd_lsp() {
             let pos = params.text_document_position.position;
             let uri = &params.text_document_position.text_document.uri;
 
-            let docs = self.documents.read().unwrap();
-            let Some(text) = docs.get(uri) else {
-                return Ok(None);
+            let text = {
+                let docs = self.documents.read().unwrap();
+                match docs.get(uri) {
+                    Some(t) => t.clone(),
+                    None => return Ok(None),
+                }
             };
 
             let line_text = text.lines().nth(pos.line as usize).unwrap_or("");
+
+            // First try cite completion, since `cite`` shouldn't fall back
+            // to unicode shortcut completion.
+            if let Some(cite_ctx) =
+                cite_completion_context_for_line(line_text, pos.character as usize)
+            {
+                let file_path = uri.to_file_path().ok();
+                let entries = file_path
+                    .as_deref()
+                    .map(|p| load_bib_entries_for_file(p, &text))
+                    .unwrap_or_default();
+                let replace_range = Range {
+                    start: Position {
+                        line: pos.line,
+                        character: cite_ctx.replace_start_utf16,
+                    },
+                    end: Position {
+                        line: pos.line,
+                        character: cite_ctx.replace_end_utf16,
+                    },
+                };
+                let items: Vec<CompletionItem> = entries
+                    .into_iter()
+                    .filter(|e| {
+                        cite_ctx.typed_prefix.is_empty()
+                            || e.key
+                                .to_ascii_lowercase()
+                                .contains(&cite_ctx.typed_prefix.to_ascii_lowercase())
+                    })
+                    .map(|e| CompletionItem {
+                        label: e.key.clone(),
+                        kind: Some(CompletionItemKind::REFERENCE),
+                        detail: e.title.clone(),
+                        filter_text: Some(e.key.clone()),
+                        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                            range: replace_range,
+                            new_text: e.key.clone(),
+                        })),
+                        ..Default::default()
+                    })
+                    .collect();
+                return Ok(Some(CompletionResponse::Array(items)));
+            }
+
             let Some(ctx) = completion_context_for_line(line_text, pos.character as usize) else {
                 return Ok(None);
             };
@@ -1508,23 +1709,6 @@ async fn cmd_lsp() {
             return None;
         }
         Some(ident.to_string())
-    }
-
-    fn find_root_document(file_path: &Path) -> Option<PathBuf> {
-        let mut dir = file_path.parent()?;
-        let mut best: Option<PathBuf> = None;
-        loop {
-            for name in &["paper.ogma", "index.ogma"] {
-                let candidate = dir.join(name);
-                if candidate.exists() && candidate != file_path {
-                    best = Some(candidate);
-                }
-            }
-            match dir.parent() {
-                Some(parent) => dir = parent,
-                None => return best,
-            }
-        }
     }
 
     let stdin = tokio::io::stdin();

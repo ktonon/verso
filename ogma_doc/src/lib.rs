@@ -11,6 +11,7 @@
 //! preferred place to start when integrating `ogma_doc`.
 
 pub mod ast;
+pub mod bib;
 pub mod compile_tex;
 pub mod config;
 pub mod dim;
