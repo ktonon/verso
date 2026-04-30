@@ -259,12 +259,27 @@ pub(super) fn write_def(out: &mut String, decl: &DefDecl, ctx: &TexContext) {
     let label = declaration_equation_label("def", &decl.name)
         .expect("def declarations should always have equation labels");
     writeln!(out, "\\begin{{equation}} \\label{{{}}}", label).unwrap();
-    writeln!(out, "  {} \\mathrel{{:=}} {}", tex_name, decl.value.to_tex()).unwrap();
+    let dim_annotation = decl
+        .dimension
+        .as_ref()
+        .map(|d| format!("{}", d))
+        .filter(|s| s != "1")
+        .map(|s| format!(" \\quad {}", escape_tex_dim(&s)))
+        .unwrap_or_default();
+    writeln!(
+        out,
+        "  {} \\mathrel{{:=}} {}{}",
+        tex_name,
+        decl.value.to_tex(),
+        dim_annotation
+    )
+    .unwrap();
     writeln!(out, "\\end{{equation}}").unwrap();
 }
 
-/// Emit a header like `\textit{Definition}($\mathrm{g}$): Description.`
-/// The kind word is italic, the symbol is upright (mathrm), and the colon
+/// Emit a header like `\textit{Definition}($g$): Description.` The kind
+/// word is italic; the symbol renders in plain math mode so it matches the
+/// typesetting of the same symbol in the equation that follows. The colon
 /// is dropped when there's no description.
 fn write_kind_header(
     out: &mut String,
@@ -273,7 +288,7 @@ fn write_kind_header(
     desc: Option<&str>,
     ctx: &TexContext,
 ) {
-    write!(out, "\\textit{{{}}}($\\mathrm{{{}}}$)", kind, tex_name).unwrap();
+    write!(out, "\\textit{{{}}}(${}$)", kind, tex_name).unwrap();
     if let Some(desc) = desc {
         out.push_str(": ");
         write_description(out, desc, ctx);
