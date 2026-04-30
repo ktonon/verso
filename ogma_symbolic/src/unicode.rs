@@ -59,6 +59,7 @@ static TABLE: &[UnicodeEntry] = &[
     UnicodeEntry { name: "psi", char: 'ψ', latex: "\\psi" },
     UnicodeEntry { name: "rho", char: 'ρ', latex: "\\rho" },
     UnicodeEntry { name: "rightarrow", char: '→', latex: "\\rightarrow" },
+    UnicodeEntry { name: "section", char: '§', latex: "\\S" },
     UnicodeEntry { name: "sigma", char: 'σ', latex: "\\sigma" },
     UnicodeEntry { name: "sqrt", char: '√', latex: "\\sqrt" },
     UnicodeEntry { name: "subset", char: '⊂', latex: "\\subset" },
