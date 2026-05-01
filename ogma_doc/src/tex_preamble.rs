@@ -65,10 +65,10 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool, opts: &crate::com
     // Dark mode color definitions must precede hyperref since its options
     // reference the named colors.
     if opts.dark {
-        writeln!(out, "\\definecolor{{ogmabg}}{{HTML}}{{1E1E1E}}").unwrap();
-        writeln!(out, "\\definecolor{{ogmafg}}{{HTML}}{{D4D4D4}}").unwrap();
-        writeln!(out, "\\definecolor{{ogmalink}}{{HTML}}{{4FC3F7}}").unwrap();
-        writeln!(out, "\\definecolor{{ogmacite}}{{HTML}}{{B5CEA8}}").unwrap();
+        writeln!(out, "\\definecolor{{ogmabg}}{{HTML}}{{262B36}}").unwrap();
+        writeln!(out, "\\definecolor{{ogmafg}}{{HTML}}{{B8C0CC}}").unwrap();
+        writeln!(out, "\\definecolor{{ogmalink}}{{HTML}}{{88C0D0}}").unwrap();
+        writeln!(out, "\\definecolor{{ogmacite}}{{HTML}}{{A3BE8C}}").unwrap();
     }
     if has_refs {
         let (link, url, cite) = if opts.dark {
