@@ -106,7 +106,7 @@ pub fn compile_to_tex_with(doc: &Document, opts: &CompileOptions) -> String {
                 label,
                 ..
             } => {
-                write_section(&mut out, *level, title, label.as_deref());
+                write_section(&mut out, *level, title, label.as_deref(), &ctx);
             }
             Block::Prose(fragments) => {
                 write_prose(&mut out, fragments, &ctx);
