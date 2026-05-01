@@ -18,8 +18,20 @@ pub use crate::tex_queries::{
 };
 use std::fmt::Write;
 
-/// Compile a Document to a LaTeX string.
+/// Options that affect LaTeX output. Defaults to standard light-mode rendering.
+#[derive(Debug, Clone, Default)]
+pub struct CompileOptions {
+    /// Render the document with a dark page background and light text.
+    pub dark: bool,
+}
+
+/// Compile a Document to a LaTeX string with default options.
 pub fn compile_to_tex(doc: &Document) -> String {
+    compile_to_tex_with(doc, &CompileOptions::default())
+}
+
+/// Compile a Document to a LaTeX string with the given options.
+pub fn compile_to_tex_with(doc: &Document, opts: &CompileOptions) -> String {
     let mut out = String::new();
 
     let ctx = TexContext {
@@ -32,7 +44,7 @@ pub fn compile_to_tex(doc: &Document) -> String {
     // Check if document uses ref tags (to conditionally include hyperref)
     let has_refs = doc.blocks.iter().any(|b| block_has_refs(b));
 
-    write_preamble(&mut out, has_refs);
+    write_preamble(&mut out, has_refs, opts);
 
     // Title block in preamble. The first line renders at the default \title
     // size; any subsequent lines are treated as a subtitle and downsized so

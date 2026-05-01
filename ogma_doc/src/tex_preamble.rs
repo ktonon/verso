@@ -51,7 +51,7 @@ pub(super) fn collect_metadata(doc: &Document) -> TexMetadata<'_> {
     }
 }
 
-pub(super) fn write_preamble(out: &mut String, has_refs: bool) {
+pub(super) fn write_preamble(out: &mut String, has_refs: bool, opts: &crate::compile_tex::CompileOptions) {
     writeln!(out, "\\documentclass[11pt]{{article}}").unwrap();
     writeln!(out, "\\usepackage[margin=1in]{{geometry}}").unwrap();
     writeln!(out, "\\usepackage[T1]{{fontenc}}").unwrap();
@@ -62,10 +62,24 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool) {
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
     writeln!(out, "\\usepackage{{xcolor}}").unwrap();
     writeln!(out, "\\usepackage{{framed}}").unwrap();
+    // Dark mode color definitions must precede hyperref since its options
+    // reference the named colors.
+    if opts.dark {
+        writeln!(out, "\\definecolor{{ogmabg}}{{HTML}}{{1E1E1E}}").unwrap();
+        writeln!(out, "\\definecolor{{ogmafg}}{{HTML}}{{D4D4D4}}").unwrap();
+        writeln!(out, "\\definecolor{{ogmalink}}{{HTML}}{{4FC3F7}}").unwrap();
+        writeln!(out, "\\definecolor{{ogmacite}}{{HTML}}{{B5CEA8}}").unwrap();
+    }
     if has_refs {
+        let (link, url, cite) = if opts.dark {
+            ("ogmalink", "ogmalink", "ogmacite")
+        } else {
+            ("black", "blue", "black")
+        };
         writeln!(
             out,
-            "\\usepackage[colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black]{{hyperref}}"
+            "\\usepackage[colorlinks=true,linkcolor={},urlcolor={},citecolor={}]{{hyperref}}",
+            link, url, cite
         )
         .unwrap();
     }
@@ -77,6 +91,13 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool) {
     writeln!(out, "\\usepackage{{wrapfig}}").unwrap();
     writeln!(out, "\\usepackage{{tikz}}").unwrap();
     writeln!(out, "\\usetikzlibrary{{arrows.meta,positioning,calc}}").unwrap();
+
+    if opts.dark {
+        writeln!(out).unwrap();
+        writeln!(out, "% Dark mode: --dark flag").unwrap();
+        writeln!(out, "\\pagecolor{{ogmabg}}").unwrap();
+        writeln!(out, "\\color{{ogmafg}}").unwrap();
+    }
 
     writeln!(out).unwrap();
     writeln!(out, "\\setlength{{\\parindent}}{{0pt}}").unwrap();

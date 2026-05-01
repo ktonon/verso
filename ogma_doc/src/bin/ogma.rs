@@ -35,6 +35,9 @@ enum Command {
         /// Watch files and re-build on save
         #[arg(short, long)]
         watch: bool,
+        /// Render with a dark page background and light text
+        #[arg(long)]
+        dark: bool,
     },
     /// Remove cached build artifacts
     Clean,
@@ -73,6 +76,7 @@ fn main() {
             file: None,
             output,
             watch,
+            dark,
         } => {
             let config = require_config();
             let builds = plan_config_builds(&config, output.as_deref()).unwrap_or_else(|e| {
@@ -86,7 +90,7 @@ fn main() {
                         let watch_input = input.clone();
                         let run_input = input;
                         WatchTask::new(&watch_input, move || {
-                            cmd_build(&run_input, Some(&output_path))
+                            cmd_build(&run_input, Some(&output_path), dark)
                         })
                     })
                     .collect();
@@ -96,7 +100,7 @@ fn main() {
                 }
                 watch_and_run(tasks);
             } else {
-                cmd_build_from_config_resolved(&config, output.as_deref());
+                cmd_build_from_config_resolved(&config, output.as_deref(), dark);
                 stamp_config_if_present();
             }
         }
@@ -104,14 +108,16 @@ fn main() {
             file: Some(f),
             output,
             watch,
+            dark,
         } => {
             if watch {
                 let f2 = f.clone();
                 let out = output;
-                let tasks = vec![WatchTask::new(&f, move || cmd_build(&f2, out.as_deref()))];
+                let tasks =
+                    vec![WatchTask::new(&f, move || cmd_build(&f2, out.as_deref(), dark))];
                 watch_and_run(tasks);
             } else {
-                cmd_build(&f, output.as_deref());
+                cmd_build(&f, output.as_deref(), dark);
             }
         }
         Command::Clean => cmd_clean(),
@@ -335,6 +341,7 @@ fn load_dimensions_for_file(file: &Path) -> std::collections::HashSet<String> {
 fn cmd_build_from_config_resolved(
     config: &ogma_doc::config::ResolvedConfig,
     output_override: Option<&str>,
+    dark: bool,
 ) {
     if config.output_dir != "." {
         std::fs::create_dir_all(&config.output_dir).unwrap_or_else(|e| {
@@ -349,7 +356,7 @@ fn cmd_build_from_config_resolved(
     });
 
     for (input, output) in builds {
-        cmd_build(&input, Some(&output));
+        cmd_build(&input, Some(&output), dark);
     }
 }
 
@@ -518,9 +525,9 @@ fn cite_completion_context_for_line(
     })
 }
 
-fn cmd_build(file: &str, output: Option<&str>) {
+fn cmd_build(file: &str, output: Option<&str>, dark: bool) {
     use std::process::Command;
-    use ogma_doc::compile_tex::compile_to_tex;
+    use ogma_doc::compile_tex::{compile_to_tex_with, CompileOptions};
     use ogma_doc::parse::parse_document_from_file;
 
     let path = Path::new(file);
@@ -548,7 +555,7 @@ fn cmd_build(file: &str, output: Option<&str>) {
         process::exit(1);
     }
 
-    let tex = compile_to_tex(&doc);
+    let tex = compile_to_tex_with(&doc, &CompileOptions { dark });
 
     // LaTeX output — just write the .tex file
     if is_tex {

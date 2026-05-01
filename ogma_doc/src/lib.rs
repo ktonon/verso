@@ -32,9 +32,9 @@ pub use ast::{
     FuncDecl, List, ListItem, MathBlock, Proof, ProofStep, ProseFragment, Span, Table, VarDecl,
 };
 pub use compile_tex::{
-    collect_labels, collect_symbols, compile_to_tex, find_claim_line, find_decl_line,
-    find_label_line, find_symbol, find_unresolved_refs, find_unresolved_refs_against, slugify,
-    SymbolInfo,
+    collect_labels, collect_symbols, compile_to_tex, compile_to_tex_with, find_claim_line,
+    find_decl_line, find_label_line, find_symbol, find_unresolved_refs,
+    find_unresolved_refs_against, slugify, CompileOptions, SymbolInfo,
 };
 pub use config::{
     default_config_content, find_config, install_schema, load_config, resolve_config, stamp_config,
