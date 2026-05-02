@@ -1,5 +1,6 @@
 | File | Name | Created | Last Updated | Status |
 |------|------|---------|--------------|--------|
+| [multi-arg-user-funcs.md](multi-arg-user-funcs.md) | Multi-arg user-defined functions in claims | 2026-05-01 | 2026-05-01 | completed |
 | [symbolic-differentiation.md](symbolic-differentiation.md) | Symbolic Differentiation | 2026-05-01 | 2026-05-01 | completed |
 | [paper-writer.md](paper-writer.md) | TDD for Physics Papers | 2026-03-12 | 2026-03-13 | completed |
 | [ogma-syntax.md](ogma-syntax.md) | Ogma Markup Syntax | 2026-03-13 | 2026-03-14 | completed |

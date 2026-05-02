@@ -871,6 +871,83 @@ fn subscripted_name(name: &str, indices: &[Index]) -> Option<String> {
 /// Replaces `Var { name, .. }` nodes whose name appears in `consts` with the constant value.
 /// For subscripted variables like `c_{t}`, tries both the bare name and the full
 /// subscripted name (e.g. `"c_{t}"`) since defs store the full notation string.
+/// True if `value` is just `Var { name }` — i.e., the binding is `name → name`,
+/// which would cause `substitute_consts` to loop forever.
+fn is_identity_binding(name: &str, value: &Expr) -> bool {
+    matches!(&value.kind, ExprKind::Var { name: n, .. } if n == name)
+}
+
+/// Single-pass substitution: replaces `Var { name }` with the bound value but
+/// does NOT recursively substitute inside the bound value. Use this for func
+/// parameter binding, where binding `n → n+1` must not loop forever (the `n`
+/// inside `n+1` would otherwise be re-bound to `n+1` again).
+pub fn substitute_locals(expr: &Expr, bindings: &HashMap<String, Expr>) -> Expr {
+    if bindings.is_empty() {
+        return expr.clone();
+    }
+    let span = expr.span;
+    match &expr.kind {
+        ExprKind::Var { name, indices, .. } => {
+            if let Some(value) = bindings.get(name) {
+                respan_tree(value, span)
+            } else if let Some(full) = subscripted_name(name, indices) {
+                if let Some(value) = bindings.get(&full) {
+                    respan_tree(value, span)
+                } else {
+                    expr.clone()
+                }
+            } else {
+                expr.clone()
+            }
+        }
+        ExprKind::Add(a, b) => Expr::spanned(
+            ExprKind::Add(
+                Box::new(substitute_locals(a, bindings)),
+                Box::new(substitute_locals(b, bindings)),
+            ),
+            span,
+        ),
+        ExprKind::Mul(a, b) => Expr::spanned(
+            ExprKind::Mul(
+                Box::new(substitute_locals(a, bindings)),
+                Box::new(substitute_locals(b, bindings)),
+            ),
+            span,
+        ),
+        ExprKind::Pow(a, b) => Expr::spanned(
+            ExprKind::Pow(
+                Box::new(substitute_locals(a, bindings)),
+                Box::new(substitute_locals(b, bindings)),
+            ),
+            span,
+        ),
+        ExprKind::Neg(inner) => Expr::spanned(
+            ExprKind::Neg(Box::new(substitute_locals(inner, bindings))),
+            span,
+        ),
+        ExprKind::Inv(inner) => Expr::spanned(
+            ExprKind::Inv(Box::new(substitute_locals(inner, bindings))),
+            span,
+        ),
+        ExprKind::Fn(kind, inner) => Expr::spanned(
+            ExprKind::Fn(kind.clone(), Box::new(substitute_locals(inner, bindings))),
+            span,
+        ),
+        ExprKind::FnN(kind, args) => Expr::spanned(
+            ExprKind::FnN(
+                kind.clone(),
+                args.iter().map(|a| substitute_locals(a, bindings)).collect(),
+            ),
+            span,
+        ),
+        ExprKind::Quantity(inner, unit) => Expr::spanned(
+            ExprKind::Quantity(Box::new(substitute_locals(inner, bindings)), unit.clone()),
+            span,
+        ),
+        ExprKind::Rational(_) | ExprKind::FracPi(_) | ExprKind::Named(_) => expr.clone(),
+    }
+}
+
 pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
     if consts.is_empty() {
         return expr.clone();
@@ -880,11 +957,21 @@ pub fn substitute_consts(expr: &Expr, consts: &HashMap<String, Expr>) -> Expr {
         ExprKind::Var { name, indices, .. } => {
             if let Some(value) = consts.get(name) {
                 // Recursively substitute so chained defs resolve fully
-                // (e.g. def c_{t} := c_{s}, def c_{s} := sqrt(μ / ρ_{0}))
-                respan_tree(&substitute_consts(value, consts), span)
+                // (e.g. def c_{t} := c_{s}, def c_{s} := sqrt(μ / ρ_{0})).
+                // Guard: if the binding is identity (x → x), the recursive
+                // call would loop forever — return the value as-is.
+                if is_identity_binding(name, value) {
+                    respan_tree(value, span)
+                } else {
+                    respan_tree(&substitute_consts(value, consts), span)
+                }
             } else if let Some(full) = subscripted_name(name, indices) {
                 if let Some(value) = consts.get(&full) {
-                    respan_tree(&substitute_consts(value, consts), span)
+                    if is_identity_binding(&full, value) {
+                        respan_tree(value, span)
+                    } else {
+                        respan_tree(&substitute_consts(value, consts), span)
+                    }
                 } else {
                     expr.clone()
                 }
@@ -956,7 +1043,7 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                 if let Some(param) = def.params.first() {
                     bindings.insert(param.clone(), expanded_arg);
                 }
-                let result = substitute_consts(&def.body, &bindings);
+                let result = substitute_locals(&def.body, &bindings);
                 let expanded = expand_funcs(&result, funcs);
                 respan_tree(&expanded, span)
             } else {
@@ -977,7 +1064,7 @@ fn expand_funcs(expr: &Expr, funcs: &HashMap<String, FuncDef>) -> Expr {
                 for (param, arg) in def.params.iter().zip(expanded_args) {
                     bindings.insert(param.clone(), arg);
                 }
-                let result = substitute_consts(&def.body, &bindings);
+                let result = substitute_locals(&def.body, &bindings);
                 let expanded = expand_funcs(&result, funcs);
                 respan_tree(&expanded, span)
             } else {

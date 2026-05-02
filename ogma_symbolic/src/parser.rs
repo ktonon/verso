@@ -465,6 +465,19 @@ impl Parser {
                 if self.peek() == Some(&Token::LParen) && name.len() > 1 {
                     return self.parse_function_call(name, start);
                 }
+                // Compound function names with underscores (e.g. apparent_speed):
+                // the tokeniser splits these on the underscore, so we glue them
+                // back together when the trailing pattern reaches an LParen.
+                if name.len() > 1 {
+                    if let Some((compound_name, tokens_to_consume)) =
+                        self.try_compound_function_name(&name)
+                    {
+                        for _ in 0..tokens_to_consume {
+                            self.next();
+                        }
+                        return self.parse_function_call(compound_name, start);
+                    }
+                }
                 let mut expr = scalar(&name);
                 expr.span = Span::new(start, self.prev_end);
                 expr = self.parse_indices(expr)?;
@@ -480,6 +493,32 @@ impl Parser {
             }
             Some(tok) => Err(ParseError::UnexpectedToken(format!("{:?}", tok))),
             None => Err(ParseError::UnexpectedEof),
+        }
+    }
+
+    /// If the token stream after the current position matches the pattern
+    /// `(_ Ident)+ LParen`, return the glued name (base + each `_ident`) and
+    /// the number of tokens to consume. Used to recover compound function
+    /// names like `apparent_speed` that the tokeniser splits on underscores.
+    fn try_compound_function_name(&self, base: &str) -> Option<(String, usize)> {
+        let mut compound = base.to_string();
+        let mut consumed = 0;
+        loop {
+            let next = self.peek_at(consumed);
+            let after = self.peek_at(consumed + 1);
+            match (next, after) {
+                (Some(Token::Underscore), Some(Token::Ident(part))) => {
+                    compound.push('_');
+                    compound.push_str(part);
+                    consumed += 2;
+                }
+                _ => break,
+            }
+        }
+        if consumed > 0 && self.peek_at(consumed) == Some(&Token::LParen) {
+            Some((compound, consumed))
+        } else {
+            None
         }
     }
 
