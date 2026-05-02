@@ -387,8 +387,9 @@ fn compile_figure_full() {
     assert!(tex.contains("\\usepackage{graphicx}"));
     assert!(tex.contains("\\begin{figure}[H]"));
     assert!(tex.contains("\\centering"));
-    assert!(tex.contains("\\includegraphics[width=0.8\\textwidth]{plots/energy.pdf}"));
-    assert!(tex.contains("\\caption{Energy levels.}"));
+    assert!(tex.contains("\\includegraphics[width=0.8\\textwidth]{"));
+    assert!(tex.contains("plots/energy.pdf"));
+    assert!(tex.contains("\\caption{\\small Energy levels.}"));
     assert!(tex.contains("\\label{fig:fig-energy}"));
     assert!(tex.contains("\\end{figure}"));
 }
@@ -398,7 +399,8 @@ fn compile_figure_path_only() {
     let src = "!figure img.png";
     let doc = parse_document(src).unwrap();
     let tex = compile_to_tex(&doc);
-    assert!(tex.contains("\\includegraphics[width=1\\textwidth]{img.png}"));
+    assert!(tex.contains("\\includegraphics[width=1\\textwidth]{"));
+    assert!(tex.contains("img.png"));
     assert!(!tex.contains("\\caption"));
     assert!(!tex.contains("\\label{fig:"));
 }

@@ -47,23 +47,52 @@ pub(super) fn write_block_quote(
     writeln!(out, "\\end{{quote}}").unwrap();
 }
 
+/// Resolve a figure path to absolute against the current working directory,
+/// so pdflatex (which runs in a temp build dir) can find it. Returns the
+/// path unchanged if it's already absolute.
+fn resolve_path(path: &str) -> String {
+    let p = std::path::Path::new(path);
+    if p.is_absolute() {
+        return path.to_string();
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        return cwd.join(p).to_string_lossy().into_owned();
+    }
+    path.to_string()
+}
+
 pub(super) fn write_figure(out: &mut String, fig: &Figure, ctx: &TexContext) {
     writeln!(out, "\\begin{{figure}}[H]").unwrap();
     writeln!(out, "\\centering").unwrap();
     writeln!(
         out,
-        "\\includegraphics[width={}\\textwidth]{{{}}}",
-        fig.width, fig.path
+        "\\fbox{{\\begin{{minipage}}{{0.95\\linewidth}}\\centering"
     )
     .unwrap();
+    // Body: \input{...} for .tex sources, \includegraphics{...} otherwise.
+    // Paths are resolved to absolute against the current working directory
+    // because pdflatex runs in a temp build directory and won't find
+    // project-relative paths otherwise.
+    let resolved = resolve_path(&fig.path);
+    if fig.path.ends_with(".tex") {
+        writeln!(out, "\\input{{{}}}", resolved).unwrap();
+    } else {
+        writeln!(
+            out,
+            "\\includegraphics[width={}\\textwidth]{{{}}}",
+            fig.width, resolved
+        )
+        .unwrap();
+    }
     if let Some(cap) = &fig.caption {
-        write!(out, "\\caption{{").unwrap();
+        write!(out, "\\caption{{\\small ").unwrap();
         write_prose_fragments(out, cap, ctx);
         writeln!(out, "}}").unwrap();
     }
     if let Some(label) = &fig.label {
         writeln!(out, "\\label{{fig:{}}}", label).unwrap();
     }
+    writeln!(out, "\\end{{minipage}}}}").unwrap();
     writeln!(out, "\\end{{figure}}").unwrap();
 }
 

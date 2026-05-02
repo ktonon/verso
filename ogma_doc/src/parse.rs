@@ -144,26 +144,52 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             let mut caption: Option<Vec<ProseFragment>> = None;
             let mut label: Option<String> = None;
             let mut width: f64 = 1.0;
-            while i < lines.len() && is_continuation(&lines[i]) {
-                let kv = lines[i].trim();
-                if let Some(val) = kv.strip_prefix("caption:") {
-                    let cap_line = i + 1;
-                    caption = Some(parse_prose_fragments(val.trim()).map_err(|mut e| {
-                        if e.line == 0 {
-                            e.line = cap_line;
-                        }
-                        e
-                    })?);
-                } else if let Some(val) = kv.strip_prefix("label:") {
-                    label = Some(val.trim().to_string());
-                } else if let Some(val) = kv.strip_prefix("width:") {
-                    width = val.trim().parse::<f64>().map_err(|_| ParseDocError {
-                        line: i + 1,
-                        message: "invalid width value".into(),
-                    })?;
-                }
-                i += 1;
+
+            // Determine mode: key-value (legacy) or bare-prose-as-caption.
+            // Key-value mode is detected by finding `caption:`, `label:`, or
+            // `width:` as the prefix of the first indented non-blank line.
+            let mut peek = i;
+            while peek < lines.len() && lines[peek].trim().is_empty() {
+                peek += 1;
             }
+            let kv_mode = peek < lines.len()
+                && is_continuation(&lines[peek])
+                && {
+                    let t = lines[peek].trim();
+                    t.starts_with("caption:")
+                        || t.starts_with("label:")
+                        || t.starts_with("width:")
+                };
+
+            if kv_mode {
+                while i < lines.len() && is_continuation(&lines[i]) {
+                    let kv = lines[i].trim();
+                    if let Some(val) = kv.strip_prefix("caption:") {
+                        let cap_line = i + 1;
+                        caption = Some(parse_prose_fragments(val.trim()).map_err(|mut e| {
+                            if e.line == 0 {
+                                e.line = cap_line;
+                            }
+                            e
+                        })?);
+                    } else if let Some(val) = kv.strip_prefix("label:") {
+                        label = Some(val.trim().to_string());
+                    } else if let Some(val) = kv.strip_prefix("width:") {
+                        width = val.trim().parse::<f64>().map_err(|_| ParseDocError {
+                            line: i + 1,
+                            message: "invalid width value".into(),
+                        })?;
+                    }
+                    i += 1;
+                }
+            } else if peek < lines.len() && is_continuation(&lines[peek]) {
+                // Bare-prose mode: the entire indented body is the caption.
+                let cap = collect_indented_body(&lines, &mut i, fig_line)?;
+                if !cap.is_empty() {
+                    caption = Some(cap);
+                }
+            }
+
             blocks.push(Block::Figure(Figure {
                 path,
                 caption,
