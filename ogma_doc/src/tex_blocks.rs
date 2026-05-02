@@ -64,9 +64,11 @@ fn resolve_path(path: &str) -> String {
 pub(super) fn write_figure(out: &mut String, fig: &Figure, ctx: &TexContext) {
     writeln!(out, "\\begin{{figure}}[H]").unwrap();
     writeln!(out, "\\centering").unwrap();
+    // Increase fbox padding so the border doesn't crowd the figure body
+    // or the caption text. Local to this figure via the surrounding group.
     writeln!(
         out,
-        "\\fbox{{\\begin{{minipage}}{{0.95\\linewidth}}\\centering"
+        "{{\\setlength{{\\fboxsep}}{{10pt}}\\fbox{{\\begin{{minipage}}{{0.92\\linewidth}}\\centering"
     )
     .unwrap();
     // Body: \input{...} for .tex sources, \includegraphics{...} otherwise.
@@ -92,7 +94,7 @@ pub(super) fn write_figure(out: &mut String, fig: &Figure, ctx: &TexContext) {
     if let Some(label) = &fig.label {
         writeln!(out, "\\label{{fig:{}}}", label).unwrap();
     }
-    writeln!(out, "\\end{{minipage}}}}").unwrap();
+    writeln!(out, "\\end{{minipage}}}}}}").unwrap();
     writeln!(out, "\\end{{figure}}").unwrap();
 }
 
