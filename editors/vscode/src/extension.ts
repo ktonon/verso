@@ -57,28 +57,60 @@ function findServerPath(): string {
   return "ogma";
 }
 
+function workspaceRoot(document: TextDocument): string | undefined {
+  const ws = workspace.getWorkspaceFolder(document.uri);
+  return ws?.uri.fsPath;
+}
+
+function resolvePath(
+  document: TextDocument,
+  target: string,
+  fallbackToWorkspace: boolean
+): string {
+  if (path.isAbsolute(target)) {
+    return target;
+  }
+  const docDir = path.dirname(document.uri.fsPath);
+  const docRelative = path.join(docDir, target);
+  if (fs.existsSync(docRelative)) {
+    return docRelative;
+  }
+  if (fallbackToWorkspace) {
+    const ws = workspaceRoot(document);
+    if (ws) {
+      const wsRelative = path.join(ws, target);
+      if (fs.existsSync(wsRelative)) {
+        return wsRelative;
+      }
+    }
+  }
+  return docRelative;
+}
+
 const includeLinkProvider: DocumentLinkProvider = {
   provideDocumentLinks(
     document: TextDocument,
     _token: CancellationToken
   ): DocumentLink[] {
     const links: DocumentLink[] = [];
-    const docDir = path.dirname(document.uri.fsPath);
-    const re = /^\s*(?:!include|!bibliography|use)\s+(\S.*?)\s*$/;
+    // !include, !bibliography, use — paths resolved relative to the source
+    // file. !figure — paths typically relative to the project root (because
+    // pdflatex resolves them against cwd), so try workspace fallback too.
+    const re = /^\s*(!include|!bibliography|use|!figure)\s+(\S.*?)\s*$/;
     for (let i = 0; i < document.lineCount; i++) {
       const line = document.lineAt(i).text;
       const m = re.exec(line);
       if (!m) continue;
-      const target = m[1];
+      const directive = m[1];
+      const target = m[2];
       const start = line.indexOf(target, m[0].indexOf(target));
       if (start < 0) continue;
       const range = new Range(
         new Position(i, start),
         new Position(i, start + target.length)
       );
-      const resolved = path.isAbsolute(target)
-        ? target
-        : path.join(docDir, target);
+      const fallbackToWorkspace = directive === "!figure";
+      const resolved = resolvePath(document, target, fallbackToWorkspace);
       links.push(new DocumentLink(range, Uri.file(resolved)));
     }
     return links;

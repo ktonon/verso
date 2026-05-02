@@ -545,6 +545,9 @@
               "name": "string.unquoted.value.ogma"
             }
           }
+        },
+        {
+          "include": "#prose-inline"
         }
       ]
     },
