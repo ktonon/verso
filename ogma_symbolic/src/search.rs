@@ -1,3 +1,4 @@
+use crate::derivative::differentiate;
 use crate::expr::{classify_mul, Expr, ExprKind, FnKind, MulKind};
 use crate::rational::Rational;
 use crate::rule::RuleSet;
@@ -311,8 +312,12 @@ pub fn simplify(expr: &Expr, rules: &RuleSet) -> Expr {
     // Use wider beam to explore both distribution and factoring paths
     let wide_search = BeamSearch::new(20, 200);
 
+    // Resolve any symbolic Diff nodes before running the main simplification
+    // pipeline so the result is a normal algebraic expression.
+    let simplified = eval_derivatives(expr);
+
     // First pass with beam search
-    let simplified = wide_search.simplify(expr, rules);
+    let simplified = wide_search.simplify(&simplified, rules);
     let simplified = eval_constants(&simplified);
 
     // Re-run rules after constant evaluation so identities like cos(pi/2) apply
@@ -390,6 +395,23 @@ fn isqrt(n: i64) -> Option<i64> {
 /// Pure constant evaluation: arithmetic on Rational/FracPi values and trig at constant arguments.
 /// No normalization (no factor sorting, no mul shortcuts). This is mathematical evaluation,
 /// not a search strategy choice.
+/// Resolve any `FnN(Diff, [expr, var])` nodes by computing the symbolic
+/// derivative. Walks bottom-up so nested `Diff` nodes are resolved
+/// inside-out. Leaves the node unchanged if the second argument is not
+/// a Var (no variable to differentiate against).
+pub fn eval_derivatives(expr: &Expr) -> Expr {
+    expr.rewrite_bottom_up_derived(&mut |node| match &node.kind {
+        ExprKind::FnN(FnKind::Diff, args) if args.len() == 2 => {
+            if let ExprKind::Var { name, .. } = &args[1].kind {
+                Some(differentiate(&args[0], name))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    })
+}
+
 pub fn eval_constants(expr: &Expr) -> Expr {
     expr.rewrite_bottom_up_derived(&mut |node| match &node.kind {
         ExprKind::Rational(_)

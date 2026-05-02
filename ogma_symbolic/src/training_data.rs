@@ -75,6 +75,7 @@ pub fn fn_kind_string(kind: &FnKind) -> String {
         FnKind::Clamp => "CLAMP",
         FnKind::Exp => "EXP",
         FnKind::Ln => "LN",
+        FnKind::Diff => "DIFF",
         FnKind::Custom(name) => return name.to_uppercase(),
     }
     .to_string()
@@ -189,6 +190,7 @@ const ALL_FN_KINDS: &[FnKind] = &[
     FnKind::Clamp,
     FnKind::Exp,
     FnKind::Ln,
+    FnKind::Diff,
 ];
 
 /// All NamedConst variants in a fixed order for vocabulary enumeration.
@@ -315,6 +317,7 @@ pub fn parse_token_string(s: &str) -> Result<Token, TokenParseError> {
         "MIN" => Ok(Token::FnN(FnKind::Min)),
         "MAX" => Ok(Token::FnN(FnKind::Max)),
         "CLAMP" => Ok(Token::FnN(FnKind::Clamp)),
+        "DIFF" => Ok(Token::FnN(FnKind::Diff)),
         // Single-arg functions → Fn
         "SIN" => Ok(Token::Fn(FnKind::Sin)),
         "COS" => Ok(Token::Fn(FnKind::Cos)),
@@ -577,8 +580,8 @@ mod tests {
         let rules = IndexedRuleSet::new(RuleSet::full());
         let vocab = build_vocab_metadata(&rules);
 
-        // Encoder tokens: 5 ops + 18 fns + 5 named + 4 structural + 8 vars + 31 ints + 4 indices = 75
-        assert_eq!(vocab.encoder_tokens.len(), 75);
+        // Encoder tokens: 5 ops + 19 fns + 5 named + 4 structural + 8 vars + 31 ints + 4 indices = 76
+        assert_eq!(vocab.encoder_tokens.len(), 76);
         assert_eq!(vocab.encoder_tokens[0], "ADD");
         assert!(vocab.encoder_tokens.contains(&"SIN".to_string()));
         assert!(vocab.encoder_tokens.contains(&"E".to_string()));

@@ -9,6 +9,7 @@
 //! - render expressions with [`ToTex`] and text formatters
 
 pub mod context;
+pub mod derivative;
 pub mod dim;
 pub mod eval;
 mod expr;
@@ -33,12 +34,13 @@ pub use context::{
 };
 pub use dim::{is_user_dim_name, BaseDim, Dimension};
 pub use eval::{eval_f64, free_vars, spot_check, SpotCheckFailure};
+pub use derivative::differentiate;
 pub use expr::{
-    add, acos, asin, atan, ceil, clamp, classify_mul, constant, cos, cosh, div, e_const, exp,
-    frac_pi, floor, has_indices, infer_ty_from_kind, inv, ln, lower, match_log_base, max, min,
-    mul, named, neg, pi, pow, quantity, rational, round, scalar, scalar_dim, sign, sin, sinh,
-    sqrt, sub, tan, tanh, tensor, upper, Expr, ExprKind, FnKind, Index, IndexPosition, MulKind,
-    NamedConst, Span, Ty,
+    add, acos, asin, atan, ceil, clamp, classify_mul, constant, cos, cosh, diff, div, e_const,
+    exp, frac_pi, floor, has_indices, infer_ty_from_kind, inv, ln, lower, match_log_base, max,
+    min, mul, named, neg, pi, pow, quantity, rational, round, scalar, scalar_dim, sign, sin,
+    sinh, sqrt, sub, tan, tanh, tensor, upper, Expr, ExprKind, FnKind, Index, IndexPosition,
+    MulKind, NamedConst, Span, Ty,
 };
 pub use fmt::{fmt_colored, Colored};
 pub use parser::{parse_expr, ParseError};
@@ -50,7 +52,8 @@ pub use rule::{
     ExprBindings, IndexBindings, IndexPattern, Pattern, Rule, RuleSet, VarPattern,
 };
 pub use search::{
-    eval_constants, simplify, simplify_with_trace, BeamSearch, SearchStrategy, TraceStep,
+    eval_constants, eval_derivatives, simplify, simplify_with_trace, BeamSearch, SearchStrategy,
+    TraceStep,
 };
 pub use to_tex::ToTex;
 pub use unit::Unit;

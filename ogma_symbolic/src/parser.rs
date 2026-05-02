@@ -1,8 +1,8 @@
 use crate::dim::Dimension;
 use crate::expr::{
-    acos, add, asin, atan, ceil, clamp, constant, cos, cosh, exp, floor, frac_pi, inv, ln, max,
-    min, mul, named, neg, pow, quantity, round, scalar, sign, sin, sinh, sqrt, tan, tanh, Expr,
-    ExprKind, FnKind, Index, IndexPosition, NamedConst, Span,
+    acos, add, asin, atan, ceil, clamp, constant, cos, cosh, diff, exp, floor, frac_pi, inv, ln,
+    max, min, mul, named, neg, pow, quantity, round, scalar, sign, sin, sinh, sqrt, tan, tanh,
+    Expr, ExprKind, FnKind, Index, IndexPosition, NamedConst, Span,
 };
 use crate::rational::Rational;
 use crate::unit::Unit;
@@ -532,6 +532,10 @@ impl Parser {
             "clamp" => {
                 let mut args = expect_n(args, 3, "clamp")?;
                 clamp(args.remove(0), args.remove(0), args.remove(0))
+            }
+            "diff" => {
+                let mut args = expect_n(args, 2, "diff")?;
+                diff(args.remove(0), args.remove(0))
             }
             _ => {
                 // User-defined function call

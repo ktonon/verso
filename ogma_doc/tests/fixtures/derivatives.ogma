@@ -1,0 +1,30 @@
+# Symbolic Differentiation
+
+Verifiable claims involving the `diff` operator.
+
+claim diff_constant
+  diff(5, x) = 0
+
+claim diff_var_match
+  diff(x, x) = 1
+
+claim diff_other_var
+  diff(y, x) = 0
+
+claim diff_power_rule
+  diff(x^3, x) = 3 * x^2
+
+claim diff_sum
+  diff(x + x^2, x) = 1 + 2*x
+
+claim diff_quotient_m_over_r
+  diff(M/r, r) = -M/r^2
+
+claim diff_chain_sin_x_squared
+  diff(sin(x^2), x) = 2 * x * cos(x^2)
+
+claim diff_exp
+  diff(exp(x), x) = exp(x)
+
+claim diff_ln
+  diff(ln(x), x) = 1/x

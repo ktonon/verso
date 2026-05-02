@@ -68,6 +68,7 @@ impl ToTex for FnKind {
             FnKind::Clamp => "\\operatorname{clamp}".to_string(),
             FnKind::Exp => "\\exp".to_string(),
             FnKind::Ln => "\\ln".to_string(),
+            FnKind::Diff => "\\operatorname{diff}".to_string(),
             FnKind::Custom(name) => format!("\\operatorname{{{}}}", name),
         }
     }
@@ -223,14 +224,23 @@ fn render_expr(expr: &Expr) -> TexRender {
                 fn_call: Some((kind.clone(), child.tex.clone())),
                 ..TexRender::default()
             },
-            (ExprKind::FnN(kind, _), args) => {
-                let joined = args
-                    .iter()
-                    .map(|arg| arg.tex.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
+            (ExprKind::FnN(kind, exprs), args) => {
+                let tex = if matches!(kind, FnKind::Diff) && args.len() == 2 {
+                    let var_tex = match &exprs[1].kind {
+                        ExprKind::Var { name, .. } => name.clone(),
+                        _ => args[1].tex.clone(),
+                    };
+                    format!("\\frac{{d}}{{d{}}}\\left( {} \\right)", var_tex, args[0].tex)
+                } else {
+                    let joined = args
+                        .iter()
+                        .map(|arg| arg.tex.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("{}\\left( {} \\right)", kind.to_tex(), joined)
+                };
                 TexRender {
-                    tex: format!("{}\\left( {} \\right)", kind.to_tex(), joined),
+                    tex,
                     ..TexRender::default()
                 }
             }

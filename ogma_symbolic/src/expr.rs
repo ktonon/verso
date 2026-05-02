@@ -297,6 +297,10 @@ pub enum FnKind {
     Clamp,
     Exp,
     Ln,
+    /// Symbolic differentiation: `Diff(expr, var)` represents `d/d(var) of expr`.
+    /// Used as `FnN(Diff, vec![expr, var])`. The simplifier evaluates this to
+    /// the symbolic derivative when `eval_derivatives` is run.
+    Diff,
     /// User-defined function (from `!func` declarations).
     Custom(String),
 }
@@ -846,6 +850,12 @@ pub fn max(a: Expr, b: Expr) -> Expr {
 
 pub fn clamp(x: Expr, lo: Expr, hi: Expr) -> Expr {
     Expr::new(ExprKind::FnN(FnKind::Clamp, vec![x, lo, hi]))
+}
+
+/// Constructs an unevaluated `diff(expr, var)` node. The simplifier evaluates
+/// this to the symbolic derivative via `eval_derivatives`.
+pub fn diff(expr: Expr, var: Expr) -> Expr {
+    Expr::new(ExprKind::FnN(FnKind::Diff, vec![expr, var]))
 }
 
 pub fn exp(a: Expr) -> Expr {
