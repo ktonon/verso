@@ -53,6 +53,31 @@ pub(super) fn write_section(
     }
 }
 
+/// Emit a `\part{...}` heading. Part titles are rendered as prose so
+/// inline math, bold, italic, etc. are typeset properly.
+pub(super) fn write_part(out: &mut String, title: &str, ctx: &TexContext) {
+    let (rendered, plain) = match parse_prose_fragments(title) {
+        Ok(frags) => {
+            let mut buf = String::new();
+            write_prose_fragments(&mut buf, &frags, ctx);
+            (buf, prose_to_string(&frags))
+        }
+        Err(_) => (escape_prose(title), title.to_string()),
+    };
+
+    let rendered = rendered.trim_end().to_string();
+    if rendered != plain {
+        writeln!(
+            out,
+            "\\part{{\\texorpdfstring{{{}}}{{{}}}}}",
+            rendered, plain
+        )
+        .unwrap();
+    } else {
+        writeln!(out, "\\part{{{}}}", rendered).unwrap();
+    }
+}
+
 pub(super) fn write_claim(out: &mut String, claim: &Claim) {
     writeln!(out, "\\begin{{equation}} \\label{{eq:{}}}", claim.name).unwrap();
     writeln!(

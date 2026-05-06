@@ -557,6 +557,14 @@ fn compile_pagebreak() {
 }
 
 #[test]
+fn compile_part() {
+    let src = "!part Foundations\n\n# Introduction\n\nText.";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(tex.contains("\\part{Foundations}"));
+}
+
+#[test]
 fn unresolved_ref_detected() {
     let src = "## Introduction\n\nSee ref`nonexistent` and ref`introduction`.";
     let doc = parse_document(src).unwrap();

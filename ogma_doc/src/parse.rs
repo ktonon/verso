@@ -65,6 +65,23 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
+        // Part heading
+        if trimmed.starts_with("!part") {
+            let text = trimmed["!part".len()..].trim().to_string();
+            if text.is_empty() {
+                return Err(ParseDocError {
+                    line: i + 1,
+                    message: "!part requires a title".into(),
+                });
+            }
+            blocks.push(Block::Part {
+                title: text,
+                span: Span { line: i + 1 },
+            });
+            i += 1;
+            continue;
+        }
+
         // Document metadata
         if trimmed.starts_with("!title") {
             let text = trimmed["!title".len()..].trim().to_string();
@@ -2877,6 +2894,23 @@ More prose here.
     fn parse_toc() {
         let doc = parse_document("!toc").unwrap();
         assert!(matches!(&doc.blocks[0], Block::Toc));
+    }
+
+    // Parts
+
+    #[test]
+    fn parse_part() {
+        let doc = parse_document("!part Foundations").unwrap();
+        match &doc.blocks[0] {
+            Block::Part { title, .. } => assert_eq!(title, "Foundations"),
+            other => panic!("expected Part, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_part_requires_title() {
+        let err = parse_document("!part").unwrap_err();
+        assert!(err.message.contains("requires a title"));
     }
 
     // URLs

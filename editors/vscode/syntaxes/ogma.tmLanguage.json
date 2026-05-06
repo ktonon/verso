@@ -52,6 +52,9 @@
       "include": "#directive-pagebreak"
     },
     {
+      "include": "#directive-part"
+    },
+    {
       "include": "#directive-include"
     },
     {
@@ -621,6 +624,17 @@
       "captures": {
         "1": {
           "name": "keyword.control.directive.pagebreak.ogma"
+        }
+      }
+    },
+    "directive-part": {
+      "match": "^(!part)\\s+(.+)$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.directive.part.ogma"
+        },
+        "2": {
+          "name": "entity.name.section.part.ogma"
         }
       }
     },

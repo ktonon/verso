@@ -11,7 +11,7 @@ use crate::tex_prose::{
     write_var, TexContext,
 };
 use crate::tex_refs::block_has_refs;
-use crate::tex_structure::{write_claim, write_proof, write_section};
+use crate::tex_structure::{write_claim, write_part, write_proof, write_section};
 pub use crate::tex_queries::{
     collect_labels, collect_symbols, find_claim_line, find_decl_line, find_label_line,
     find_symbol, find_unresolved_refs, find_unresolved_refs_against, slugify, SymbolInfo,
@@ -133,6 +133,9 @@ pub fn compile_to_tex_with(doc: &Document, opts: &CompileOptions) -> String {
             }
             Block::Toc => {
                 writeln!(out, "\\tableofcontents").unwrap();
+            }
+            Block::Part { title, .. } => {
+                write_part(&mut out, title, &ctx);
             }
             Block::List(list) => {
                 write_list(&mut out, list, &ctx);
