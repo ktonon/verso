@@ -194,8 +194,8 @@ In physics notation, subscripts serve different roles:
 
 4. **Partial derivative shorthand.** The notation math`f_{x}` sometimes
    means the partial derivative of f with respect to x. This convention
-   is **not supported** by Ogma. Use explicit derivative notation
-   instead.
+   is **not supported** by Ogma. Use explicit derivative notation with
+   the `diff()` function instead — see ref`derivatives`.
 
 Ogma treats subscripts as part of the variable name. A declaration of
 math`v_{0}` creates a variable named "v_{0}" and does not imply any
@@ -346,6 +346,34 @@ a^2 + b^2
 
 A math block with alignment markers compiles to a LaTeX align environment.
 Multi-line blocks without alignment compile to a gather environment.
+
+## Derivatives label`derivatives`
+
+First-order derivatives are written with the `diff()` function:
+
+math`diff(expr, var)`
+
+The argument order is (expression, variable). For example, math`diff(x^2, x)`
+simplifies symbolically to math`2 x`, and math`diff(ln(λ), r)` renders as
+a fraction-style derivative in the output.
+
+Greek-letter variables in math expressions use the actual Unicode character
+(for example math`λ`, math`α`, math`θ`) rather than the LaTeX command name;
+the symbolic system recognises Unicode and emits the corresponding LaTeX
+command in the output.
+
+Two practical constraints worth knowing:
+
+- **No chained equalities.** Inline math expressions of the form
+  `a = b = c` are not supported. Use two adjacent math expressions
+  instead — for example math`diff(ln(λ), r) = k_0`, math`diff(ln(T), r) = k_0` —
+  or use a proof block, which does support chained derivations.
+- **No partial-derivative shorthand.** Subscript notation like math`f_{x}`
+  is treated as a name, not as a partial derivative (see ref`subscripts`).
+  Always write derivatives explicitly with `diff()`.
+
+The `diff()` function is integrated with the symbolic system: derivatives
+are simplified, evaluated, and dimension-checked alongside other expressions.
 
 # Document Elements
 
