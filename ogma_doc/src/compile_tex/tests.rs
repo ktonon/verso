@@ -70,6 +70,26 @@ fn prose_roman_numeral_renders_as_ascii() {
 }
 
 #[test]
+fn ref_hyperref_text_is_escaped_for_unicode() {
+    // Section titles can carry Unicode like ℙⅠ; the text shown by a
+    // ref must go through escape_prose so the bare Unicode doesn't
+    // reach pdflatex inside \hyperref{...}.
+    let src = "# ℙⅠ Foundations label`part1`\n\nSee ref`part1` for context.";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("\\hyperref[part1]{$\\mathbb{P}$I Foundations}"),
+        "ref text should be escape_prose-d: {}",
+        tex
+    );
+    assert!(
+        !tex.contains("\\hyperref[part1]{ℙⅠ"),
+        "raw Unicode should not survive in \\hyperref text: {}",
+        tex
+    );
+}
+
+#[test]
 fn compile_inline_math_geometric_unicode() {
     let doc = parse_document("Speeds are math`c_n^{∥}` and math`c_n^{⟂}`.").unwrap();
     let tex = compile_to_tex(&doc);

@@ -190,11 +190,11 @@ pub(super) fn write_prose_fragments(
                     .as_deref()
                     .or_else(|| ctx.section_titles.get(label.as_str()).map(|s| s.as_str()))
                     .unwrap_or(label.as_str());
-                write!(out, "\\hyperref[{}]{{{}}}", label, text).unwrap();
+                write!(out, "\\hyperref[{}]{{{}}}", label, escape_prose(text)).unwrap();
             }
             ProseFragment::Url { url, display } => {
                 if let Some(text) = display {
-                    write!(out, "\\href{{{}}}{{{}}}", url, text).unwrap();
+                    write!(out, "\\href{{{}}}{{{}}}", url, escape_prose(text)).unwrap();
                 } else {
                     write!(out, "\\url{{{}}}", url).unwrap();
                 }
