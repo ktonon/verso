@@ -203,7 +203,7 @@
       ]
     },
     "claim-body": {
-      "match": "^\\s+(.+?)\\s*(>=|<=|=|>|<)\\s*(.+)$",
+      "match": "^\\s+(.+?)\\s*(~=|>=|<=|=|>|<)\\s*(.+)$",
       "captures": {
         "1": {
           "name": "meta.expression.lhs.ogma",

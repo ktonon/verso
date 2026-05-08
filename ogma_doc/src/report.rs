@@ -56,6 +56,13 @@ fn write_result(f: &mut fmt::Formatter<'_>, result: &VerificationResult) -> fmt:
                 result.name, samples, result.span.line
             )
         }
+        Outcome::ApproxStated => {
+            writeln!(
+                f,
+                "  \x1b[33m~\x1b[0m {} (approximation, stated but unverified, line {})",
+                result.name, result.span.line
+            )
+        }
         Outcome::ComparisonPass => {
             writeln!(
                 f,

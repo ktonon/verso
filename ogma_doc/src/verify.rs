@@ -39,6 +39,7 @@ impl VerificationResult {
             self.outcome,
             Outcome::Pass
                 | Outcome::NumericalPass { .. }
+                | Outcome::ApproxStated
                 | Outcome::ComparisonPass
                 | Outcome::ProofPass { .. }
                 | Outcome::ExpectFailPass
@@ -56,6 +57,9 @@ pub enum Outcome {
         samples: usize,
         residual: Expr,
     },
+    /// An approximation (`~=`) is stated but not verified by Ogma.
+    /// Dimensions are still checked when declarations exist.
+    ApproxStated,
     ComparisonPass,
     ComparisonFalse {
         lhs: Expr,
@@ -154,6 +158,9 @@ fn describe_result(r: &VerificationResult) -> String {
         Outcome::Pass => parts.push(format!("'{}' passed symbolically", r.name)),
         Outcome::NumericalPass { samples, .. } => {
             parts.push(format!("'{}' passed numerically ({} samples)", r.name, samples))
+        }
+        Outcome::ApproxStated => {
+            parts.push(format!("'{}' stated as approximation (unverified)", r.name))
         }
         Outcome::ComparisonPass => {
             parts.push(format!("'{}' comparison passed", r.name))
@@ -271,6 +278,7 @@ fn verify_claim(claim: &Claim, ctx: &Context) -> VerificationResult {
             }
             ogma_symbolic::EqualityResult::NotEqual { residual } => Outcome::Fail { residual },
         },
+        ClaimRelation::Approx => Outcome::ApproxStated,
         _ => verify_comparison(claim, ctx),
     };
     let mut units = collect_units(&claim.lhs);
@@ -308,7 +316,7 @@ fn verify_comparison(claim: &Claim, ctx: &Context) -> Outcome {
 
 fn relation_holds(ordering: std::cmp::Ordering, relation: ClaimRelation) -> bool {
     match relation {
-        ClaimRelation::Eq => ordering == std::cmp::Ordering::Equal,
+        ClaimRelation::Eq | ClaimRelation::Approx => ordering == std::cmp::Ordering::Equal,
         ClaimRelation::Gt => ordering == std::cmp::Ordering::Greater,
         ClaimRelation::Ge => {
             ordering == std::cmp::Ordering::Greater || ordering == std::cmp::Ordering::Equal
@@ -576,6 +584,40 @@ proof expand
         let doc = parse_document("claim trivial\n  x = x").unwrap();
         let report = verify_document(&doc);
         assert!(report.results[0].units.is_empty());
+    }
+
+    #[test]
+    fn verify_approx_claim_passes_unverified() {
+        let doc = parse_document("claim small_angle\n  sin(x) ~= x").unwrap();
+        let report = verify_document(&doc);
+        assert!(report.all_passed());
+        match &report.results[0].outcome {
+            Outcome::ApproxStated => {}
+            other => panic!("expected ApproxStated, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn verify_approx_claim_does_not_become_rule() {
+        // An approximation must NOT be promoted to a rewrite rule, even though
+        // the claim is reported as passed. Otherwise later equality claims
+        // could rely on it as if it were exact.
+        let src = "\
+claim approx_one
+  f(x) ~= x
+
+claim downstream
+  f(2) = 2
+";
+        let doc = parse_document(src).unwrap();
+        let report = verify_document(&doc);
+        // The downstream equality must not silently inherit the approximation.
+        let downstream = &report.results[1];
+        assert!(
+            !matches!(downstream.outcome, Outcome::Pass),
+            "approx claim must not be substituted as exact: {:?}",
+            downstream.outcome
+        );
     }
 
     #[test]

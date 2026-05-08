@@ -253,12 +253,24 @@ claim positive_threshold
 claim lower_bound
   1 <= 1
 
+claim small_angle_sin
+  sin(x) ~= x
+
 The body must be indented. Exactly one equals sign separates the left-hand
 side from the right-hand side for equality claims. Comparison claims use one
 of the operators >, >=, <, or <=. Chained comparisons such as
 tex`0 < x < 1` are not supported in the current language. Both sides use
 Ogma expression syntax.
-Claims compile to numbered LaTeX equations with an equation label.
+
+Approximation claims use ~= and are stated but *not* verified by Ogma —
+they render with an *approximately equal* relation in TeX and surface a
+warning in the verification report. Use them for physically motivated
+approximations the symbolic system cannot reach. Dimensions are still
+checked when declarations exist.
+
+Claims render with an italicised *Claim*(humanised name) header — underscores
+become spaces and the first letter is capitalised — followed by a numbered
+LaTeX equation carrying an equation label.
 
 See claim`add_zero_identity` for the simplest example.
 

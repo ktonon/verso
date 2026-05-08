@@ -1136,7 +1136,7 @@ fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseD
     let (relation, op, op_pos) = find_claim_relation(body).ok_or_else(|| ParseDocError {
         line,
         message: format!(
-            "claim '{}': expected one of 'lhs = rhs', 'lhs > rhs', 'lhs >= rhs', 'lhs < rhs', or 'lhs <= rhs'",
+            "claim '{}': expected one of 'lhs = rhs', 'lhs ~= rhs', 'lhs > rhs', 'lhs >= rhs', 'lhs < rhs', or 'lhs <= rhs'",
             name
         ),
     })?;
@@ -1165,6 +1165,7 @@ fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseD
 
 fn find_claim_relation(body: &str) -> Option<(ClaimRelation, &'static str, usize)> {
     for (relation, op) in [
+        (ClaimRelation::Approx, "~="),
         (ClaimRelation::Ge, ">="),
         (ClaimRelation::Le, "<="),
         (ClaimRelation::Eq, "="),
@@ -1752,6 +1753,16 @@ mod tests {
         let doc = parse_document(src).unwrap();
         match &doc.blocks[0] {
             Block::Claim(c) => assert_eq!(c.relation, ClaimRelation::Le),
+            _ => panic!("expected Claim"),
+        }
+    }
+
+    #[test]
+    fn parse_approx_claim() {
+        let src = "claim small_angle\n  sin(x) ~= x";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Claim(c) => assert_eq!(c.relation, ClaimRelation::Approx),
             _ => panic!("expected Claim"),
         }
     }

@@ -1453,6 +1453,18 @@ async fn cmd_lsp() {
                         ..Default::default()
                     });
                 }
+                Outcome::ApproxStated => {
+                    diagnostics.push(Diagnostic {
+                        range: line_range(original_line),
+                        severity: Some(DiagnosticSeverity::WARNING),
+                        message: format!(
+                            "'{}' is stated as an approximation (~=) and is not verified by Ogma.",
+                            result.name
+                        ),
+                        source: Some("ogma".to_string()),
+                        ..Default::default()
+                    });
+                }
                 Outcome::Fail { residual } => {
                     diagnostics.push(Diagnostic {
                         range: line_range(original_line),

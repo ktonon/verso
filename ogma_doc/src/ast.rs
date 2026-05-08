@@ -234,6 +234,7 @@ pub enum ProseFragment {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClaimRelation {
     Eq,
+    Approx,
     Gt,
     Ge,
     Lt,
@@ -244,6 +245,7 @@ impl ClaimRelation {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Eq => "=",
+            Self::Approx => "~=",
             Self::Gt => ">",
             Self::Ge => ">=",
             Self::Lt => "<",
@@ -254,6 +256,7 @@ impl ClaimRelation {
     pub fn as_tex_str(&self) -> &'static str {
         match self {
             Self::Eq => "=",
+            Self::Approx => "\\approx",
             Self::Gt => ">",
             Self::Ge => "\\ge",
             Self::Lt => "<",
