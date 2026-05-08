@@ -15,6 +15,7 @@ static TABLE: &[UnicodeEntry] = &[
     // Greek lowercase
     UnicodeEntry { name: "alpha", char: 'α', latex: "\\alpha" },
     UnicodeEntry { name: "approx", char: '≈', latex: "\\approx" },
+    UnicodeEntry { name: "bbP", char: 'ℙ', latex: "\\mathbb{P}" },
     UnicodeEntry { name: "beta", char: 'β', latex: "\\beta" },
     UnicodeEntry { name: "cdot", char: '·', latex: "\\cdot" },
     UnicodeEntry { name: "chi", char: 'χ', latex: "\\chi" },
@@ -73,9 +74,16 @@ static TABLE: &[UnicodeEntry] = &[
     UnicodeEntry { name: "upsilon", char: 'υ', latex: "\\upsilon" },
     UnicodeEntry { name: "xi", char: 'ξ', latex: "\\xi" },
     UnicodeEntry { name: "zeta", char: 'ζ', latex: "\\zeta" },
-    // Greek uppercase
+    // Greek uppercase, plus Roman numeral characters (typeset upright in math
+    // mode). Sorted alphabetically among themselves so the table-sort test
+    // stays happy.
     UnicodeEntry { name: "Delta", char: 'Δ', latex: "\\Delta" },
     UnicodeEntry { name: "Gamma", char: 'Γ', latex: "\\Gamma" },
+    UnicodeEntry { name: "I", char: 'Ⅰ', latex: "\\mathrm{I}" },
+    UnicodeEntry { name: "II", char: 'Ⅱ', latex: "\\mathrm{II}" },
+    UnicodeEntry { name: "III", char: 'Ⅲ', latex: "\\mathrm{III}" },
+    UnicodeEntry { name: "IV", char: 'Ⅳ', latex: "\\mathrm{IV}" },
+    UnicodeEntry { name: "IX", char: 'Ⅸ', latex: "\\mathrm{IX}" },
     UnicodeEntry { name: "Lambda", char: 'Λ', latex: "\\Lambda" },
     UnicodeEntry { name: "Omega", char: 'Ω', latex: "\\Omega" },
     UnicodeEntry { name: "Phi", char: 'Φ', latex: "\\Phi" },
@@ -83,6 +91,13 @@ static TABLE: &[UnicodeEntry] = &[
     UnicodeEntry { name: "Psi", char: 'Ψ', latex: "\\Psi" },
     UnicodeEntry { name: "Sigma", char: 'Σ', latex: "\\Sigma" },
     UnicodeEntry { name: "Theta", char: 'Θ', latex: "\\Theta" },
+    UnicodeEntry { name: "V", char: 'Ⅴ', latex: "\\mathrm{V}" },
+    UnicodeEntry { name: "VI", char: 'Ⅵ', latex: "\\mathrm{VI}" },
+    UnicodeEntry { name: "VII", char: 'Ⅶ', latex: "\\mathrm{VII}" },
+    UnicodeEntry { name: "VIII", char: 'Ⅷ', latex: "\\mathrm{VIII}" },
+    UnicodeEntry { name: "X", char: 'Ⅹ', latex: "\\mathrm{X}" },
+    UnicodeEntry { name: "XI", char: 'Ⅺ', latex: "\\mathrm{XI}" },
+    UnicodeEntry { name: "XII", char: 'Ⅻ', latex: "\\mathrm{XII}" },
     UnicodeEntry { name: "Xi", char: 'Ξ', latex: "\\Xi" },
 ];
 
@@ -107,6 +122,44 @@ pub fn replace_unicode_with_latex(input: &str) -> String {
         }
     }
     result
+}
+
+/// Plain-text-mode equivalent for a Unicode character. Returns the substitution
+/// to use when rendering inside ordinary prose (where math commands need to be
+/// wrapped in `$...$`, and characters like Roman numerals can simply be ASCII).
+/// Returns `None` for characters that should pass through verbatim.
+pub fn to_text_latex(c: char) -> Option<&'static str> {
+    match c {
+        // Blackboard P — wrap math command in inline math.
+        'ℙ' => Some("$\\mathbb{P}$"),
+        // Roman numerals — emit plain ASCII so they typeset cleanly in
+        // section titles and prose without entering math mode.
+        'Ⅰ' => Some("I"),
+        'Ⅱ' => Some("II"),
+        'Ⅲ' => Some("III"),
+        'Ⅳ' => Some("IV"),
+        'Ⅴ' => Some("V"),
+        'Ⅵ' => Some("VI"),
+        'Ⅶ' => Some("VII"),
+        'Ⅷ' => Some("VIII"),
+        'Ⅸ' => Some("IX"),
+        'Ⅹ' => Some("X"),
+        'Ⅺ' => Some("XI"),
+        'Ⅻ' => Some("XII"),
+        'ⅰ' => Some("i"),
+        'ⅱ' => Some("ii"),
+        'ⅲ' => Some("iii"),
+        'ⅳ' => Some("iv"),
+        'ⅴ' => Some("v"),
+        'ⅵ' => Some("vi"),
+        'ⅶ' => Some("vii"),
+        'ⅷ' => Some("viii"),
+        'ⅸ' => Some("ix"),
+        'ⅹ' => Some("x"),
+        'ⅺ' => Some("xi"),
+        'ⅻ' => Some("xii"),
+        _ => None,
+    }
 }
 
 /// Return all entries whose name starts with the given prefix.
@@ -242,6 +295,34 @@ mod tests {
             replace_unicode_with_latex("c_n^{∥} and c_n^{⟂}"),
             "c_n^{\\parallel} and c_n^{\\perp}"
         );
+    }
+
+    #[test]
+    fn math_mode_replaces_blackboard_p_and_roman_numerals() {
+        assert_eq!(replace_unicode_with_latex("ℙ"), "\\mathbb{P}");
+        assert_eq!(replace_unicode_with_latex("ℙⅠ"), "\\mathbb{P}\\mathrm{I}");
+        assert_eq!(replace_unicode_with_latex("Ⅻ"), "\\mathrm{XII}");
+    }
+
+    #[test]
+    fn text_mode_blackboard_p_wraps_in_inline_math() {
+        assert_eq!(to_text_latex('ℙ'), Some("$\\mathbb{P}$"));
+    }
+
+    #[test]
+    fn text_mode_roman_numerals_use_ascii() {
+        assert_eq!(to_text_latex('Ⅰ'), Some("I"));
+        assert_eq!(to_text_latex('Ⅻ'), Some("XII"));
+        assert_eq!(to_text_latex('ⅰ'), Some("i"));
+        assert_eq!(to_text_latex('ⅻ'), Some("xii"));
+    }
+
+    #[test]
+    fn text_mode_passthrough_for_other_chars() {
+        // Greek letters and other math chars pass through in prose; the
+        // user is expected to use math\`...\` to typeset them.
+        assert_eq!(to_text_latex('α'), None);
+        assert_eq!(to_text_latex('a'), None);
     }
 
     // -- completions --

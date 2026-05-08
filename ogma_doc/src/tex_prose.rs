@@ -115,7 +115,13 @@ pub(super) fn escape_prose(text: &str) -> String {
             '#' => result.push_str("\\#"),
             '%' => result.push_str("\\%"),
             '$' => result.push_str("\\$"),
-            _ => result.push(ch),
+            _ => {
+                if let Some(s) = ogma_symbolic::unicode::to_text_latex(ch) {
+                    result.push_str(s);
+                } else {
+                    result.push(ch);
+                }
+            }
         }
     }
     result

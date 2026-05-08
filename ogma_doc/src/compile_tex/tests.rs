@@ -46,6 +46,30 @@ fn compile_inline_math_approx_unicode() {
 }
 
 #[test]
+fn prose_blackboard_p_renders_as_math() {
+    let doc = parse_document("# ℙⅠ").unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("$\\mathbb{P}$"),
+        "expected $\\mathbb{{P}}$ in section title: {}",
+        tex
+    );
+    // Ⅰ in plain prose should appear as plain ASCII.
+    assert!(tex.contains("I"), "expected ASCII I in section title: {}", tex);
+}
+
+#[test]
+fn prose_roman_numeral_renders_as_ascii() {
+    let doc = parse_document("# Part Ⅻ Conclusion").unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("Part XII Conclusion"),
+        "expected Roman numeral as ASCII: {}",
+        tex
+    );
+}
+
+#[test]
 fn compile_inline_math_geometric_unicode() {
     let doc = parse_document("Speeds are math`c_n^{∥}` and math`c_n^{⟂}`.").unwrap();
     let tex = compile_to_tex(&doc);

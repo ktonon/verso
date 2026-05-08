@@ -62,6 +62,7 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool, opts: &crate::com
     writeln!(out, "\\usepackage{{lmodern}}").unwrap();
     writeln!(out, "\\usepackage{{microtype}}").unwrap();
     writeln!(out, "\\usepackage{{amsmath}}").unwrap();
+    writeln!(out, "\\usepackage{{amssymb}}").unwrap();
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
     writeln!(out, "\\usepackage{{xcolor}}").unwrap();
     writeln!(out, "\\usepackage{{framed}}").unwrap();
