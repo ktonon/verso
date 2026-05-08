@@ -104,6 +104,28 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool, opts: &crate::com
     writeln!(out, "\\setlength{{\\parskip}}{{6pt plus 2pt minus 1pt}}").unwrap();
     writeln!(out, "\\setlength{{\\emergencystretch}}{{3em}}").unwrap();
     writeln!(out, "\\setcounter{{tocdepth}}{{3}}").unwrap();
+
+    // Widen the TOC number columns so two-digit subsection numbers like
+    // "13.10" don't crowd the title. The article-class defaults reserve only
+    // 2.3em / 3.2em / 4.1em — enough for one-digit numbers but not for
+    // documents with more than ten sections or subsections-per-section.
+    writeln!(out, "\\makeatletter").unwrap();
+    writeln!(
+        out,
+        "\\renewcommand*\\l@subsection{{\\@dottedtocline{{2}}{{1.5em}}{{3.0em}}}}"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "\\renewcommand*\\l@subsubsection{{\\@dottedtocline{{3}}{{4.5em}}{{3.8em}}}}"
+    )
+    .unwrap();
+    writeln!(
+        out,
+        "\\renewcommand*\\l@paragraph{{\\@dottedtocline{{4}}{{8.3em}}{{4.5em}}}}"
+    )
+    .unwrap();
+    writeln!(out, "\\makeatother").unwrap();
 }
 
 pub(super) fn collect_used_env_kinds(doc: &Document) -> Vec<EnvKind> {
