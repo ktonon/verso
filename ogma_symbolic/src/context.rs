@@ -1,6 +1,6 @@
 use crate::dim::Dimension;
 use crate::eval::{free_vars, spot_check};
-use crate::expr::{Expr, ExprKind, Index, IndexPosition, Span, Ty};
+use crate::expr::{Expr, ExprKind, FnKind, Index, IndexPosition, Span, Ty};
 use crate::rational::Rational;
 use crate::rule::{self, Pattern, Rule, RuleSet};
 use crate::search;
@@ -614,24 +614,36 @@ fn elaborate_expr(expr: &Expr, env: &DimEnv) -> Result<Expr, DimError> {
                 .iter()
                 .map(|arg| elaborate_expr(arg, env))
                 .collect::<Result<_, _>>()?;
-            let mut unresolved = false;
-            for arg in &args {
-                match ty_dimension(&arg.ty) {
-                    Some(dim) if dim.is_dimensionless() => {}
-                    Some(dim) => {
-                        return Err(DimError::NonDimensionlessFnArg {
-                            func: format!("{:?}", kind).to_lowercase(),
-                            dim,
-                            span: arg.span,
-                        });
+            // diff(expr, var) accepts dimensional arguments and yields
+            // [expr] / [var]. Other multi-arg functions (min/max/clamp)
+            // currently require dimensionless arguments.
+            let ty = if matches!(kind, FnKind::Diff) && args.len() == 2 {
+                match (ty_dimension(&args[0].ty), ty_dimension(&args[1].ty)) {
+                    (Some(d_expr), Some(d_var)) => {
+                        Ty::Concrete(d_expr.mul(&d_var.inv()))
                     }
-                    None => unresolved = true,
+                    _ => Ty::Unresolved,
                 }
-            }
-            let ty = if unresolved {
-                Ty::Unresolved
             } else {
-                Ty::Concrete(Dimension::dimensionless())
+                let mut unresolved = false;
+                for arg in &args {
+                    match ty_dimension(&arg.ty) {
+                        Some(dim) if dim.is_dimensionless() => {}
+                        Some(dim) => {
+                            return Err(DimError::NonDimensionlessFnArg {
+                                func: format!("{:?}", kind).to_lowercase(),
+                                dim,
+                                span: arg.span,
+                            });
+                        }
+                        None => unresolved = true,
+                    }
+                }
+                if unresolved {
+                    Ty::Unresolved
+                } else {
+                    Ty::Concrete(Dimension::dimensionless())
+                }
             };
             Ok(Expr::spanned_typed(
                 ExprKind::FnN(kind.clone(), args),
@@ -1743,6 +1755,42 @@ mod tests {
             result,
             Err(DimError::NonDimensionlessFnArg { .. })
         ));
+    }
+
+    #[test]
+    fn check_dim_diff_yields_quotient_of_dimensions() {
+        // diff(λ, r) where λ : [L], r : [L] should yield dimensionless [1].
+        let mut env = DimEnv::new();
+        env.insert("lambda".into(), Dimension::single(BaseDim::L, 1));
+        env.insert("r".into(), Dimension::single(BaseDim::L, 1));
+        let expr = parse_expr("diff(lambda, r)").unwrap();
+        let dim = check_dim(&expr, &env).unwrap();
+        assert!(dim.is_dimensionless());
+    }
+
+    #[test]
+    fn check_dim_diff_dimensional_var_is_allowed() {
+        // diff(ln(x), r) where x : [L] (so ln(x) is dimensionless),
+        // r : [L]. Result should be [L^-1] — allowed, not an error.
+        let mut env = DimEnv::new();
+        env.insert("x".into(), Dimension::dimensionless());
+        env.insert("r".into(), Dimension::single(BaseDim::L, 1));
+        let expr = parse_expr("diff(ln(x), r)").unwrap();
+        let dim = check_dim(&expr, &env).unwrap();
+        assert_eq!(dim, Dimension::single(BaseDim::L, -1));
+    }
+
+    #[test]
+    fn check_dim_diff_dimensional_expr_is_allowed() {
+        // diff(s, t) where s : [L], t : [T] should yield [L T^-1].
+        let mut env = DimEnv::new();
+        env.insert("s".into(), Dimension::single(BaseDim::L, 1));
+        env.insert("t".into(), Dimension::single(BaseDim::T, 1));
+        let expr = parse_expr("diff(s, t)").unwrap();
+        let dim = check_dim(&expr, &env).unwrap();
+        let expected = Dimension::single(BaseDim::L, 1)
+            .mul(&Dimension::single(BaseDim::T, 1).inv());
+        assert_eq!(dim, expected);
     }
 
     #[test]
