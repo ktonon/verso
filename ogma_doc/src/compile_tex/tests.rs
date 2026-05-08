@@ -24,6 +24,28 @@ fn compile_inline_math_equality() {
 }
 
 #[test]
+fn compile_inline_math_approx_ascii() {
+    let doc = parse_document("So math`sin(x) ~= x` for small x.").unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("$\\sin{x} \\approx x$") || tex.contains("$sin(x) \\approx x$"),
+        "expected \\approx in output: {}",
+        tex
+    );
+}
+
+#[test]
+fn compile_inline_math_approx_unicode() {
+    let doc = parse_document("So math`a ≈ b` here.").unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("$a \\approx b$"),
+        "expected \\approx in output: {}",
+        tex
+    );
+}
+
+#[test]
 fn compile_inline_math_geometric_unicode() {
     let doc = parse_document("Speeds are math`c_n^{∥}` and math`c_n^{⟂}`.").unwrap();
     let tex = compile_to_tex(&doc);

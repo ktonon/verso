@@ -215,6 +215,9 @@ pub enum ProseFragment {
     MathEquality(Expr, Expr),
     /// Tagged inline math equivalence: math`lhs ≡ rhs` — rendered as $lhs \equiv rhs$.
     MathEquivalence(Expr, Expr),
+    /// Tagged inline math approximation: math`lhs ~= rhs` (or `≈`) — rendered
+    /// as $lhs \approx rhs$. Stated, not symbolically verified.
+    MathApprox(Expr, Expr),
     /// Tagged inline raw LaTeX: tex`\vec{v}` — passed through as-is.
     Tex(String),
     /// Tagged claim reference: claim`name` — rendered as \eqref{eq:name}.

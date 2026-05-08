@@ -1417,14 +1417,35 @@ pub fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocE
                 InlineMatch::Tag(tag_match) => {
                     match tag_match.tag {
                         "math" => {
-                            let split = tag_match
-                                .content
-                                .char_indices()
-                                .find(|(_, c)| *c == '=' || *c == '≡');
-                            if let Some((eq_pos, eq_ch)) = split {
-                                let lhs_str = tag_match.content[..eq_pos].trim();
+                            // Operators recognised in inline math, listed once.
+                            // We pick the *leftmost* occurrence so a stray `=`
+                            // later in an expression doesn't beat an earlier
+                            // `~=` or `≈` on byte position.
+                            #[derive(Clone, Copy)]
+                            enum Rel {
+                                Eq,
+                                Equiv,
+                                Approx,
+                            }
+                            let candidates: &[(&str, Rel)] = &[
+                                ("~=", Rel::Approx),
+                                ("≈", Rel::Approx),
+                                ("≡", Rel::Equiv),
+                                ("=", Rel::Eq),
+                            ];
+                            let split = candidates
+                                .iter()
+                                .filter_map(|(op, rel)| {
+                                    tag_match
+                                        .content
+                                        .find(*op)
+                                        .map(|pos| (pos, *op, *rel))
+                                })
+                                .min_by_key(|(pos, _, _)| *pos);
+                            if let Some((pos, op, rel)) = split {
+                                let lhs_str = tag_match.content[..pos].trim();
                                 let rhs_str =
-                                    tag_match.content[eq_pos + eq_ch.len_utf8()..].trim();
+                                    tag_match.content[pos + op.len()..].trim();
                                 let lhs =
                                     parse_expr(lhs_str).map_err(|e| ParseDocError {
                                         line: 0,
@@ -1435,10 +1456,10 @@ pub fn parse_prose_fragments(text: &str) -> Result<Vec<ProseFragment>, ParseDocE
                                         line: 0,
                                         message: format!("inline math`{}`: rhs: {:?}", tag_match.content, e),
                                     })?;
-                                fragments.push(if eq_ch == '≡' {
-                                    ProseFragment::MathEquivalence(lhs, rhs)
-                                } else {
-                                    ProseFragment::MathEquality(lhs, rhs)
+                                fragments.push(match rel {
+                                    Rel::Eq => ProseFragment::MathEquality(lhs, rhs),
+                                    Rel::Equiv => ProseFragment::MathEquivalence(lhs, rhs),
+                                    Rel::Approx => ProseFragment::MathApprox(lhs, rhs),
                                 });
                             } else {
                                 let expr =
@@ -1579,7 +1600,8 @@ pub fn prose_to_string(fragments: &[ProseFragment]) -> String {
             ProseFragment::Text(t) => s.push_str(t),
             ProseFragment::Math(_)
             | ProseFragment::MathEquality(_, _)
-            | ProseFragment::MathEquivalence(_, _) => s.push_str("[math]"),
+            | ProseFragment::MathEquivalence(_, _)
+            | ProseFragment::MathApprox(_, _) => s.push_str("[math]"),
             ProseFragment::Tex(t) => {
                 s.push_str("tex`");
                 s.push_str(t);
@@ -2521,6 +2543,45 @@ More prose here.
             }
             other => panic!("expected Prose, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn parse_inline_math_approx_ascii() {
+        let doc = parse_document("Then math`sin(x) ~= x` for small x.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert!(
+                    matches!(&fragments[1], ProseFragment::MathApprox(_, _)),
+                    "expected MathApprox, got {:?}",
+                    fragments[1]
+                );
+            }
+            other => panic!("expected Prose, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_inline_math_approx_unicode() {
+        let doc = parse_document("Then math`sin(x) ≈ x` for small x.").unwrap();
+        match &doc.blocks[0] {
+            Block::Prose(fragments) => {
+                assert!(
+                    matches!(&fragments[1], ProseFragment::MathApprox(_, _)),
+                    "expected MathApprox, got {:?}",
+                    fragments[1]
+                );
+            }
+            other => panic!("expected Prose, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_inline_math_approx_takes_precedence_over_later_eq() {
+        // The leftmost relation wins, so `a ~= b = c` splits on `~=`
+        // (lhs=a, rhs="b = c"). Since `b = c` won't parse as a single expr,
+        // we expect this to error rather than silently splitting on `=`.
+        let result = parse_document("text math`a ~= b = c` end.");
+        assert!(result.is_err(), "expected parse error, got {:?}", result);
     }
 
     #[test]

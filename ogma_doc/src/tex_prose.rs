@@ -147,6 +147,9 @@ pub(super) fn write_prose_fragments(
             ProseFragment::MathEquivalence(lhs, rhs) => {
                 write!(out, "${} \\equiv {}$", lhs.to_tex(), rhs.to_tex()).unwrap();
             }
+            ProseFragment::MathApprox(lhs, rhs) => {
+                write!(out, "${} \\approx {}$", lhs.to_tex(), rhs.to_tex()).unwrap();
+            }
             ProseFragment::Tex(raw) => {
                 write!(
                     out,
@@ -250,6 +253,9 @@ pub(super) fn write_prose_fragments_math_mode(
             }
             ProseFragment::MathEquivalence(lhs, rhs) => {
                 write!(out, "{} \\equiv {}", lhs.to_tex(), rhs.to_tex()).unwrap();
+            }
+            ProseFragment::MathApprox(lhs, rhs) => {
+                write!(out, "{} \\approx {}", lhs.to_tex(), rhs.to_tex()).unwrap();
             }
             ProseFragment::Tex(raw) => {
                 out.push_str(&ogma_symbolic::unicode::replace_unicode_with_latex(raw));
