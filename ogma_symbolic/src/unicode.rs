@@ -18,6 +18,7 @@ static TABLE: &[UnicodeEntry] = &[
     UnicodeEntry { name: "beta", char: 'β', latex: "\\beta" },
     UnicodeEntry { name: "cdot", char: '·', latex: "\\cdot" },
     UnicodeEntry { name: "chi", char: 'χ', latex: "\\chi" },
+    UnicodeEntry { name: "dagger", char: '†', latex: "\\dagger" },
     UnicodeEntry { name: "delta", char: 'δ', latex: "\\delta" },
     UnicodeEntry { name: "ell", char: 'ℓ', latex: "\\ell" },
     UnicodeEntry { name: "epsilon", char: 'ε', latex: "\\epsilon" },
