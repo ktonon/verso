@@ -79,6 +79,13 @@ pub(super) fn write_part(out: &mut String, title: &str, ctx: &TexContext) {
 }
 
 pub(super) fn write_claim(out: &mut String, claim: &Claim) {
+    let humanized = humanize_label(&claim.name);
+    writeln!(
+        out,
+        "\\textit{{Claim}}({})",
+        escape_prose(&humanized)
+    )
+    .unwrap();
     writeln!(out, "\\begin{{equation}} \\label{{eq:{}}}", claim.name).unwrap();
     writeln!(
         out,
@@ -89,6 +96,28 @@ pub(super) fn write_claim(out: &mut String, claim: &Claim) {
     )
     .unwrap();
     writeln!(out, "\\end{{equation}}").unwrap();
+}
+
+/// Convert an identifier-style label (e.g. `universal_wavelength_stretch`)
+/// into a human-readable phrase: underscores become spaces and the first
+/// letter is capitalised. Other characters are preserved as-is, so
+/// camelCase identifiers retain their internal capitalisation.
+fn humanize_label(name: &str) -> String {
+    let mut result = String::with_capacity(name.len());
+    let mut chars = name.chars();
+    if let Some(first) = chars.next() {
+        for c in first.to_uppercase() {
+            result.push(c);
+        }
+    }
+    for c in chars {
+        if c == '_' {
+            result.push(' ');
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 pub(super) fn write_proof(out: &mut String, proof: &Proof) {
