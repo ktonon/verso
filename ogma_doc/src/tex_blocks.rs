@@ -169,7 +169,10 @@ pub(super) fn write_table(out: &mut String, table: &Table, ctx: &TexContext) {
 pub(super) fn write_align(out: &mut String, align: &Align, ctx: &TexContext) {
     // `\[\begin{aligned}...\end{aligned}\]` rather than `align*` — gives the
     // natural display-math vertical spacing without the extra paragraph break
-    // that `align*` introduces.
+    // that `align*` introduces. The leading negative \vspace cancels the
+    // \parskip that the surrounding paragraph break inserts so the display
+    // sits closer to the preceding prose.
+    writeln!(out, "\\vspace*{{-\\parskip}}").unwrap();
     writeln!(out, "\\[\\begin{{aligned}}").unwrap();
     let last = align.rows.len().saturating_sub(1);
     for (i, row) in align.rows.iter().enumerate() {
