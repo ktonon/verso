@@ -891,18 +891,18 @@ fn successive_declarations_no_medskip_between() {
 }
 
 #[test]
-fn align_block_emits_align_star() {
+fn align_block_emits_aligned_in_display_math() {
     let src = "!align\n  math`a^2` & = & math`b^2` + math`c^2`";
     let doc = parse_document(src).unwrap();
     let tex = compile_to_tex(&doc);
     assert!(
-        tex.contains("\\begin{align*}"),
-        "!align should open align* environment: {}",
+        tex.contains("\\[\\begin{aligned}"),
+        "!align should open `\\[\\begin{{aligned}}`: {}",
         tex
     );
     assert!(
-        tex.contains("\\end{align*}"),
-        "!align should close align* environment: {}",
+        tex.contains("\\end{aligned}\\]"),
+        "!align should close `\\end{{aligned}}\\]`: {}",
         tex
     );
     assert!(

@@ -167,7 +167,10 @@ pub(super) fn write_table(out: &mut String, table: &Table, ctx: &TexContext) {
 }
 
 pub(super) fn write_align(out: &mut String, align: &Align, ctx: &TexContext) {
-    writeln!(out, "\\begin{{align*}}").unwrap();
+    // `\[\begin{aligned}...\end{aligned}\]` rather than `align*` — gives the
+    // natural display-math vertical spacing without the extra paragraph break
+    // that `align*` introduces.
+    writeln!(out, "\\[\\begin{{aligned}}").unwrap();
     let last = align.rows.len().saturating_sub(1);
     for (i, row) in align.rows.iter().enumerate() {
         for (j, cell) in row.iter().enumerate() {
@@ -182,7 +185,7 @@ pub(super) fn write_align(out: &mut String, align: &Align, ctx: &TexContext) {
             writeln!(out).unwrap();
         }
     }
-    writeln!(out, "\\end{{align*}}").unwrap();
+    writeln!(out, "\\end{{aligned}}\\]").unwrap();
 }
 
 pub(super) fn write_environment(

@@ -619,6 +619,9 @@
         {
           "match": "(&)",
           "name": "keyword.operator.align.ogma"
+        },
+        {
+          "include": "#prose-inline"
         }
       ]
     },
