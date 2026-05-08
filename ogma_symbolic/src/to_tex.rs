@@ -243,6 +243,7 @@ fn render_expr(expr: &Expr) -> TexRender {
                 tex: match kind {
                     FnKind::Floor => format!("\\lfloor {} \\rfloor", child.tex),
                     FnKind::Ceil => format!("\\lceil {} \\rceil", child.tex),
+                    FnKind::Exp => format!("e^{{{}}}", child.tex),
                     _ => format!("{}{{{}}}", kind.to_tex(), child.tex),
                 },
                 fn_call: Some((kind.clone(), child.tex.clone())),
@@ -573,6 +574,13 @@ mod tests {
     #[test]
     fn to_tex_unicode_var() {
         assert_eq!(scalar("μ").to_tex(), "\\mu");
+    }
+
+    #[test]
+    fn to_tex_exp_renders_as_e_to_power() {
+        // exp(x) should typeset as e^{x}, not \exp{x}.
+        let e = exp(scalar("x"));
+        assert_eq!(e.to_tex(), "e^{x}");
     }
 
     #[test]
