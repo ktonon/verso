@@ -855,6 +855,42 @@ fn escape_prose_in_section_title() {
 }
 
 #[test]
+fn declaration_after_prose_inserts_medskip() {
+    let src = "Some prose paragraph.\n\nvar v [L T^-1]\n  Velocity.";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("\\medskip"),
+        "declaration after prose should be preceded by \\medskip: {}",
+        tex
+    );
+}
+
+#[test]
+fn declaration_after_section_no_medskip() {
+    let src = "# Section\n\nvar v [L T^-1]\n  Velocity.";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        !tex.contains("\\medskip"),
+        "declaration directly under a heading should not get \\medskip: {}",
+        tex
+    );
+}
+
+#[test]
+fn successive_declarations_no_medskip_between() {
+    let src = "var u [L]\n  First.\n\nvar v [L]\n  Second.";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        !tex.contains("\\medskip"),
+        "successive declarations should not be separated by \\medskip: {}",
+        tex
+    );
+}
+
+#[test]
 fn escape_prose_in_table_cells() {
     let src = "!table T\n  | Type | Description |\n  |------|-------------|\n  | dimension_mismatch | LHS mismatch |";
     let doc = parse_document(src).unwrap();

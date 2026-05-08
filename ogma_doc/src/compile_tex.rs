@@ -97,8 +97,56 @@ pub fn compile_to_tex_with(doc: &Document, opts: &CompileOptions) -> String {
         writeln!(out, "\\end{{abstract}}").unwrap();
     }
 
+    let mut prev_emitted: Option<&Block> = None;
     for block in &doc.blocks {
+        // Blocks that don't emit anything in the body — skip without
+        // touching prev_emitted so spacing keys off the last visible block.
+        if matches!(
+            block,
+            Block::Func(_)
+                | Block::Title(_)
+                | Block::Author(_)
+                | Block::Date(_)
+                | Block::Abstract(_)
+                | Block::Bibliography { .. }
+                | Block::ExpectFail { .. }
+        ) {
+            continue;
+        }
+
         writeln!(out).unwrap();
+
+        // Add a touch more breathing room when a declaration follows a
+        // paragraph-style block (prose, list, blockquote, math, figure...).
+        // Successive declarations and declarations under a fresh heading
+        // stay tight.
+        let is_declaration = matches!(
+            block,
+            Block::Var(_) | Block::Concept(_) | Block::Def(_) | Block::Claim(_)
+        );
+        if is_declaration {
+            if let Some(prev) = prev_emitted {
+                let prev_is_decl = matches!(
+                    prev,
+                    Block::Var(_)
+                        | Block::Concept(_)
+                        | Block::Def(_)
+                        | Block::Claim(_)
+                        | Block::Proof(_)
+                );
+                let prev_is_break = matches!(
+                    prev,
+                    Block::Section { .. }
+                        | Block::Part { .. }
+                        | Block::PageBreak
+                        | Block::Toc
+                );
+                if !prev_is_decl && !prev_is_break {
+                    writeln!(out, "\\medskip").unwrap();
+                }
+            }
+        }
+
         match block {
             Block::Section {
                 level,
@@ -166,6 +214,8 @@ pub fn compile_to_tex_with(doc: &Document, opts: &CompileOptions) -> String {
                 // Test-only construct, not emitted in output
             }
         }
+
+        prev_emitted = Some(block);
     }
 
     write_bibliography(&mut out, doc);
