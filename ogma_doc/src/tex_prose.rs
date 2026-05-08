@@ -220,6 +220,61 @@ pub(super) fn write_prose_fragments(
     }
 }
 
+/// Emit prose fragments inside a LaTeX math-mode context (e.g. an `align*`
+/// cell). Math fragments emit their TeX bare; plain text is wrapped in
+/// `\text{...}`; text containing only Unicode/punctuation (no ASCII letters)
+/// passes through Unicode → LaTeX replacement and emits bare so things like
+/// `→` typeset as `\rightarrow`.
+pub(super) fn write_prose_fragments_math_mode(
+    out: &mut String,
+    fragments: &[ProseFragment],
+    ctx: &TexContext,
+) {
+    for fragment in fragments {
+        match fragment {
+            ProseFragment::Text(text) => {
+                if text.chars().any(|c| c.is_ascii_alphabetic()) {
+                    write!(
+                        out,
+                        "\\text{{{}}}",
+                        escape_prose(text)
+                    )
+                    .unwrap();
+                } else {
+                    out.push_str(&ogma_symbolic::unicode::replace_unicode_with_latex(text));
+                }
+            }
+            ProseFragment::Math(expr) => out.push_str(&expr.to_tex()),
+            ProseFragment::MathEquality(lhs, rhs) => {
+                write!(out, "{} = {}", lhs.to_tex(), rhs.to_tex()).unwrap();
+            }
+            ProseFragment::MathEquivalence(lhs, rhs) => {
+                write!(out, "{} \\equiv {}", lhs.to_tex(), rhs.to_tex()).unwrap();
+            }
+            ProseFragment::Tex(raw) => {
+                out.push_str(&ogma_symbolic::unicode::replace_unicode_with_latex(raw));
+            }
+            ProseFragment::ClaimRef(name) => {
+                write!(out, "\\eqref{{eq:{}}}", name).unwrap();
+            }
+            // Less common in align cells. Wrap in \text{...} and let the
+            // text-mode writer handle nested math via its own $...$ entry/exit.
+            ProseFragment::Bold(_)
+            | ProseFragment::Italic(_)
+            | ProseFragment::Footnote(_)
+            | ProseFragment::Cite(_)
+            | ProseFragment::Ref { .. }
+            | ProseFragment::Url { .. }
+            | ProseFragment::Sym { .. } => {
+                out.push_str("\\text{");
+                write_prose_fragments(out, std::slice::from_ref(fragment), ctx);
+                out.push('}');
+            }
+            ProseFragment::ParBreak => {}
+        }
+    }
+}
+
 pub(super) fn write_var(out: &mut String, decl: &VarDecl, ctx: &TexContext) {
     write_var_with_kind(out, decl, ctx, "var", "Variable");
 }

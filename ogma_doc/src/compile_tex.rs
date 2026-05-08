@@ -1,6 +1,7 @@
 use crate::ast::{Block, Document};
 use crate::tex_blocks::{
-    write_block_quote, write_environment, write_figure, write_list, write_math_block, write_table,
+    write_align, write_block_quote, write_environment, write_figure, write_list, write_math_block,
+    write_table,
 };
 use crate::tex_preamble::{
     build_section_title_map, collect_metadata, collect_used_env_kinds, write_bibliography,
@@ -209,6 +210,9 @@ pub fn compile_to_tex_with(doc: &Document, opts: &CompileOptions) -> String {
             }
             Block::Table(table) => {
                 write_table(&mut out, table, &ctx);
+            }
+            Block::Align(align) => {
+                write_align(&mut out, align, &ctx);
             }
             Block::ExpectFail { .. } => {
                 // Test-only construct, not emitted in output

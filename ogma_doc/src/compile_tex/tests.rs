@@ -891,6 +891,68 @@ fn successive_declarations_no_medskip_between() {
 }
 
 #[test]
+fn align_block_emits_align_star() {
+    let src = "!align\n  math`a^2` & = & math`b^2` + math`c^2`";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("\\begin{align*}"),
+        "!align should open align* environment: {}",
+        tex
+    );
+    assert!(
+        tex.contains("\\end{align*}"),
+        "!align should close align* environment: {}",
+        tex
+    );
+    assert!(
+        tex.contains("a^{2} & = & b^{2} + c^{2}"),
+        "math cells should emit bare TeX with & separators: {}",
+        tex
+    );
+}
+
+#[test]
+fn align_cell_text_wraps_in_text_command() {
+    let src = "!align\n  math`x` redshift & = & math`y`";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("\\text{ redshift}"),
+        "plain prose in an align cell should be wrapped in \\text{{...}}: {}",
+        tex
+    );
+}
+
+#[test]
+fn align_cell_unicode_only_is_treated_as_math() {
+    // A cell containing only the Unicode arrow should render as \rightarrow,
+    // not as \text{→} (which would not typeset as an arrow in math mode).
+    let src = "!align\n  math`a` & → & math`b`";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("\\rightarrow"),
+        "Unicode-only align cell should emit \\rightarrow, not \\text{{→}}: {}",
+        tex
+    );
+    assert!(
+        !tex.contains("\\text{→}"),
+        "Unicode-only align cell should not be wrapped in \\text: {}",
+        tex
+    );
+}
+
+#[test]
+fn align_multiple_rows_have_double_backslash() {
+    let src = "!align\n  a & b\n  c & d\n  e & f";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    // Two row separators (between three rows), no trailing one.
+    assert_eq!(tex.matches(" \\\\\n").count(), 2, "tex was: {}", tex);
+}
+
+#[test]
 fn escape_prose_in_table_cells() {
     let src = "!table T\n  | Type | Description |\n  |------|-------------|\n  | dimension_mismatch | LHS mismatch |";
     let doc = parse_document(src).unwrap();

@@ -431,6 +431,23 @@ The second row marks the header boundary. Column alignment can be specified
 with colons in the separator: left-aligned by default, centered with colons
 on both sides, right-aligned with a colon on the right.
 
+## Aligned Math Displays
+
+For multi-column math layouts, use !align. Each indented line is a row;
+columns are separated by *&*, just like LaTeX's align environment. Cells
+are parsed as prose fragments, so plain text and inline math tags mix
+freely. Plain text in a cell is wrapped in tex`\text{...}`; cells whose
+text is purely punctuation/Unicode (no ASCII letters) pass through
+Unicode-to-LaTeX replacement so the bare arrow → typesets as a math
+arrow.
+
+!align
+  math`a^2`    & = & math`b^2 + c^2`
+  math`sin(x)` & ≈ & math`x`           long-tail correction
+  math`E`      & = & math`m c^2`
+
+The block compiles to a LaTeX align* environment (no equation numbers).
+
 ## Theorem-like Environments
 
 Ogma supports theorem, lemma, corollary, remark, and example environments.

@@ -55,6 +55,12 @@ pub enum Block {
     Figure(Figure),
     /// A table: `!table Title` with pipe-delimited rows
     Table(Table),
+    /// A multi-column aligned math display: `!align` with `&`-separated cells.
+    /// Compiles to LaTeX `align*`. Each cell is parsed as prose fragments;
+    /// math fragments emit their TeX bare, plain text is wrapped in `\text{...}`,
+    /// and Unicode-only text (no ASCII letters) is treated as math after
+    /// Unicode → LaTeX replacement so things like `→` become `\rightarrow`.
+    Align(Align),
     /// Centered block: `!center` with indented body
     Center(Vec<ProseFragment>),
     /// Page break: `!pagebreak`
@@ -137,6 +143,15 @@ pub struct Table {
     pub header: Vec<Vec<ProseFragment>>,
     pub rows: Vec<Vec<Vec<ProseFragment>>>,
     pub label: Option<String>,
+    pub span: Span,
+}
+
+/// A multi-column aligned math display.
+/// Each row is a sequence of cells separated by `&` in the source. Cells are
+/// parsed as prose fragments and emitted in math mode in the rendered output.
+#[derive(Debug)]
+pub struct Align {
+    pub rows: Vec<Vec<Vec<ProseFragment>>>,
     pub span: Span,
 }
 

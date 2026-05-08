@@ -20,6 +20,10 @@ pub(super) fn block_has_refs(block: &Block) -> bool {
                     .iter()
                     .any(|row| row.iter().any(|cell| fragments_have_refs(cell)))
         }
+        Block::Align(align) => align
+            .rows
+            .iter()
+            .any(|row| row.iter().any(|cell| fragments_have_refs(cell))),
         _ => false,
     }
 }

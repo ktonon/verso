@@ -1,6 +1,10 @@
-use crate::ast::{ColumnAlign, Environment, Figure, List, MathBlock, ProseFragment, Table};
+use crate::ast::{
+    Align, ColumnAlign, Environment, Figure, List, MathBlock, ProseFragment, Table,
+};
 use crate::tex_preamble::env_kind_name;
-use crate::tex_prose::{escape_prose, write_prose_fragments, TexContext};
+use crate::tex_prose::{
+    escape_prose, write_prose_fragments, write_prose_fragments_math_mode, TexContext,
+};
 use std::fmt::Write;
 use ogma_symbolic::ToTex;
 
@@ -160,6 +164,25 @@ pub(super) fn write_table(out: &mut String, table: &Table, ctx: &TexContext) {
     }
     writeln!(out, "\\hline").unwrap();
     writeln!(out, "\\end{{longtable}}").unwrap();
+}
+
+pub(super) fn write_align(out: &mut String, align: &Align, ctx: &TexContext) {
+    writeln!(out, "\\begin{{align*}}").unwrap();
+    let last = align.rows.len().saturating_sub(1);
+    for (i, row) in align.rows.iter().enumerate() {
+        for (j, cell) in row.iter().enumerate() {
+            if j > 0 {
+                write!(out, " & ").unwrap();
+            }
+            write_prose_fragments_math_mode(out, cell, ctx);
+        }
+        if i < last {
+            writeln!(out, " \\\\").unwrap();
+        } else {
+            writeln!(out).unwrap();
+        }
+    }
+    writeln!(out, "\\end{{align*}}").unwrap();
 }
 
 pub(super) fn write_environment(

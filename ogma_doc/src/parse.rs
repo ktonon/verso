@@ -1,5 +1,5 @@
 use crate::ast::{
-    Block, Claim, ClaimRelation, ColumnAlign, DefDecl, Document, EnvKind, Environment,
+    Align, Block, Claim, ClaimRelation, ColumnAlign, DefDecl, Document, EnvKind, Environment,
     ExpectFailType, Figure, FuncDecl, List, ListItem, MathBlock, Proof, ProofStep, ProseFragment,
     Span, Table, VarDecl,
 };
@@ -296,6 +296,42 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                 rows,
                 label,
                 span: Span { line: table_line },
+            }));
+            continue;
+        }
+
+        // Align block: `!align` followed by indented rows. Each row is a
+        // sequence of cells separated by `&`. Cells are parsed as prose
+        // fragments. Compiles to a LaTeX `align*` environment.
+        if trimmed == "!align" {
+            let align_line = i + 1;
+            i += 1;
+            let mut rows: Vec<Vec<Vec<ProseFragment>>> = Vec::new();
+            while i < lines.len() && is_continuation(&lines[i]) {
+                let row_line = lines[i].trim();
+                if row_line.is_empty() {
+                    i += 1;
+                    continue;
+                }
+                let cells: Result<Vec<Vec<ProseFragment>>, _> = row_line
+                    .split('&')
+                    .map(|cell| parse_prose_fragments(cell.trim()))
+                    .collect();
+                rows.push(cells.map_err(|e| ParseDocError {
+                    line: i + 1,
+                    message: format!("!align cell: {:?}", e),
+                })?);
+                i += 1;
+            }
+            if rows.is_empty() {
+                return Err(ParseDocError {
+                    line: align_line,
+                    message: "!align requires at least one row".into(),
+                });
+            }
+            blocks.push(Block::Align(Align {
+                rows,
+                span: Span { line: align_line },
             }));
             continue;
         }
@@ -3225,6 +3261,40 @@ More prose here.
                 assert!(table.title.is_none());
             }
             other => panic!("expected Table, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_align_basic() {
+        let src = "!align\n  a & b & c\n  d & e & f";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Align(align) => {
+                assert_eq!(align.rows.len(), 2);
+                assert_eq!(align.rows[0].len(), 3);
+                assert_eq!(align.rows[1].len(), 3);
+            }
+            other => panic!("expected Align, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_align_requires_at_least_one_row() {
+        let src = "!align\n";
+        let err = parse_document(src).unwrap_err();
+        assert!(err.message.contains("at least one row"), "{}", err.message);
+    }
+
+    #[test]
+    fn parse_align_with_inline_math() {
+        let src = "!align\n  math`a^2` & = & math`b^2` + math`c^2`";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Align(align) => {
+                assert_eq!(align.rows.len(), 1);
+                assert_eq!(align.rows[0].len(), 3);
+            }
+            other => panic!("expected Align, got {:?}", other),
         }
     }
 

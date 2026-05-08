@@ -43,6 +43,9 @@
       "include": "#directive-table"
     },
     {
+      "include": "#directive-align"
+    },
+    {
       "include": "#directive-toc"
     },
     {
@@ -600,6 +603,22 @@
         {
           "match": "(\\|)",
           "name": "keyword.operator.table.ogma"
+        }
+      ]
+    },
+    "directive-align": {
+      "begin": "^(!align)\\s*$",
+      "end": "^(?!\\s)|^\\s*$",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.directive.align.ogma"
+        }
+      },
+      "name": "meta.block.align.ogma",
+      "patterns": [
+        {
+          "match": "(&)",
+          "name": "keyword.operator.align.ogma"
         }
       ]
     },
