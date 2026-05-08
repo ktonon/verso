@@ -69,8 +69,13 @@ pub enum Block {
     Toc,
     /// Document part: `!part Title` — a higher-level division above sections,
     /// emitted as `\part{Title}` in LaTeX. Title may contain inline prose
-    /// (math, bold, italic, etc.).
-    Part { title: String, span: Span },
+    /// (math, bold, italic, etc.). An inline `label`name`` (or trailing
+    /// `\label{name}`) sets a referenceable target.
+    Part {
+        title: String,
+        label: Option<String>,
+        span: Span,
+    },
     /// Expect-fail block: succeeds only when inner verification fails
     /// with the specified failure type.
     ExpectFail {

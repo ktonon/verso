@@ -67,15 +67,17 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
 
         // Part heading
         if trimmed.starts_with("!part") {
-            let text = trimmed["!part".len()..].trim().to_string();
-            if text.is_empty() {
+            let raw_text = trimmed["!part".len()..].trim();
+            if raw_text.is_empty() {
                 return Err(ParseDocError {
                     line: i + 1,
                     message: "!part requires a title".into(),
                 });
             }
+            let (title, label) = extract_section_label(raw_text);
             blocks.push(Block::Part {
-                title: text,
+                title,
+                label,
                 span: Span { line: i + 1 },
             });
             i += 1;
@@ -3019,6 +3021,27 @@ More prose here.
     fn parse_part_requires_title() {
         let err = parse_document("!part").unwrap_err();
         assert!(err.message.contains("requires a title"));
+    }
+
+    #[test]
+    fn parse_part_with_inline_label() {
+        let doc = parse_document("!part Foundations label`foundations`").unwrap();
+        match &doc.blocks[0] {
+            Block::Part { title, label, .. } => {
+                assert_eq!(title, "Foundations");
+                assert_eq!(label.as_deref(), Some("foundations"));
+            }
+            other => panic!("expected Part, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_part_without_label_has_none() {
+        let doc = parse_document("!part Foundations").unwrap();
+        match &doc.blocks[0] {
+            Block::Part { label, .. } => assert!(label.is_none()),
+            other => panic!("expected Part, got {:?}", other),
+        }
     }
 
     // URLs

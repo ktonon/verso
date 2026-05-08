@@ -54,8 +54,15 @@ pub(super) fn write_section(
 }
 
 /// Emit a `\part{...}` heading. Part titles are rendered as prose so
-/// inline math, bold, italic, etc. are typeset properly.
-pub(super) fn write_part(out: &mut String, title: &str, ctx: &TexContext) {
+/// inline math, bold, italic, etc. are typeset properly. An optional label
+/// sets the referenceable target; absent that, the slug of the plain title
+/// is used so `ref\`title-slug\`` still resolves (matching section behaviour).
+pub(super) fn write_part(
+    out: &mut String,
+    title: &str,
+    label: Option<&str>,
+    ctx: &TexContext,
+) {
     let (rendered, plain) = match parse_prose_fragments(title) {
         Ok(frags) => {
             let mut buf = String::new();
@@ -75,6 +82,13 @@ pub(super) fn write_part(out: &mut String, title: &str, ctx: &TexContext) {
         .unwrap();
     } else {
         writeln!(out, "\\part{{{}}}", rendered).unwrap();
+    }
+
+    let lbl = label
+        .map(|value| value.to_string())
+        .unwrap_or_else(|| slugify(&plain));
+    if !lbl.is_empty() {
+        writeln!(out, "\\label{{{}}}", lbl).unwrap();
     }
 }
 

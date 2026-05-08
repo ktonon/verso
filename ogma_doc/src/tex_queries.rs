@@ -72,6 +72,15 @@ pub fn collect_labels(doc: &Document) -> HashSet<String> {
                     labels.insert(slug);
                 }
             }
+            Block::Part { title, label, .. } => {
+                if let Some(explicit) = label {
+                    labels.insert(explicit.clone());
+                }
+                let slug = slugify(title);
+                if !slug.is_empty() {
+                    labels.insert(slug);
+                }
+            }
             Block::Figure(fig) => {
                 if let Some(label) = &fig.label {
                     labels.insert(label.clone());

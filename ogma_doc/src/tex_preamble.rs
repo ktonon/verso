@@ -14,11 +14,14 @@ pub(super) struct TexMetadata<'a> {
 pub(super) fn build_section_title_map(doc: &Document) -> HashMap<String, String> {
     let mut section_titles = HashMap::new();
     for block in &doc.blocks {
-        if let Block::Section { title, label, .. } = block {
-            if let Some(lbl) = label {
-                section_titles.insert(lbl.clone(), title.clone());
+        match block {
+            Block::Section { title, label, .. } | Block::Part { title, label, .. } => {
+                if let Some(lbl) = label {
+                    section_titles.insert(lbl.clone(), title.clone());
+                }
+                section_titles.insert(slugify(title), title.clone());
             }
-            section_titles.insert(slugify(title), title.clone());
+            _ => {}
         }
     }
     section_titles

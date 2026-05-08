@@ -183,8 +183,8 @@ pub fn compile_to_tex_with(doc: &Document, opts: &CompileOptions) -> String {
             Block::Toc => {
                 writeln!(out, "\\tableofcontents").unwrap();
             }
-            Block::Part { title, .. } => {
-                write_part(&mut out, title, &ctx);
+            Block::Part { title, label, .. } => {
+                write_part(&mut out, title, label.as_deref(), &ctx);
             }
             Block::List(list) => {
                 write_list(&mut out, list, &ctx);

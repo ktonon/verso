@@ -591,6 +591,43 @@ fn compile_part() {
 }
 
 #[test]
+fn compile_part_with_explicit_label_emits_label_command() {
+    let src = "!part Foundations label`foundations`\n";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(tex.contains("\\part{Foundations}"), "tex: {}", tex);
+    assert!(
+        tex.contains("\\label{foundations}"),
+        "expected \\label{{foundations}}: {}",
+        tex
+    );
+}
+
+#[test]
+fn compile_part_without_explicit_label_emits_slug_label() {
+    let src = "!part Foundations\n";
+    let doc = parse_document(src).unwrap();
+    let tex = compile_to_tex(&doc);
+    assert!(
+        tex.contains("\\label{foundations}"),
+        "expected slug-derived label: {}",
+        tex
+    );
+}
+
+#[test]
+fn ref_to_part_label_resolves() {
+    let src = "!part Foundations label`foundations`\n\nSee ref`foundations`.";
+    let doc = parse_document(src).unwrap();
+    let unresolved = find_unresolved_refs(&doc);
+    assert!(
+        unresolved.is_empty(),
+        "ref to part label should resolve, got {:?}",
+        unresolved
+    );
+}
+
+#[test]
 fn unresolved_ref_detected() {
     let src = "## Introduction\n\nSee ref`nonexistent` and ref`introduction`.";
     let doc = parse_document(src).unwrap();
