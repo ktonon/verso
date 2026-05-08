@@ -650,15 +650,19 @@
       }
     },
     "directive-part": {
-      "match": "^(!part)\\s+(.+)$",
-      "captures": {
+      "begin": "^(!part)\\s+",
+      "end": "$",
+      "beginCaptures": {
         "1": {
           "name": "keyword.control.directive.part.ogma"
-        },
-        "2": {
-          "name": "entity.name.section.part.ogma"
         }
-      }
+      },
+      "contentName": "entity.name.section.part.ogma",
+      "patterns": [
+        {
+          "include": "#tag-label"
+        }
+      ]
     },
     "directive-include": {
       "match": "^(!include)\\s+(.+)$",
