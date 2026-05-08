@@ -10,6 +10,30 @@ fn name_to_latex(name: &str) -> String {
     unicode::replace_unicode_with_latex(name)
 }
 
+/// Escape a `Unit::display` string for use inside `\mathrm{...}`.
+/// Wraps `^` exponents in braces so that `s^-1` typesets as `s^{-1}` (the `1`
+/// stays in the superscript) rather than `s^-` followed by a stray `1`.
+fn escape_unit_display_for_tex(display: &str) -> String {
+    let mut out = String::with_capacity(display.len() + 4);
+    let mut chars = display.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '^' {
+            out.push_str("^{");
+            while let Some(&next) = chars.peek() {
+                if next == '-' || next == '+' || next.is_ascii_digit() {
+                    out.push(chars.next().unwrap());
+                } else {
+                    break;
+                }
+            }
+            out.push('}');
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 fn frac_pi_to_tex(r: &Rational) -> String {
     let n = r.num();
     let d = r.den();
@@ -245,7 +269,11 @@ fn render_expr(expr: &Expr) -> TexRender {
                 }
             }
             (ExprKind::Quantity(_, unit), [child]) => TexRender {
-                tex: format!("{} \\; \\mathrm{{{}}}", child.tex, unit.display),
+                tex: format!(
+                    "{} \\; \\mathrm{{{}}}",
+                    child.tex,
+                    escape_unit_display_for_tex(&unit.display)
+                ),
                 ..TexRender::default()
             },
             other => panic!("unexpected TeX render fold shape: {:?}", other),
@@ -512,6 +540,34 @@ mod tests {
         };
         let e = quantity(constant(5.0), unit);
         assert_eq!(e.to_tex(), "5 \\; \\mathrm{m}");
+    }
+
+    #[test]
+    fn to_tex_quantity_negative_exponent_braces_the_exponent() {
+        // s^-1 must render as \mathrm{s^{-1}} so the -1 stays in the
+        // superscript when typeset; the bare ^ would only consume the minus.
+        use crate::dim::{BaseDim, Dimension};
+        use crate::unit::Unit;
+        let unit = Unit {
+            dimension: Dimension::single(BaseDim::T, -1),
+            scale: 1.0,
+            display: "s^-1".to_string(),
+        };
+        let e = quantity(constant(1.0), unit);
+        assert_eq!(e.to_tex(), "1 \\; \\mathrm{s^{-1}}");
+    }
+
+    #[test]
+    fn to_tex_quantity_positive_exponent_braces_the_exponent() {
+        use crate::dim::{BaseDim, Dimension};
+        use crate::unit::Unit;
+        let unit = Unit {
+            dimension: Dimension::single(BaseDim::L, 2),
+            scale: 1.0,
+            display: "m^2".to_string(),
+        };
+        let e = quantity(constant(3.0), unit);
+        assert_eq!(e.to_tex(), "3 \\; \\mathrm{m^{2}}");
     }
 
     #[test]
