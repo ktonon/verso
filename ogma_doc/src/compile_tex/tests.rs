@@ -82,7 +82,11 @@ fn compile_def_renders_equation() {
         "def should render as equation: {}",
         tex
     );
-    assert!(tex.contains(":="), "def should show := operator: {}", tex);
+    assert!(
+        tex.contains("\\equiv"),
+        "def should render the := operator as \\equiv: {}",
+        tex
+    );
     assert!(
         tex.contains("10^{8}"),
         "def should contain expression: {}",

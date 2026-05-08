@@ -268,7 +268,7 @@ pub(super) fn write_def(out: &mut String, decl: &DefDecl, ctx: &TexContext) {
         .unwrap_or_default();
     writeln!(
         out,
-        "  {} \\mathrel{{:=}} {}{}",
+        "  {} \\equiv {}{}",
         tex_name,
         decl.value.to_tex(),
         dim_annotation
