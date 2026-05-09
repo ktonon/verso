@@ -590,10 +590,10 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             continue;
         }
 
-        // Definition: def name [dim] := expr
+        // Definition: def name [dim] := expr  (also accepts `≡` for `:=`)
         if trimmed == "def" || trimmed.starts_with("def ") {
             let rest = trimmed.strip_prefix("def").unwrap().trim();
-            let assign_pos = rest.find(":=").ok_or_else(|| ParseDocError {
+            let (assign_pos, assign_len) = find_def_assign(rest).ok_or_else(|| ParseDocError {
                 line: i + 1,
                 message: "def requires name := expr, e.g. def c := 3*10^8".into(),
             })?;
@@ -621,7 +621,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
                     message: "def requires a name".into(),
                 });
             }
-            let value_str = rest[assign_pos + 2..].trim();
+            let value_str = rest[assign_pos + assign_len..].trim();
             let value = parse_expr(value_str).map_err(|e| ParseDocError {
                 line: i + 1,
                 message: format!("def '{}': {:?}", name, e),
@@ -673,6 +673,7 @@ pub fn parse_document(src: &str) -> Result<Document, ParseDocError> {
             let after_rparen = rest[rparen + 1..].trim();
             let body_str = after_rparen
                 .strip_prefix(":=")
+                .or_else(|| after_rparen.strip_prefix('≡'))
                 .ok_or_else(|| ParseDocError {
                     line: i + 1,
                     message: "func requires := after parameters".into(),
@@ -1199,6 +1200,18 @@ fn parse_claim_body(name: &str, body: &str, line: usize) -> Result<Claim, ParseD
         rhs,
         span: Span { line },
     })
+}
+
+/// Locate the `:=` (or `≡` alias) operator that separates a def's name from
+/// its value. Returns (byte offset, byte length) of the operator on success.
+fn find_def_assign(body: &str) -> Option<(usize, usize)> {
+    match (body.find(":="), body.find('≡')) {
+        (Some(a), Some(b)) if a <= b => Some((a, 2)),
+        (Some(_), Some(b)) => Some((b, '≡'.len_utf8())),
+        (Some(a), None) => Some((a, 2)),
+        (None, Some(b)) => Some((b, '≡'.len_utf8())),
+        (None, None) => None,
+    }
 }
 
 fn find_claim_relation(body: &str) -> Option<(ClaimRelation, &'static str, usize)> {
@@ -1971,6 +1984,44 @@ proof pythag
                 );
             }
             _ => panic!("expected Def"),
+        }
+    }
+
+    #[test]
+    fn parse_def_with_equiv_alias() {
+        // `≡` should be accepted as an alias for `:=`.
+        let src = "def c ≡ 3*10^8";
+        let doc = parse_document(src).unwrap();
+        assert_eq!(doc.blocks.len(), 1);
+        match &doc.blocks[0] {
+            Block::Def(d) => assert_eq!(d.name, "c"),
+            other => panic!("expected Def, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_def_with_equiv_alias_and_dimension() {
+        let src = "def c [L T^-1] ≡ 3*10^8";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Def(d) => {
+                assert_eq!(d.name, "c");
+                assert!(d.dimension.is_some());
+            }
+            other => panic!("expected Def, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_func_with_equiv_alias() {
+        let src = "func KE(m, v) ≡ (1/2)*m*v^2";
+        let doc = parse_document(src).unwrap();
+        match &doc.blocks[0] {
+            Block::Func(f) => {
+                assert_eq!(f.name, "KE");
+                assert_eq!(f.params, vec!["m", "v"]);
+            }
+            other => panic!("expected Func, got {:?}", other),
         }
     }
 
