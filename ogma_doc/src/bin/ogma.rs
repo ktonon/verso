@@ -525,6 +525,59 @@ fn cite_completion_context_for_line(
     })
 }
 
+/// Context for completion inside a `ref`...`` tag. Captures the partial label
+/// being typed and the UTF-16 range to replace. The optional `|display` form
+/// is respected — completion only fires while the cursor is in the label
+/// segment (before any `|`).
+#[derive(Debug, PartialEq, Eq)]
+struct RefCompletionContext {
+    typed_prefix: String,
+    replace_start_utf16: u32,
+    replace_end_utf16: u32,
+}
+
+fn ref_completion_context_for_line(
+    line_text: &str,
+    cursor_utf16: usize,
+) -> Option<RefCompletionContext> {
+    let cursor_byte = utf16_offset_to_byte(line_text, cursor_utf16);
+    let before_cursor = &line_text[..cursor_byte.min(line_text.len())];
+
+    // Most recent backtick before cursor — the candidate opening backtick.
+    let backtick_byte = before_cursor.rfind('`')?;
+
+    // The three chars immediately before the backtick must spell "ref",
+    // bounded on the left by a non-identifier character or start-of-line.
+    let prefix = &before_cursor[..backtick_byte];
+    let prefix = prefix.strip_suffix("ref")?;
+    if let Some(prev_ch) = prefix.chars().last() {
+        if prev_ch.is_ascii_alphanumeric() || prev_ch == '_' {
+            return None;
+        }
+    }
+
+    // Reject if there's already a closing backtick between the opening one
+    // and the cursor (i.e. cursor is past the tag).
+    let inner = &before_cursor[backtick_byte + 1..];
+    if inner.contains('`') {
+        return None;
+    }
+
+    // ref`label|display` — only complete inside the label segment.
+    if inner.contains('|') {
+        return None;
+    }
+
+    let segment_byte = backtick_byte + 1;
+    let typed_prefix = line_text[segment_byte..cursor_byte].to_string();
+
+    Some(RefCompletionContext {
+        typed_prefix,
+        replace_start_utf16: byte_offset_to_utf16(line_text, segment_byte) as u32,
+        replace_end_utf16: byte_offset_to_utf16(line_text, cursor_byte) as u32,
+    })
+}
+
 fn cmd_build(file: &str, output: Option<&str>, dark: bool) {
     use std::process::Command;
     use ogma_doc::compile_tex::{compile_to_tex_with, CompileOptions};
@@ -947,6 +1000,48 @@ mod tests {
         let cursor = line.encode_utf16().count() - 1;
         assert!(cite_completion_context_for_line(line, cursor).is_none());
     }
+
+    use super::ref_completion_context_for_line;
+
+    #[test]
+    fn ref_context_inside_empty_tag() {
+        let line = "See ref``";
+        let cursor = line.encode_utf16().count() - 1; // before closing backtick
+        let ctx = ref_completion_context_for_line(line, cursor).expect("ref context");
+        assert_eq!(ctx.typed_prefix, "");
+    }
+
+    #[test]
+    fn ref_context_with_partial_label() {
+        let line = "See ref`fou";
+        let cursor = line.encode_utf16().count();
+        let ctx = ref_completion_context_for_line(line, cursor).expect("ref context");
+        assert_eq!(ctx.typed_prefix, "fou");
+    }
+
+    #[test]
+    fn ref_context_rejects_after_closing_backtick() {
+        let line = "See ref`foo` here";
+        let cursor = line.encode_utf16().count() - 1;
+        assert!(ref_completion_context_for_line(line, cursor).is_none());
+    }
+
+    #[test]
+    fn ref_context_rejects_when_prefix_isnt_ref_word() {
+        // "pref" should not trigger ref completion.
+        let line = "pref`foo`";
+        let cursor = line.encode_utf16().count() - 1;
+        assert!(ref_completion_context_for_line(line, cursor).is_none());
+    }
+
+    #[test]
+    fn ref_context_rejects_in_display_segment() {
+        // Once a `|` appears, the cursor is past the label and shouldn't
+        // get label completions.
+        let line = "See ref`foo|disp";
+        let cursor = line.encode_utf16().count();
+        assert!(ref_completion_context_for_line(line, cursor).is_none());
+    }
 }
 
 #[tokio::main]
@@ -955,8 +1050,8 @@ async fn cmd_lsp() {
     use tower_lsp::lsp_types::*;
     use tower_lsp::{Client, LanguageServer, LspService, Server};
     use ogma_doc::compile_tex::{
-        collect_symbols, find_claim_line, find_decl_line, find_label_line, find_symbol,
-        find_unresolved_refs_against,
+        collect_labels, collect_symbols, find_claim_line, find_decl_line, find_label_line,
+        find_symbol, find_unresolved_refs_against,
     };
     use ogma_doc::dim::DimOutcome;
     use ogma_doc::parse::{
@@ -1048,6 +1143,59 @@ async fn cmd_lsp() {
             };
 
             let line_text = text.lines().nth(pos.line as usize).unwrap_or("");
+
+            // ref`...` completion: suggest defined labels in the document
+            // tree. Tried before cite/unicode so the label segment doesn't
+            // fall back to a generic shortcut completion list.
+            if let Some(ref_ctx) =
+                ref_completion_context_for_line(line_text, pos.character as usize)
+            {
+                let file_path = uri.to_file_path().ok();
+                // Parse the root document so labels declared in included files
+                // are also offered. Fall back to the current document on its own.
+                let root_doc = file_path
+                    .as_deref()
+                    .and_then(find_root_document)
+                    .and_then(|root| parse_document_from_file(&root).ok());
+                let local_doc = parse_document(&text).ok();
+                let labels: Vec<String> = match root_doc.as_ref().or(local_doc.as_ref()) {
+                    Some(doc) => {
+                        let mut v: Vec<String> = collect_labels(doc).into_iter().collect();
+                        v.sort();
+                        v
+                    }
+                    None => Vec::new(),
+                };
+                let replace_range = Range {
+                    start: Position {
+                        line: pos.line,
+                        character: ref_ctx.replace_start_utf16,
+                    },
+                    end: Position {
+                        line: pos.line,
+                        character: ref_ctx.replace_end_utf16,
+                    },
+                };
+                let typed_lower = ref_ctx.typed_prefix.to_ascii_lowercase();
+                let items: Vec<CompletionItem> = labels
+                    .into_iter()
+                    .filter(|l| {
+                        typed_lower.is_empty()
+                            || l.to_ascii_lowercase().contains(&typed_lower)
+                    })
+                    .map(|label| CompletionItem {
+                        label: label.clone(),
+                        kind: Some(CompletionItemKind::REFERENCE),
+                        filter_text: Some(label.clone()),
+                        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
+                            range: replace_range,
+                            new_text: label.clone(),
+                        })),
+                        ..Default::default()
+                    })
+                    .collect();
+                return Ok(Some(CompletionResponse::Array(items)));
+            }
 
             // First try cite completion, since `cite`` shouldn't fall back
             // to unicode shortcut completion.
