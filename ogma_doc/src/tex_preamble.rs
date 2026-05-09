@@ -66,13 +66,17 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool, opts: &crate::com
     writeln!(out, "\\usepackage{{amsthm}}").unwrap();
     writeln!(out, "\\usepackage{{xcolor}}").unwrap();
     writeln!(out, "\\usepackage{{framed}}").unwrap();
-    // Dark mode color definitions must precede hyperref since its options
-    // reference the named colors.
+    // Color definitions must precede hyperref since its options reference
+    // the named colors.
     if opts.dark {
         writeln!(out, "\\definecolor{{ogmabg}}{{HTML}}{{262B36}}").unwrap();
         writeln!(out, "\\definecolor{{ogmafg}}{{HTML}}{{B8C0CC}}").unwrap();
         writeln!(out, "\\definecolor{{ogmalink}}{{HTML}}{{88C0D0}}").unwrap();
         writeln!(out, "\\definecolor{{ogmacite}}{{HTML}}{{A3BE8C}}").unwrap();
+    } else if has_refs {
+        // Muted steel-blue (#336699) for internal refs and URLs — readable
+        // and clearly clickable without LaTeX's harsh saturated blue.
+        writeln!(out, "\\definecolor{{ogmalink}}{{HTML}}{{336699}}").unwrap();
     }
     if has_refs {
         // Internal refs share the URL colour (modern preprint convention) so
@@ -81,7 +85,7 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool, opts: &crate::com
         let (link, url, cite) = if opts.dark {
             ("ogmalink", "ogmalink", "ogmacite")
         } else {
-            ("blue", "blue", "black")
+            ("ogmalink", "ogmalink", "black")
         };
         writeln!(
             out,

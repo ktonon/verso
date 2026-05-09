@@ -363,7 +363,7 @@ fn compile_ref_with_auto_title() {
     let tex = compile_to_tex(&doc);
     assert!(tex.contains("\\hyperref[newtons-laws]{Newton's Laws}"));
     assert!(tex.contains(
-        "\\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=black]{hyperref}"
+        "\\usepackage[colorlinks=true,linkcolor=ogmalink,urlcolor=ogmalink,citecolor=black]{hyperref}"
     ));
 }
 
@@ -387,7 +387,7 @@ fn compile_no_hyperref_without_refs() {
     let doc = parse_document("# My Section\n\nJust prose.").unwrap();
     let tex = compile_to_tex(&doc);
     assert!(!tex.contains(
-        "\\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=black]{hyperref}"
+        "\\usepackage[colorlinks=true,linkcolor=ogmalink,urlcolor=ogmalink,citecolor=black]{hyperref}"
     ));
 }
 
@@ -606,7 +606,7 @@ fn compile_url_plain() {
     let tex = compile_to_tex(&doc);
     assert!(tex.contains("\\url{https://example.com}"));
     assert!(tex.contains(
-        "\\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=black]{hyperref}"
+        "\\usepackage[colorlinks=true,linkcolor=ogmalink,urlcolor=ogmalink,citecolor=black]{hyperref}"
     ));
 }
 
