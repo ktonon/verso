@@ -315,7 +315,7 @@
       }
     },
     "directive-def": {
-      "match": "^(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=)\\s*(.+)$",
+      "match": "^(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=|≡)\\s*(.+)$",
       "captures": {
         "1": {
           "name": "keyword.control.directive.def.ogma"
@@ -340,7 +340,7 @@
       }
     },
     "directive-func": {
-      "match": "^(func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(:=)\\s*(.+)$",
+      "match": "^(func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(:=|≡)\\s*(.+)$",
       "captures": {
         "1": {
           "name": "keyword.control.directive.func.ogma"
@@ -429,7 +429,7 @@
       }
     },
     "indented-def": {
-      "match": "^\\s+(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=)\\s*(.+)$",
+      "match": "^\\s+(def)\\s+(\\S+)\\s*(\\[[^\\]]*\\])?\\s*(:=|≡)\\s*(.+)$",
       "captures": {
         "1": {
           "name": "keyword.control.directive.def.ogma"
@@ -454,7 +454,7 @@
       }
     },
     "indented-func": {
-      "match": "^\\s+(func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(:=)\\s*(.+)$",
+      "match": "^\\s+(func)\\s+(\\S+?)\\(([^)]+)\\)\\s*(:=|≡)\\s*(.+)$",
       "captures": {
         "1": {
           "name": "keyword.control.directive.func.ogma"
