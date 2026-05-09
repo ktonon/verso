@@ -75,10 +75,13 @@ pub(super) fn write_preamble(out: &mut String, has_refs: bool, opts: &crate::com
         writeln!(out, "\\definecolor{{ogmacite}}{{HTML}}{{A3BE8C}}").unwrap();
     }
     if has_refs {
+        // Internal refs share the URL colour (modern preprint convention) so
+        // clickable cross-references read as such; citations stay black to
+        // avoid colour-noise in long bibliographies.
         let (link, url, cite) = if opts.dark {
             ("ogmalink", "ogmalink", "ogmacite")
         } else {
-            ("black", "blue", "black")
+            ("blue", "blue", "black")
         };
         writeln!(
             out,
